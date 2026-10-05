@@ -3,7 +3,7 @@
 Three kinds, each user picks which they want (stored per user, applies to all their devices):
   printer      a printer can't print (jam, door open, no paper…) or stopped answering
   replacement  a toner replacement was detected and waits in Vēsture → Jāpārbauda
-  toner        a toner is nearly empty and there is no spare in the reserve
+  toner        the toner in a printer is below 40% and there is no spare in the reserve ("zems pēdējais toneris")
 
 How it works: after every SNMP poll, `after_poll` looks at what changed and returns the messages to send;
 `dispatch` then delivers them in a background thread. `push_state` remembers what was already announced,
@@ -35,7 +35,9 @@ PREFS_KEY = "push_prefs"
 SEEN_KEY = "push_seen_id"  # per user: the newest history entry they have looked at (for the unread badge)
 HISTORY_KEEP = 300  # how many past notifications the history keeps
 HISTORY_SHOWN = 60
-LOW_PCT = 15  # same threshold as the orange toner bars in the app
+# "Low last toner": the cartridge in the printer is below this and there is no spare. Deliberately earlier
+# than the app's orange toner bars (15%), so there is time to order before it runs out.
+LOW_PCT = 40
 
 
 @dataclass
@@ -206,7 +208,7 @@ def after_poll(conn: sqlite3.Connection, printer_ids: list[int]) -> list[Message
         else:
             stop(f"blocked:{pid}")
 
-        # Nearly empty toner with nothing in the reserve.
+        # The last toner (nothing in the reserve) is getting low.
         mono = printer["color_type"] == "Melnbalts"
         linked = conn.execute(
             "SELECT t.id, t.code, UPPER(t.color) AS color, pt.qty,"
@@ -224,7 +226,7 @@ def after_poll(conn: sqlite3.Connection, printer_ids: list[int]) -> list[Message
                 low_now.add(t["id"])
                 on_order = f" Pasūtīts ×{t['ordered']}." if t["ordered"] else " Nekas nav pasūtīts."
                 start(f"lowtoner:{pid}:{t['id']}", Message(
-                    "toner", f"{name}: beidzas toneris", f"{t['code']} — {s['pct']}%, rezervē nav neviena.{on_order}",
+                    "toner", f"{name}: zems pēdējais toneris", f"{t['code']} — {s['pct']}%, rezervē nav neviena.{on_order}",
                     "/stock", f"toner-{pid}-{t['id']}"))
         for t in linked:
             if t["id"] not in low_now:
