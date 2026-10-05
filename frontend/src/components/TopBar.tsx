@@ -6,6 +6,7 @@ import { ROLE_LV } from '../lib'
 import { useTabClick } from '../viewTransition'
 import { CompactBar } from './CompactBar'
 import { Dialog } from './Dialog'
+import { NotificationsButton } from './NotificationsButton'
 import { PushSettings } from './PushSettings'
 
 export const NAV = [
@@ -40,6 +41,7 @@ export function TopBar({ title, children, sticky }: { title: [string, string]; c
         {/* Company filter pills are hidden for now to keep the phone view simple; ctx.company stays '' (all). */}
         <div className="acts">
           {children}
+          <NotificationsButton />
           {/* Opens the profile window (who is logged in, role, Iziet) — it does not log out by itself. */}
           <button className="rb dk" onClick={() => setProfile(true)} title={`Profils: ${user}`} aria-label={`Profils (${user})`} aria-haspopup="dialog">{Icon.user()}</button>
         </div>

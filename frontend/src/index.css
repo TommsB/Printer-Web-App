@@ -231,6 +231,19 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .profile__txt { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .profile__txt b { font-size: 18px; font-weight: 600; letter-spacing: -.02em; overflow-wrap: anywhere; }
 .profile__txt span { font-size: 13.5px; color: var(--muted); }
+/* Bell button (top bar) with the unread count, and its history list */
+.rb.bell { position: relative; }
+.rb.bell .badge-n { position: absolute; top: 2px; right: 0; margin: 0; box-shadow: 0 0 0 2px var(--bg); }
+.nday + .nday { margin-top: 10px; }
+.nday__head { padding: 2px 2px 4px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.nday .ev__main { padding: 10px 8px; align-items: flex-start; }
+/* Titles here are sentences, not short codes: let them wrap (the log rows keep theirs on one line). */
+.nday .ev__l1 { display: block; }
+.nday .ev__l1 .nt { white-space: normal; overflow-wrap: anywhere; }
+.nbody { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.ntime { flex: none; align-self: flex-start; padding-top: 2px; font-size: 12.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.ev.unread .ev__main { background: var(--alert-bg); }
+.ev.unread .nt::after { content: ''; display: inline-block; width: 7px; height: 7px; margin-left: 7px; border-radius: 50%; background: var(--accent); vertical-align: middle; }
 /* Profile window → Paziņojumi */
 .push { gap: 12px; }
 .push__test { align-self: flex-start; }

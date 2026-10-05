@@ -6,6 +6,8 @@ export interface Session { username: string; role: Role }
 export interface AppUser { username: string; role: Role; created_ts?: string; created_by?: string | null; has_password?: boolean }
 /** Which kinds of push notifications a user wants (see backend/app/push.py). */
 export interface PushPrefs { printer: boolean; replacement: boolean; toner: boolean }
+export interface PushLogItem { id: number; ts: string; category: keyof PushPrefs; title: string; body: string; url: string }
+export interface PushHistory { items: PushLogItem[]; seen: number; unread: number }
 export interface PushStatus { public_key: string; prefs: PushPrefs; endpoints: string[] }
 export interface Snapshot {
   ts: string; reachable: boolean; hostname: string; serial: string; status: string
@@ -175,6 +177,9 @@ export const api = {
   pushSubscribe: (body: { endpoint: string; keys: { p256dh: string; auth: string }; device: string }) => req<unknown>('POST', '/api/push/subscribe', body),
   pushUnsubscribe: (endpoint: string) => req<unknown>('POST', '/api/push/unsubscribe', { endpoint }),
   pushPrefs: (prefs: PushPrefs) => req<PushPrefs>('PUT', '/api/push/prefs', prefs),
+  /** The bell button: past notifications (newest first) and how many this user hasn't seen. */
+  pushHistory: () => req<PushHistory>('GET', '/api/push/history'),
+  pushSeen: (id: number) => req<{ seen: number }>('POST', '/api/push/seen', { id }),
   pushTest: (endpoint: string) => req<{ ok: boolean; status: number; reason?: string; contact?: string }>('POST', '/api/push/test', { endpoint }),
   /** Per-user settings (key → text); null = not set yet. */
   getSetting: (key: string) => req<{ value: string | null }>('GET', `/api/settings/${key}`),

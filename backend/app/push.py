@@ -32,6 +32,9 @@ router = APIRouter(prefix="/api/push", tags=["push"])
 
 CATEGORIES = ("printer", "replacement", "toner")
 PREFS_KEY = "push_prefs"
+SEEN_KEY = "push_seen_id"  # per user: the newest history entry they have looked at (for the unread badge)
+HISTORY_KEEP = 300  # how many past notifications the history keeps
+HISTORY_SHOWN = 60
 LOW_PCT = 15  # same threshold as the orange toner bars in the app
 
 
@@ -131,6 +134,10 @@ def dispatch(messages: list[Message]) -> None:
     if not messages:
         return
     with get_db() as conn:
+        # The history (bell button) gets every announcement, also when nobody has push switched on.
+        conn.executemany("INSERT INTO push_log (category, title, body, url) VALUES (?,?,?,?)",
+                         [(m.category, m.title, m.body, m.url) for m in messages])
+        conn.execute("DELETE FROM push_log WHERE id <= (SELECT MAX(id) FROM push_log) - ?", (HISTORY_KEEP,))
         subs = [dict(r) for r in conn.execute("SELECT endpoint, username, p256dh, auth FROM push_subscriptions")]
         if not subs:
             return
@@ -297,6 +304,38 @@ def set_prefs(body: PrefsIn, conn: sqlite3.Connection = Depends(db_dep), usernam
     conn.execute("INSERT INTO user_settings (username, key, value) VALUES (?,?,?)"
                  " ON CONFLICT(username, key) DO UPDATE SET value = excluded.value", (username, PREFS_KEY, json.dumps(prefs)))
     return prefs
+
+
+class SeenIn(BaseModel):
+    id: int
+
+
+def _seen(conn: sqlite3.Connection, username: str) -> int:
+    row = conn.execute("SELECT value FROM user_settings WHERE username = ? AND key = ?", (username, SEEN_KEY)).fetchone()
+    try:
+        return int(row["value"]) if row else 0
+    except ValueError:
+        return 0
+
+
+@router.get("/history")
+def history(conn: sqlite3.Connection = Depends(db_dep), username: str = Depends(current_username)) -> dict:
+    """The latest announcements (newest first) and how many of them this user hasn't opened the list for yet.
+    Everyone sees the same history, whatever kinds they chose to be pushed."""
+    seen = _seen(conn, username)
+    items = [dict(r) for r in conn.execute(
+        "SELECT id, ts, category, title, body, url FROM push_log ORDER BY id DESC LIMIT ?", (HISTORY_SHOWN,))]
+    unread = conn.execute("SELECT COUNT(*) FROM push_log WHERE id > ?", (seen,)).fetchone()[0]
+    return {"items": items, "seen": seen, "unread": unread}
+
+
+@router.post("/seen")
+def mark_seen(body: SeenIn, conn: sqlite3.Connection = Depends(db_dep), username: str = Depends(current_username)) -> dict:
+    """The user opened the list: everything up to `id` counts as read (never moves backwards)."""
+    seen = max(_seen(conn, username), body.id)
+    conn.execute("INSERT INTO user_settings (username, key, value) VALUES (?,?,?)"
+                 " ON CONFLICT(username, key) DO UPDATE SET value = excluded.value", (username, SEEN_KEY, str(seen)))
+    return {"seen": seen}
 
 
 @router.post("/test")
