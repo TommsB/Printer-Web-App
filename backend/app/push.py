@@ -67,25 +67,40 @@ def vapid_keys(conn: sqlite3.Connection) -> tuple[str, str]:
 
 
 def _contact() -> str:
-    """Who runs this server, as required by the push services: the app's https address, else a mailto."""
+    """Who runs this server — the push services require it, and Apple rejects the request (403 BadJwtToken)
+    if it isn't a real-looking `mailto:` address or https URL. PUSH_CONTACT wins; else the app's https address."""
+    contact = config["push_contact"].strip()
+    if contact:
+        return contact if contact.lower().startswith(("mailto:", "https://")) else f"mailto:{contact}"
     url = config["public_url"].strip()
     return url if url.lower().startswith("https://") else "mailto:printeri@localhost.localdomain"
 
 
 # ---- sending --------------------------------------------------------------------------------
 
-def _send(sub: dict, payload: str, private_key: str) -> int:
-    """Deliver one notification. Returns the push service's HTTP status (0 = couldn't reach it)."""
+def _send_detail(sub: dict, payload: str, private_key: str) -> tuple[int, str]:
+    """Deliver one notification. Returns the push service's HTTP status (0 = couldn't reach it) and, when it
+    refused, the reason it gave (e.g. Apple's {"reason":"BadJwtToken"})."""
     from pywebpush import WebPushException, webpush
     try:
         webpush(subscription_info={"endpoint": sub["endpoint"], "keys": {"p256dh": sub["p256dh"], "auth": sub["auth"]}},
                 data=payload, vapid_private_key=private_key, vapid_claims={"sub": _contact()}, ttl=6 * 3600, timeout=10)
-        return 201
+        return 201, ""
     except WebPushException as e:
-        return e.response.status_code if e.response is not None else 0
+        if e.response is None:
+            print(f"[push] send failed: {e}")
+            return 0, str(e)[:200]
+        reason = (e.response.text or "").strip()[:300]
+        host = sub["endpoint"].split("/")[2] if "//" in sub["endpoint"] else "?"
+        print(f"[push] {host} answered {e.response.status_code}: {reason} (contact: {_contact()})")
+        return e.response.status_code, reason
     except Exception as e:  # network trouble etc. must never break the caller
         print(f"[push] send failed: {e}")
-        return 0
+        return 0, str(e)[:200]
+
+
+def _send(sub: dict, payload: str, private_key: str) -> int:
+    return _send_detail(sub, payload, private_key)[0]
 
 
 def _payload(m: Message) -> str:
@@ -292,7 +307,7 @@ def send_test(body: EndpointIn, conn: sqlite3.Connection = Depends(db_dep), user
     if not sub:
         raise HTTPException(404, "Šai ierīcei paziņojumi nav ieslēgti")
     private_key, _ = vapid_keys(conn)
-    code = _send(dict(sub), _payload(Message("printer", "Printeri: tests", "Paziņojumi šajā ierīcē darbojas.", "/", "test")), private_key)
+    code, reason = _send_detail(dict(sub), _payload(Message("printer", "Printeri: tests", "Paziņojumi šajā ierīcē darbojas.", "/", "test")), private_key)
     if code in (404, 410):
         conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (body.endpoint,))
-    return {"ok": 200 <= code < 300, "status": code}
+    return {"ok": 200 <= code < 300, "status": code, "reason": reason, "contact": _contact()}

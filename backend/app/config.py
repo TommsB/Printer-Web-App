@@ -17,6 +17,8 @@ DEFAULTS = {
     "entra_client_id": "",
     "entra_client_secret": "",
     "public_url": "",  # how users reach the app, e.g. https://printeri.tenax.lv (for the Microsoft redirect)
+    # Push notifications: a contact for the push services, e.g. mailto:it@tenax.lv. Empty = use public_url.
+    "push_contact": "",
     # "true"/"false" as text (env vars are text). The defaults are the strict policy:
     # only people already listed in Pārvaldība → Lietotāji get in ("true" = any account of the tenant is
     # added as a standard user on first sign-in) …

@@ -16,6 +16,8 @@ services:
       ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-}
       ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET:-}
       PUBLIC_URL: ${PUBLIC_URL:-}                        # e.g. https://printeri.tenax.lv
+      # Push notifications: who runs this server, shown to Apple/Google. A real address, e.g. mailto:it@tenax.lv
+      PUSH_CONTACT: ${PUSH_CONTACT:-}
       # Policy once Microsoft sign-in is on: only people listed in Pārvaldība → Lietotāji, and only via Microsoft.
       ENTRA_AUTO_CREATE: ${ENTRA_AUTO_CREATE:-false}     # true = any tenant account gets in as a standard user
       PASSWORD_LOGIN: ${PASSWORD_LOGIN:-false}           # true = also allow username + password (use while testing)

@@ -66,7 +66,13 @@ export function PushSettings() {
     setNote('')
     try {
       const r = await api.pushTest(endpoint)
-      setNote(r.ok ? 'Testa paziņojums nosūtīts. Tam jāparādās pēc brīža.' : `Paziņojumu serviss to nepieņēma (kods ${r.status}). Izslēdziet un ieslēdziet paziņojumus šajā ierīcē.`)
+      // 404/410 = this device's registration is gone (fix: off and on again). Anything else is a server-side
+      // problem — show what the push service said, so it can be fixed there.
+      const gone = r.status === 404 || r.status === 410
+      setNote(r.ok ? 'Testa paziņojums nosūtīts. Tam jāparādās pēc brīža.'
+        : gone ? 'Šīs ierīces reģistrācija vairs nav derīga. Izslēdziet un ieslēdziet paziņojumus šajā ierīcē.'
+        : r.status === 0 ? `Serveris nevarēja sasniegt paziņojumu servisu${r.reason ? ` (${r.reason})` : ''}.`
+        : `Paziņojumu serviss atteica (kods ${r.status}${r.reason ? `: ${r.reason}` : ''}). Servera kontakts: ${r.contact ?? '?'}`)
       if (!r.ok && (r.status === 404 || r.status === 410)) setEndpoint(null)
     } catch (err) {
       setNote(err instanceof Error ? err.message : 'Neizdevās nosūtīt')
