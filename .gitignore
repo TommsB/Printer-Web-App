@@ -1,0 +1,14 @@
+node_modules/
+.venv/
+__pycache__/
+frontend/dist/
+data/
+auth_users.json
+
+# Never commit data or secrets: database copies (all records + password hashes), archives, env files
+*.db
+*.db-wal
+*.db-shm
+*.tgz
+*.zip
+.env

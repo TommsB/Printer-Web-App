@@ -1,0 +1,5 @@
+{
+  "snmp_bin_dir": "\\\\10.0.4.29\\Tenax Grupa\\01_Dati\\Pythons\\printeri",
+  "snmp_community": "public",
+  "poll_interval_minutes": 15
+}

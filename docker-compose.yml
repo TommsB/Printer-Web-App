@@ -1,0 +1,20 @@
+services:
+  printers:
+    build: .
+    container_name: printer-manager
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      SNMP_COMMUNITY: public
+      POLL_INTERVAL_MINUTES: "15"
+    volumes:
+      # Named volume, not a bind mount: SQLite WAL fails on Windows-host bind mounts
+      # ("disk I/O error"). On Linux either works; backup: see README.
+      - printer-data:/app/data
+      - ./auth_users.json:/app/auth_users.json:ro  # logins (scripts/hash_password.py)
+    # SNMP needs to reach the printer subnets. If the Linux VM can route to them,
+    # the default bridge network is enough (outbound traffic is NATed).
+
+volumes:
+  printer-data:
