@@ -10,6 +10,14 @@ services:
     environment:
       SNMP_COMMUNITY: public
       POLL_INTERVAL_MINUTES: "15"
+      # Sign in with Microsoft (Entra ID). Put the values in the .env file next to this one (not in git);
+      # empty = off, password login only. See README → "Sign in with Microsoft".
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-}
+      ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-}
+      ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET:-}
+      PUBLIC_URL: ${PUBLIC_URL:-}                        # e.g. https://printeri.tenax.lv
+      ENTRA_AUTO_CREATE: ${ENTRA_AUTO_CREATE:-true}      # false = only people listed in Pārvaldība → Lietotāji
+      PASSWORD_LOGIN: ${PASSWORD_LOGIN:-true}            # false = Microsoft only
     volumes:
       # Named volume, not a bind mount: SQLite WAL fails on Windows-host bind mounts
       # ("disk I/O error"). On Linux either works; backup: see README.

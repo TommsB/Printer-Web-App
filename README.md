@@ -19,6 +19,35 @@ docker compose down                 # data survives (named volume printer-data)
 - Settings via env vars in `docker-compose.yml`: `SNMP_COMMUNITY`, `POLL_INTERVAL_MINUTES`, `SNAPSHOT_KEEP_DAYS`.
 - The container must be able to route to the printer subnets (192.168.88/90/91.x, 10.0.2.x).
 
+### Sign in with Microsoft (Entra ID)
+Off by default; the password login keeps working either way. It needs the app's final **https** address.
+
+**1. App registration** (Entra admin center → App registrations → New registration; needs a tenant admin):
+- Name: e.g. `Printeru pārvaldība`. Supported account types: **this organizational directory only** (single tenant).
+- Redirect URI: platform **Web**, `https://<app-address>/api/auth/microsoft/callback`
+  (for a test on a dev PC also add `http://localhost:8000/api/auth/microsoft/callback`).
+- Certificates & secrets → New client secret → copy the secret **Value** (shown once; note its expiry date).
+- API permissions: the default delegated `User.Read` is enough (the app only asks for `openid profile email`).
+  "Grant admin consent" saves users the consent prompt.
+- Optional, to limit who can sign in: Enterprise applications → this app → Properties →
+  "Assignment required" = Yes, then assign the people or a group.
+- Hand over three values: **Directory (tenant) ID**, **Application (client) ID**, the **secret Value**.
+
+**2. On the server**, in the `.env` file next to `docker-compose.yml` (not in git):
+```
+ENTRA_TENANT_ID=<tenant id>
+ENTRA_CLIENT_ID=<client id>
+ENTRA_CLIENT_SECRET=<secret value>
+PUBLIC_URL=https://<app-address>
+```
+then `docker compose up -d`. The login page now shows "Pieslēgties ar Microsoft".
+
+**Who gets in.** A Microsoft account is matched to an app user by its sign-in name: the full name
+(`janis.berzins@tenax.lv`) or the part before the `@` (`janis.berzins`) — so existing logins keep their role and
+settings. An account with no app user is added as a **standard user** on first sign-in. To allow only people
+already listed in Pārvaldība → Lietotāji, set `ENTRA_AUTO_CREATE=false`. To switch the password form off, set
+`PASSWORD_LOGIN=false` (the `set_user.py` rescue script still works).
+
 ### Database
 SQLite at `/app/data/printers.db` inside the `printer-data` volume (a named volume, because SQLite WAL breaks on Windows bind mounts).
 ```

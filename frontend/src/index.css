@@ -212,6 +212,12 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .left .rh-tools { flex: none; gap: 10px; }
 .ord .kebab { flex: none; margin-right: -6px; }
 .recv-all-btn { display: block; width: 100%; margin-top: 12px; }
+/* Login page: "Pieslēgties ar Microsoft" (shown when configured) above the password form */
+/* .btn.ms-btn (two classes): .btn is defined later in this file and would otherwise repaint it white. */
+.btn.ms-btn { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; text-decoration: none; background: var(--ink); border-color: var(--ink); color: #fff; }
+.btn.ms-btn:hover { background: #4A4A45; border-color: #4A4A45; }
+.login__or { display: flex; align-items: center; gap: 12px; margin: 4px 0; font-size: 12.5px; color: var(--faint); }
+.login__or::before, .login__or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 /* Password field with a show/hide eye (user editor) */
 .pw { position: relative; display: block; }
 .pw input { padding-right: 50px; }

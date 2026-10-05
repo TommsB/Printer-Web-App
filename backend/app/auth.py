@@ -3,6 +3,9 @@
 Users live in the database (table `users`: bcrypt hash + role). Two roles: 'admin' and 'standard'. They can do
 exactly the same in the app, except that only an admin can manage users (Pārvaldība → Lietotāji).
 
+Two ways to log in: a password kept here (bcrypt), and "Sign in with Microsoft" (microsoft.py, when configured).
+A user with an empty password hash can only use Microsoft.
+
 auth_users.json (project root, {"users": {name: bcrypt_hash}}) is only the bootstrap: when the users table is
 empty — first start, or first start after this was added — its users are imported as admins. To recover a lost
 admin login use scripts/set_user.py. Sessions are in-memory, so a backend restart logs everyone out.
@@ -18,7 +21,7 @@ import bcrypt
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
-from .config import PROJECT_ROOT
+from .config import PROJECT_ROOT, config, flag
 from .db import db_dep, get_db
 
 USERS_PATH = PROJECT_ROOT / "auth_users.json"
@@ -47,6 +50,28 @@ def bootstrap_users() -> None:
                          list(users.items()))
 
 
+def microsoft_enabled() -> bool:
+    """Sign in with Microsoft is on once the Entra app registration values and the public address are set."""
+    return all(config[k] for k in ("entra_tenant_id", "entra_client_id", "entra_client_secret", "public_url"))
+
+
+def start_session(response: Response, username: str) -> None:
+    """Log `username` in on this browser: remember the session and set its cookie on `response`.
+    The cookie is marked Secure when the app is served over https (PUBLIC_URL)."""
+    token = secrets.token_urlsafe(32)
+    _sessions[token] = {"username": username, "expires_at": datetime.now(timezone.utc) + SESSION_TTL}
+    response.set_cookie(
+        SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=int(SESSION_TTL.total_seconds()),
+        secure=config["public_url"].lower().startswith("https://"),
+    )
+
+
+@router.get("/config")
+def auth_config() -> dict:
+    """What the login page should offer (public: it is needed before anyone is logged in)."""
+    return {"microsoft": microsoft_enabled(), "password": flag("password_login") or not microsoft_enabled()}
+
+
 class LoginBody(BaseModel):
     username: str
     password: str
@@ -54,18 +79,13 @@ class LoginBody(BaseModel):
 
 @router.post("/login")
 def login(body: LoginBody, response: Response, conn: sqlite3.Connection = Depends(db_dep)) -> dict:
+    if microsoft_enabled() and not flag("password_login"):
+        raise HTTPException(403, "Pieslēgšanās ar paroli ir izslēgta. Izmantojiet Microsoft kontu.")
     row = conn.execute("SELECT password_hash, role FROM users WHERE username = ?", (body.username,)).fetchone()
-    if not row or not bcrypt.checkpw(body.password.encode(), row["password_hash"].encode()):
+    # An empty hash = a Microsoft-only user: no password can match it.
+    if not row or not row["password_hash"] or not bcrypt.checkpw(body.password.encode(), row["password_hash"].encode()):
         raise HTTPException(401, "Nepareizs lietotājvārds vai parole")
-    token = secrets.token_urlsafe(32)
-    _sessions[token] = {
-        "username": body.username,
-        "expires_at": datetime.now(timezone.utc) + SESSION_TTL,
-    }
-    response.set_cookie(
-        SESSION_COOKIE, token, httponly=True, samesite="lax",
-        max_age=int(SESSION_TTL.total_seconds()),
-    )
+    start_session(response, body.username)
     return {"username": body.username, "role": row["role"]}
 
 
@@ -107,14 +127,17 @@ def me(username: str = Depends(current_username), conn: sqlite3.Connection = Dep
 
 # ---- user management (admin only) -----------------------------------------------------------
 
+MIN_PASSWORD = 6
+
+
 class UserIn(BaseModel):
     username: str
-    password: str = Field(min_length=6, max_length=200)
+    password: str = Field(default="", max_length=200)  # "" = no password: the user signs in with Microsoft
     role: str = "standard"
 
 
 class UserUpdate(BaseModel):
-    password: str | None = Field(default=None, min_length=6, max_length=200)  # None = keep the current one
+    password: str | None = Field(default=None, min_length=MIN_PASSWORD, max_length=200)  # None = keep the current one
     role: str | None = None
 
 
@@ -129,8 +152,9 @@ def _drop_sessions(username: str) -> None:
 
 @users_router.get("")
 def list_users(conn: sqlite3.Connection = Depends(db_dep)) -> list[dict]:
-    return [dict(r) for r in conn.execute(
-        "SELECT username, role, created_ts, created_by FROM users ORDER BY role != 'admin', username COLLATE NOCASE")]
+    return [{**dict(r), "has_password": bool(r["has_password"])} for r in conn.execute(
+        "SELECT username, role, created_ts, created_by, password_hash != '' AS has_password"
+        " FROM users ORDER BY role != 'admin', username COLLATE NOCASE")]
 
 
 @users_router.post("", status_code=201)
@@ -140,10 +164,15 @@ def create_user(body: UserIn, conn: sqlite3.Connection = Depends(db_dep), admin:
         raise HTTPException(400, "Lietotājvārdā drīkst būt burti, cipari un . _ - @ (bez atstarpēm, līdz 40 zīmēm)")
     if body.role not in ROLES:
         raise HTTPException(400, "Nezināma loma")
+    # No password is only allowed when the user can sign in with Microsoft instead.
+    if body.password == "" and not microsoft_enabled():
+        raise HTTPException(400, "Norādiet paroli")
+    if body.password and len(body.password) < MIN_PASSWORD:
+        raise HTTPException(400, f"Parolei jābūt vismaz {MIN_PASSWORD} zīmes garai")
     if conn.execute("SELECT 1 FROM users WHERE username = ? COLLATE NOCASE", (name,)).fetchone():
         raise HTTPException(409, "Šāds lietotājs jau ir")
     conn.execute("INSERT INTO users (username, password_hash, role, created_by) VALUES (?,?,?,?)",
-                 (name, hash_password(body.password), body.role, admin))
+                 (name, hash_password(body.password) if body.password else "", body.role, admin))
     return {"username": name, "role": body.role}
 
 

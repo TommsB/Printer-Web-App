@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, type AppUser, type Role } from '../../api'
 import { useApiData } from '../../cache'
 import { Dialog, DestructiveDialog } from '../../components/Dialog'
@@ -19,6 +19,9 @@ export function UsersPanel({ query, adding, onCloseAdd }: { query: string; addin
   const { user: me } = useApp()
   const users = useApiData<AppUser[]>('users', api.users, [])
   const [editing, setEditing] = useState<AppUser | null>(null)
+  // With Microsoft sign-in configured, a user can exist without a password.
+  const [microsoft, setMicrosoft] = useState(false)
+  useEffect(() => { api.authConfig().then((c) => setMicrosoft(c.microsoft)).catch(() => {}) }, [])
   const shown = users.data.filter((u) => matches(query, u.username, ROLE_LV[u.role]))
 
   return (
@@ -30,7 +33,7 @@ export function UsersPanel({ query, adding, onCloseAdd }: { query: string; addin
               <span className="mrow__ic">{Icon.user(18)}</span>
               <span className="mrow__body">
                 <span className="mrow__l1"><b>{u.username}</b>{u.username === me && <span className="tag-s">Jūs</span>}</span>
-                <span className="mrow__l2">{ROLE_LV[u.role]}</span>
+                <span className="mrow__l2">{ROLE_LV[u.role]}{u.has_password === false && ' · ienāk ar Microsoft'}</span>
               </span>
               <span className="mrow__chev">{Icon.chevron(18)}</span>
             </button>
@@ -40,7 +43,7 @@ export function UsersPanel({ query, adding, onCloseAdd }: { query: string; addin
       {shown.length === 0 && <p className="muted empty">{users.loading ? 'Ielādē…' : query ? 'Nekas netika atrasts.' : 'Vēl nav neviena.'}</p>}
 
       {(adding || editing) && (
-        <UserEditor user={editing} isSelf={editing?.username === me}
+        <UserEditor user={editing} isSelf={editing?.username === me} microsoft={microsoft}
           onClose={() => { setEditing(null); onCloseAdd() }} onSaved={users.reload} />
       )}
     </>
@@ -48,9 +51,10 @@ export function UsersPanel({ query, adding, onCloseAdd }: { query: string; addin
 }
 
 /** Add a user, or change one's role / reset the password / delete. */
-function UserEditor({ user, isSelf, onClose, onSaved }: {
+function UserEditor({ user, isSelf, microsoft, onClose, onSaved }: {
   user: AppUser | null // null = add a new user
   isSelf: boolean
+  microsoft: boolean // Microsoft sign-in is configured: a new user may be created without a password
   onClose: () => void
   onSaved: () => Promise<unknown>
 }) {
@@ -60,7 +64,8 @@ function UserEditor({ user, isSelf, onClose, onSaved }: {
   const [role, setRole] = useState<Role>(user?.role ?? 'standard')
   const [confirmDelete, setConfirmDelete] = useState(false)
 
-  const passwordOk = user ? password === '' || password.length >= MIN_PASSWORD : password.length >= MIN_PASSWORD
+  // Empty is fine when editing (= keep the current one) and, with Microsoft sign-in, for a new user (= no password).
+  const passwordOk = password.length >= MIN_PASSWORD || (password === '' && (user !== null || microsoft))
   const valid = passwordOk && (user !== null || username.trim() !== '')
 
   const save = async () => {
@@ -80,7 +85,10 @@ function UserEditor({ user, isSelf, onClose, onSaved }: {
         )}
         {/* Hidden by default; the eye shows it, so the administrator can check what they typed before passing it on.
             "new-password": the browser must not fill in the administrator's own saved password here. */}
-        <label>{user ? 'Jauna parole (atstājiet tukšu, lai nemainītu)' : 'Parole'}
+        {!user && microsoft && (
+          <p className="fnote">Ja lietotājs ienāks ar Microsoft kontu, lietotājvārdam jāsakrīt ar konta nosaukumu pirms @ (piem. janis.berzins), un paroli var atstāt tukšu.</p>
+        )}
+        <label>{user ? 'Jauna parole (atstājiet tukšu, lai nemainītu)' : microsoft ? 'Parole (nav obligāta)' : 'Parole'}
           <span className="pw">
             <input name="new-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" autoCapitalize="none" spellCheck={false}
               value={password} onChange={(e) => setPassword(e.target.value)} placeholder={`vismaz ${MIN_PASSWORD} zīmes…`} />

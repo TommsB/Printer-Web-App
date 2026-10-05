@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import auth, orders, printers, replacements, settings, toners
+from . import auth, microsoft, orders, printers, replacements, settings, toners
 from .auth import current_username
 from .config import config
 from .db import init_db
@@ -27,6 +27,7 @@ app = FastAPI(title="Printer Manager", lifespan=lifespan)
 
 require_auth = Depends(current_username)
 app.include_router(auth.router)
+app.include_router(microsoft.router)  # Sign in with Microsoft (off until ENTRA_* and PUBLIC_URL are set)
 app.include_router(auth.users_router, dependencies=[Depends(auth.require_admin)])  # every route: admins only
 app.include_router(printers.router, dependencies=[require_auth])
 app.include_router(toners.router, dependencies=[require_auth])

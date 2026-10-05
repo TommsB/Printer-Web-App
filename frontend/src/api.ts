@@ -2,7 +2,8 @@ export interface Supply { idx: string; description: string; level: number | null
 /** Two roles with the same rights in the app; only an admin can manage users (Pārvaldība → Lietotāji). */
 export type Role = 'admin' | 'standard'
 export interface Session { username: string; role: Role }
-export interface AppUser { username: string; role: Role; created_ts?: string; created_by?: string | null }
+/** has_password false = the user can only sign in with Microsoft. */
+export interface AppUser { username: string; role: Role; created_ts?: string; created_by?: string | null; has_password?: boolean }
 export interface Snapshot {
   ts: string; reachable: boolean; hostname: string; serial: string; status: string
   uptime_hours: number | null; page_count: number | null; alerts: string; supplies?: Supply[]
@@ -112,6 +113,8 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
 }
 
 export const api = {
+  /** What the login page offers: Microsoft sign-in (when configured on the server) and/or the password form. */
+  authConfig: () => req<{ microsoft: boolean; password: boolean }>('GET', '/api/auth/config'),
   me: () => req<Session>('GET', '/api/auth/me'),
   login: (username: string, password: string) => req<Session>('POST', '/api/auth/login', { username, password }),
   // User management — the server only allows these for an admin.
