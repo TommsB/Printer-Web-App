@@ -17,10 +17,13 @@ DEFAULTS = {
     "entra_client_id": "",
     "entra_client_secret": "",
     "public_url": "",  # how users reach the app, e.g. https://printeri.tenax.lv (for the Microsoft redirect)
-    # "true"/"false" as text (env vars are text): let any account of the tenant in as a standard user,
-    # or only people already listed in Pārvaldība → Lietotāji.
-    "entra_auto_create": "true",
-    "password_login": "true",  # "false" = Microsoft only (the rescue script still works)
+    # "true"/"false" as text (env vars are text). The defaults are the strict policy:
+    # only people already listed in Pārvaldība → Lietotāji get in ("true" = any account of the tenant is
+    # added as a standard user on first sign-in) …
+    "entra_auto_create": "false",
+    # … and, once Microsoft sign-in is configured, only through Microsoft ("true" = also show the password
+    # form). Without Microsoft configured the password form is always there, so nobody is locked out.
+    "password_login": "false",
 }
 
 

@@ -16,8 +16,9 @@ services:
       ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-}
       ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET:-}
       PUBLIC_URL: ${PUBLIC_URL:-}                        # e.g. https://printeri.tenax.lv
-      ENTRA_AUTO_CREATE: ${ENTRA_AUTO_CREATE:-true}      # false = only people listed in Pārvaldība → Lietotāji
-      PASSWORD_LOGIN: ${PASSWORD_LOGIN:-true}            # false = Microsoft only
+      # Policy once Microsoft sign-in is on: only people listed in Pārvaldība → Lietotāji, and only via Microsoft.
+      ENTRA_AUTO_CREATE: ${ENTRA_AUTO_CREATE:-false}     # true = any tenant account gets in as a standard user
+      PASSWORD_LOGIN: ${PASSWORD_LOGIN:-false}           # true = also allow username + password (use while testing)
     volumes:
       # Named volume, not a bind mount: SQLite WAL fails on Windows-host bind mounts
       # ("disk I/O error"). On Linux either works; backup: see README.

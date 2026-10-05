@@ -42,11 +42,19 @@ PUBLIC_URL=https://<app-address>
 ```
 then `docker compose up -d`. The login page now shows "Pieslēgties ar Microsoft".
 
-**Who gets in.** A Microsoft account is matched to an app user by its sign-in name: the full name
-(`janis.berzins@tenax.lv`) or the part before the `@` (`janis.berzins`) — so existing logins keep their role and
-settings. An account with no app user is added as a **standard user** on first sign-in. To allow only people
-already listed in Pārvaldība → Lietotāji, set `ENTRA_AUTO_CREATE=false`. To switch the password form off, set
-`PASSWORD_LOGIN=false` (the `set_user.py` rescue script still works).
+**Who gets in.** Once Microsoft sign-in is configured, the policy is strict by default:
+- **Only people listed in Pārvaldība → Lietotāji**, and they must sign in with an account of this tenant.
+  A Microsoft account is matched to an app user by its sign-in name: the full name (`janis.berzins@tenax.lv`)
+  or the part before the `@` (`janis.berzins`) — so existing logins keep their role and settings.
+  To give someone access, an administrator adds them there (username = the part before the `@`, no password).
+  Anyone else is refused ("nav piekļuves šai lietotnei").
+- **Only through Microsoft**: the username + password form is gone.
+
+Two switches in `.env` loosen this:
+- `PASSWORD_LOGIN=true` — also allow username + password. **Use it for the first test**, and as the way back in
+  if Microsoft sign-in is misconfigured: set it, `docker compose up -d`, log in with a password
+  (`set_user.py` can create or reset one).
+- `ENTRA_AUTO_CREATE=true` — any account of the tenant gets in, added as a standard user on first sign-in.
 
 ### Database
 SQLite at `/app/data/printers.db` inside the `printer-data` volume (a named volume, because SQLite WAL breaks on Windows bind mounts).
