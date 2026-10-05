@@ -56,6 +56,18 @@ Two switches in `.env` loosen this:
   (`set_user.py` can create or reset one).
 - `ENTRA_AUTO_CREATE=true` — any account of the tenant gets in, added as a standard user on first sign-in.
 
+### Push notifications
+Each user turns them on per device in the profile window (round button, top right) → **Paziņojumi**, and picks
+the kinds: a printer can't print / stopped answering, a toner replacement to confirm, a toner nearly empty with
+no spare. They are sent after each SNMP poll, once per problem (`backend/app/push.py`).
+- Needs the app on **https**, and `PUBLIC_URL=https://<app-address>` in `.env` (it identifies this server to
+  the push services).
+- The server needs outbound internet to the push services (Apple `*.push.apple.com`, Google
+  `fcm.googleapis.com`, Mozilla `updates.push.services.mozilla.com`).
+- iPhone/iPad: only in the home-screen app (Safari → Share → Add to Home Screen), iOS 16.4 or newer.
+- The server's key pair is created on first use and lives in the database (`app_kv`). Restoring an older
+  database copy, or starting with a new one, means every device has to switch notifications on again.
+
 ### Database
 SQLite at `/app/data/printers.db` inside the `printer-data` volume (a named volume, because SQLite WAL breaks on Windows bind mounts).
 ```

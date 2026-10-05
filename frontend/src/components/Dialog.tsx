@@ -35,11 +35,12 @@ function snapshot(f: HTMLFormElement): string {
 }
 
 /** The sheet itself. Submitting runs onSubmit (shows busy/errors) and closes on success. */
-function Frame({ title, onClose, onSubmit, className, children }: {
+function Frame({ title, onClose, onSubmit, className, confirmDiscard = true, children }: {
   title: string
   onClose: () => void
   onSubmit?: () => Promise<unknown> | void
   className?: string // e.g. 'wide' for long editor forms
+  confirmDiscard?: boolean // false for windows whose controls apply at once (nothing unsaved to lose)
   children: ReactNode
 }) {
   const [busy, setBusy] = useState(false)
@@ -63,7 +64,7 @@ function Frame({ title, onClose, onSubmit, className, children }: {
   // Backdrop click and Esc are easy to do by accident: ask before throwing away edits. (Atcelt closes directly.)
   const requestClose = () => {
     if (busy) return
-    if (form.current && snapshot(form.current) !== initial.current) setAskDiscard(true)
+    if (confirmDiscard && form.current && snapshot(form.current) !== initial.current) setAskDiscard(true)
     else onClose()
   }
 

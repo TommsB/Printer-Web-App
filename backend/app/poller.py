@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta
 
-from . import replacements
+from . import push, replacements
 from .config import config
 from .db import get_db
 from .snmp import poll_many
@@ -42,6 +42,12 @@ def poll_all_sync(printer_id: int | None = None) -> int:
                     print(f"[poller] replacement detection failed for printer {pid}: {e}")
         cutoff = (datetime.now() - timedelta(days=config["snapshot_keep_days"])).isoformat(timespec="seconds")
         conn.execute("DELETE FROM snmp_snapshots WHERE ts < ?", (cutoff,))
+        messages = []
+        try:  # notifications are an extra: a problem there must never stop the poll from being saved
+            messages = push.after_poll(conn, list(results))
+        except Exception as e:
+            print(f"[poller] push check failed: {e}")
+    push.dispatch(messages)  # after the commit; delivery runs in the background
     return len(results)
 
 

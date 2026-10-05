@@ -4,6 +4,9 @@ export type Role = 'admin' | 'standard'
 export interface Session { username: string; role: Role }
 /** has_password false = the user can only sign in with Microsoft. */
 export interface AppUser { username: string; role: Role; created_ts?: string; created_by?: string | null; has_password?: boolean }
+/** Which kinds of push notifications a user wants (see backend/app/push.py). */
+export interface PushPrefs { printer: boolean; replacement: boolean; toner: boolean }
+export interface PushStatus { public_key: string; prefs: PushPrefs; endpoints: string[] }
 export interface Snapshot {
   ts: string; reachable: boolean; hostname: string; serial: string; status: string
   uptime_hours: number | null; page_count: number | null; alerts: string; supplies?: Supply[]
@@ -167,6 +170,12 @@ export const api = {
     req<StockRow>('PUT', `/api/stock/${printerId}/${tonerId}/optimal`, { optimal_qty }),
   movements: () => req<Movement[]>('GET', '/api/movements'),
   deleteMovement: (id: number) => req<unknown>('DELETE', `/api/movements/${id}`),
+  // Push notifications (profile window). prefs apply to all of the user's devices; endpoints = their devices.
+  push: () => req<PushStatus>('GET', '/api/push'),
+  pushSubscribe: (body: { endpoint: string; keys: { p256dh: string; auth: string }; device: string }) => req<unknown>('POST', '/api/push/subscribe', body),
+  pushUnsubscribe: (endpoint: string) => req<unknown>('POST', '/api/push/unsubscribe', { endpoint }),
+  pushPrefs: (prefs: PushPrefs) => req<PushPrefs>('PUT', '/api/push/prefs', prefs),
+  pushTest: (endpoint: string) => req<{ ok: boolean; status: number }>('POST', '/api/push/test', { endpoint }),
   /** Per-user settings (key → text); null = not set yet. */
   getSetting: (key: string) => req<{ value: string | null }>('GET', `/api/settings/${key}`),
   putSetting: (key: string, value: string) => req<{ value: string }>('PUT', `/api/settings/${key}`, { value }),

@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import auth, microsoft, orders, printers, replacements, settings, toners
+from . import auth, microsoft, orders, printers, push, replacements, settings, toners
 from .auth import current_username
 from .config import config
 from .db import init_db
@@ -34,6 +34,7 @@ app.include_router(toners.router, dependencies=[require_auth])
 app.include_router(orders.router, dependencies=[require_auth])
 app.include_router(replacements.router, dependencies=[require_auth])
 app.include_router(settings.router, dependencies=[require_auth])
+app.include_router(push.router, dependencies=[require_auth])
 
 
 @app.get("/api/health")

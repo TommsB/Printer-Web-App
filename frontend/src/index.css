@@ -231,6 +231,9 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .profile__txt { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .profile__txt b { font-size: 18px; font-weight: 600; letter-spacing: -.02em; overflow-wrap: anywhere; }
 .profile__txt span { font-size: 13.5px; color: var(--muted); }
+/* Profile window → Paziņojumi */
+.push { gap: 12px; }
+.push__test { align-self: flex-start; }
 /* "Garantija" tag on a warranty claim (Pasūtīts, Saņemt visus, order history). */
 .tag-w { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 8px; margin-left: 6px; border-radius: 10px;
   background: #EAEFF8; color: #3C5A99; font-size: 11.5px; font-weight: 600; letter-spacing: 0; vertical-align: middle; white-space: nowrap; }

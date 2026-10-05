@@ -32,6 +32,19 @@ CREATE TABLE IF NOT EXISTS users (
     created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
     created_by TEXT
 );
+-- Push notifications (push.py): one row per browser/phone that turned them on;
+-- app_kv holds server-wide values (the VAPID key pair); push_state remembers which problems were already
+-- announced, so a printer that stays offline is reported once, not at every poll.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    endpoint TEXT PRIMARY KEY,
+    username TEXT NOT NULL,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    device TEXT NOT NULL DEFAULT '',
+    created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+);
+CREATE TABLE IF NOT EXISTS app_kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS push_state (key TEXT PRIMARY KEY, since_ts TEXT NOT NULL);
 -- Small per-user settings, e.g. the order e-mail template (settings.py).
 CREATE TABLE IF NOT EXISTS user_settings (
     username TEXT NOT NULL,

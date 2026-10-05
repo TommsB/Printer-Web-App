@@ -208,5 +208,6 @@ def delete_user(username: str, conn: sqlite3.Connection = Depends(db_dep), admin
     # Their personal settings go too; what they did (history entries, orders) keeps their name.
     conn.execute("DELETE FROM user_printer_order WHERE username = ?", (username,))
     conn.execute("DELETE FROM user_settings WHERE username = ?", (username,))
+    conn.execute("DELETE FROM push_subscriptions WHERE username = ?", (username,))  # no more notifications
     _drop_sessions(username)
     return {"deleted": username}
