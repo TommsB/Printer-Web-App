@@ -27,6 +27,7 @@ export interface StoreLocation { id: number; name: string; short: string; active
 export const UNASSIGNED = 'Nav norādīts'
 export interface PrinterToner {
   id: number; code: string; color: string; kind: string; qty: number; optimal_qty: number; low: boolean; ordered: number
+  ordered_extra: number // of `ordered`: extras from the basket, which don't count towards the norm
   locations: StockLoc[]
 }
 export interface Printer {
@@ -54,11 +55,12 @@ export interface StockRow {
   printer_id: number; company: string; location: string; model: string; ip: string | null
   toner_id: number; code: string; color: string; kind: string; qty: number; optimal_qty: number; low: boolean
   ordered: number // units on open orders
+  ordered_extra: number // of those: extras from the basket, which don't count towards the norm
   default_location_id: number | null
   locations: StockLoc[]
 }
 export interface Order {
-  id: number; printer_id: number; toner_id: number; qty: number; status: 'ordered' | 'received' | 'cancelled' | 'defect'
+  id: number; printer_id: number; toner_id: number; qty: number; status: 'planned' | 'ordered' | 'received' | 'cancelled' | 'defect' // planned = in the basket (Grozs), not ordered yet
   note: string; created_by: string; created_ts: string; resolved_by: string | null; resolved_ts: string | null
   received_qty: number | null; location: string; model: string; company: string; code: string; color: string; kind: string
   default_location_id: number | null
@@ -192,8 +194,12 @@ export const api = {
   createLocation: (name: string, short: string) => req<StoreLocation>('POST', '/api/locations', { name, short }),
   updateLocation: (id: number, name: string, short: string, active: boolean) =>
     req<StoreLocation>('PUT', `/api/locations/${id}`, { name, short, active }),
-  orders: (status: 'ordered' | 'received' | 'cancelled' | 'defect' | 'all' = 'ordered') => req<Order[]>('GET', `/api/orders?status=${status}`),
-  createOrders: (items: OrderItem[], note = '') => req<Order[]>('POST', '/api/orders', { items, note }),
+  orders: (status: Order['status'] | 'all' = 'ordered') => req<Order[]>('GET', `/api/orders?status=${status}`),
+  /** Places an order. `extra` = it is the basket's "papildus" part for those toners: that part is used up and
+   *  the order doesn't count towards the norm. Without it: the part missing to the norm. */
+  createOrders: (items: OrderItem[], note = '', extra = false) => req<Order[]>('POST', '/api/orders', { items, note, extra }),
+  /** Puts extra cartridges in the basket ("Grozs"), on top of what is missing to the norm. Nothing is ordered. */
+  addToBasket: (items: OrderItem[], note = '') => req<Order[]>('POST', '/api/orders', { items, note, planned: true }),
   receiveOrder: (id: number, qty: number, locationId: number) =>
     req<Order>('POST', `/api/orders/${id}/receive`, { qty, location_id: locationId }),
   /** "Nodots garantijā": a cartridge from the Defekti list was handed over; it becomes an open (warranty) order. */

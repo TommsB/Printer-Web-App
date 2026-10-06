@@ -1,4 +1,7 @@
-"""Toner orders: ordered -> received (adds to the reserve) or cancelled.
+"""Toner orders: (planned ->) ordered -> received (adds to the reserve) or cancelled.
+
+'planned' = in the basket ("Grozs"): cartridges someone added by hand, on top of what the app suggests there
+from the norms. Nothing is ordered until the basket is ordered; then they become 'ordered'.
 
 Stock only increases when an order is marked received; nothing is added by ordering.
 
@@ -28,6 +31,8 @@ class OrderItem(BaseModel):
 class OrderIn(BaseModel):
     items: list[OrderItem] = Field(min_length=1, max_length=100)
     note: str = ""
+    planned: bool = False  # True = only put it in the basket ("Grozs"); nothing is ordered yet
+    extra: bool = False  # True = this order is the basket's "papildus" part for these toners (uses it up)
 
 
 class ReceiveIn(BaseModel):
@@ -57,7 +62,7 @@ def _get(conn: sqlite3.Connection, order_id: int) -> sqlite3.Row:
 
 @router.get("")
 def list_orders(status: str = "ordered", conn: sqlite3.Connection = Depends(db_dep)) -> list[dict]:
-    if status not in ("ordered", "received", "cancelled", "defect", "all"):
+    if status not in ("planned", "ordered", "received", "cancelled", "defect", "all"):
         raise HTTPException(400, "bad status")
     where, args = ("", ()) if status == "all" else (" WHERE o.status = ?", (status,))
     rows = conn.execute(_SQL + where + " ORDER BY o.created_ts DESC, o.id DESC LIMIT 500", args)
@@ -68,14 +73,36 @@ def list_orders(status: str = "ordered", conn: sqlite3.Connection = Depends(db_d
 @router.post("", status_code=201)
 def create_orders(body: OrderIn, conn: sqlite3.Connection = Depends(db_dep),
                   username: str = Depends(current_username)) -> list[dict]:
+    """Three uses.
+    `planned`: put cartridges in the basket ("Grozs", status 'planned') — extra ones, on top of what is missing
+    to the norm; nothing is ordered, and adding the same toner again adds to its quantity.
+    `extra`: order the basket's extra part for these toners — the basket entries are used up, and the order is
+    marked `extra`, so it doesn't count towards the norm (what is missing to the norm stays in the basket).
+    Neither: an ordinary order (the part missing to the norm); the basket's extra entries are left alone."""
     ids = []
+    note = body.note.strip()
     for it in body.items:
         if not conn.execute("SELECT 1 FROM printer_toners WHERE printer_id = ? AND toner_id = ?",
                             (it.printer_id, it.toner_id)).fetchone():
             raise HTTPException(404, "Printer/toner link not found")
+        basket = conn.execute("SELECT id, qty, note FROM orders WHERE status = 'planned' AND printer_id = ? AND toner_id = ?",
+                              (it.printer_id, it.toner_id)).fetchall()
+        if body.planned and basket:
+            if basket[0]["qty"] + it.qty > 1000:
+                raise HTTPException(400, "Grozā nevar būt vairāk par 1000 gab. viena tonera")
+            conn.execute("UPDATE orders SET qty = qty + ?, note = CASE WHEN ? != '' THEN ? ELSE note END WHERE id = ?",
+                         (it.qty, note, note, basket[0]["id"]))
+            ids.append(basket[0]["id"])
+            continue
+        kept = ""
+        if body.extra and not body.planned:  # the basket entries become this order; their notes come along
+            kept = "; ".join(dict.fromkeys(b["note"] for b in basket if b["note"]))
+            conn.execute("DELETE FROM orders WHERE status = 'planned' AND printer_id = ? AND toner_id = ?",
+                         (it.printer_id, it.toner_id))
         cur = conn.execute(
-            "INSERT INTO orders (printer_id, toner_id, qty, note, created_by) VALUES (?,?,?,?,?)",
-            (it.printer_id, it.toner_id, it.qty, body.note.strip(), username))
+            "INSERT INTO orders (printer_id, toner_id, qty, status, note, created_by, extra) VALUES (?,?,?,?,?,?,?)",
+            (it.printer_id, it.toner_id, it.qty, "planned" if body.planned else "ordered",
+             note or kept, username, int(body.extra and not body.planned)))
         ids.append(cur.lastrowid)
     return [dict(_get(conn, i)) for i in ids]
 

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { api, UNASSIGNED, type Order, type StockLoc, type StoreLocation } from '../api'
 import { invalidate, useApiData } from '../cache'
 import { prepareFiles } from '../files'
+import { missing } from '../lib'
 import { PendingFiles } from './DefectFiles'
 import { ConfirmDialog, DestructiveDialog, InfoDialog } from './Dialog'
 import { Stepper } from './Stepper'
@@ -12,7 +13,7 @@ import { Stepper } from './Stepper'
  */
 
 export interface TonerRowData {
-  id: number; code: string; color: string; qty: number; optimal_qty: number; ordered: number; locations: StockLoc[]
+  id: number; code: string; color: string; qty: number; optimal_qty: number; ordered: number; ordered_extra?: number; locations: StockLoc[]
 }
 
 interface Common {
@@ -45,15 +46,26 @@ export function UseDialog({ printerId, printerName, toner: t, onDone, onClose }:
   )
 }
 
-/** Pasūtīt: add an order; the reserve only grows when the order is marked received. */
+/**
+ * Pievienot grozam: put cartridges in the basket (Krājumi → Grozs). Nothing is ordered yet — the order is
+ * placed from the basket. What is missing to the norm is in the basket by itself; this quantity comes on top.
+ */
 export function OrderDialog({ printerId, printerName, toner: t, onDone, onClose }: Common) {
-  const [qtyText, setQtyText] = useState(String(Math.max(1, t.optimal_qty - t.qty - t.ordered)))
+  const [qtyText, setQtyText] = useState('1')
   const [note, setNote] = useState('')
+  const short = missing(t)
   return (
-    <ConfirmDialog title={`Pasūtīt ${t.code}`} confirmLabel="Pievienot pasūtījumam" disabled={!isInt(qtyText, 1, 1000)} onClose={onClose}
-      onConfirm={async () => { await api.createOrders([{ printer_id: printerId, toner_id: t.id, qty: +qtyText }], note); onDone() }}>
+    <ConfirmDialog title={`Pievienot grozam: ${t.code}`} confirmLabel="Pievienot grozam" disabled={!isInt(qtyText, 1, 1000)} onClose={onClose}
+      onConfirm={async () => {
+        await api.addToBasket([{ printer_id: printerId, toner_id: t.id, qty: +qtyText }], note)
+        invalidate('basket') // Krājumi's basket must load fresh (this dialog also opens from Statuss)
+        onDone()
+      }}>
       <p className="dlg-text"><i className={`cdot ${t.color ? t.color.toLowerCase() : 'g'}`} /> <b>{t.code}</b> · {printerName}</p>
-      <p className="dlg-text muted">Krājums pieaugs tikai tad, kad pasūtījums tiks atzīmēts kā saņemts.</p>
+      <p className="dlg-text muted">
+        Toneris parādīsies groza daļā „Pielikts papildus” (Krājumi); pasūtīts tas tiek tur.
+        {short > 0 && ` Grozā jau ir ×${short}, kas trūkst līdz normai — šis daudzums būs papildus tam.`}
+      </p>
       <div className="field"><span>Daudzums</span><Stepper label="Daudzums" value={qtyText} onChange={setQtyText} min={1} max={1000} /></div>
       <label>Piezīme (nav obligāta)<input value={note} onChange={(e) => setNote(e.target.value)} /></label>
     </ConfirmDialog>

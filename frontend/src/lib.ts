@@ -8,8 +8,10 @@ export const SOON_DAYS = 14
 /** "≈ 12 d." next to a toner level; far-off forecasts are capped, they aren't that precise. */
 export const fmtDaysLeft = (d: number) => (d <= 0 ? 'beidzas' : d > 90 ? '> 90 d.' : `≈ ${d} d.`)
 
-/** How many cartridges of this row are still to be ordered: norm minus stock minus what is already on order. */
-export const missing = (r: Pick<StockRow, 'qty' | 'optimal_qty' | 'ordered'>) => Math.max(0, r.optimal_qty - r.qty - r.ordered)
+/** How many cartridges are missing to the norm: norm minus stock minus what is already on order for it
+ *  (extras ordered from the basket are on top of the norm, so they don't count). */
+export const missing = (r: { qty: number; optimal_qty: number; ordered: number; ordered_extra?: number }) =>
+  Math.max(0, r.optimal_qty - r.qty - (r.ordered - (r.ordered_extra ?? 0)))
 /** "Jāpasūta vienības": the big number in Krājumi and the count on its nav tab. */
 export const needUnits = (rows: StockRow[], company: string) =>
   rows.reduce((n, r) => (!company || r.company === company ? n + missing(r) : n), 0)
@@ -84,6 +86,7 @@ export function printerState(p: Printer): PrinterState {
 
 /** Where a defect (warranty claim) stands, by its order status; `cls` colours its icon. */
 export const DEFECT_STATUS: Record<Order['status'], { label: string; cls: string }> = {
+  planned: { label: 'Grozā', cls: 'k-fix' }, // never a defect; here only to cover every order status
   defect: { label: 'Nav nodots', cls: 'k-out' },
   ordered: { label: 'Nodots garantijā', cls: 'k-wait' },
   received: { label: 'Aizvietots', cls: 'k-in' },

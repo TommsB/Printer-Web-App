@@ -66,10 +66,10 @@ export default function App() {
     .catch(() => {}), [])
   useEffect(() => {
     if (!user) return
-    // The Krājumi count (to order + defects to hand over) reads the cached stock and defect lists: keep them
+    // The Krājumi count (the basket + defects to hand over) reads the cached stock, basket and defect lists: keep them
     // fresh the same way, and right after anything is changed anywhere in the app (an order, a received
     // delivery, a used cartridge, a cartridge marked defective…).
-    const counts = () => { refresh('stock', api.stock); refresh('defects', () => api.orders('defect')) }
+    const counts = () => { refresh('stock', api.stock); refresh('defects', () => api.orders('defect')); refresh('basket', () => api.orders('planned')) }
     const tick = () => { reloadEvents(); counts() }
     reloadEvents()
     const timer = setInterval(tick, 60_000)

@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS orders (
     printer_id INTEGER NOT NULL REFERENCES printers(id) ON DELETE CASCADE,
     toner_id INTEGER NOT NULL REFERENCES toner_models(id) ON DELETE CASCADE,
     qty INTEGER NOT NULL CHECK (qty > 0),
-    status TEXT NOT NULL DEFAULT 'ordered',  -- ordered | received | cancelled (+ defect: warranty, not handed over yet)
+    status TEXT NOT NULL DEFAULT 'ordered',  -- planned (in the basket) | ordered | received | cancelled (+ defect: warranty, not handed over yet)
     note TEXT NOT NULL DEFAULT '',
     created_by TEXT NOT NULL,
     created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
@@ -303,6 +303,8 @@ def init_db() -> None:
         if "sent_ts" not in ocols:
             conn.execute("ALTER TABLE orders ADD COLUMN sent_ts TEXT")
             conn.execute("ALTER TABLE orders ADD COLUMN sent_by TEXT")
+        if "extra" not in ocols:  # ordered from the basket's "papildus" part: on top of the norm, see orders.py
+            conn.execute("ALTER TABLE orders ADD COLUMN extra INTEGER NOT NULL DEFAULT 0")
         if "pages_printed" not in ocols:  # defects: what the cartridge printed, since when, where it is kept
             conn.execute("ALTER TABLE orders ADD COLUMN pages_printed INTEGER")
             conn.execute("ALTER TABLE orders ADD COLUMN installed_ts TEXT")

@@ -40,6 +40,8 @@ export const Icon = {
   alert: (s = 12) => svg(s, <><path d="M12 5.5v8" /><path d="M12 18.5v.01" /></>),
   // "On order" marker on a toner row
   cart: (s = 14) => svg(s, <><path d="M2.5 4h2.6l2.3 10.5h10.2l1.9-7.5H6.2" /><circle cx="9.5" cy="18.8" r="1.3" /><circle cx="16.5" cy="18.8" r="1.3" /></>),
+  // Krājumi → "Pasūtīts": on its way
+  truck: (s = 20) => svg(s, <><path d="M2.5 6.5h11v10h-11z" /><path d="M13.5 10h4l3 3.2v3.3h-7" /><circle cx="7" cy="17.5" r="1.8" /><circle cx="17" cy="17.5" r="1.8" /></>),
   // Show / hide a password
   eye: (s = 18) => svg(s, <><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12s-3.5 6.5-9.5 6.5S2.5 12 2.5 12z" /><circle cx="12" cy="12" r="2.8" /></>),
   eyeOff: (s = 18) => svg(s, <><path d="M4 4l16 16" /><path d="M9.6 5.9A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-2.9 3.7M6.3 7.6A17 17 0 0 0 2.5 12s3.5 6.5 9.5 6.5c1.4 0 2.6-.3 3.7-.8" /><path d="M9.9 9.9a2.8 2.8 0 0 0 4 4" /></>),

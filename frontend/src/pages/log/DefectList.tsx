@@ -9,6 +9,7 @@ import { DEFECT_STATUS, fmtDate, fmtNum } from '../../lib'
 /** Recorded = warning sign; handed over = waiting (the same clock as an order on its way); replacement
  *  arrived = the "received" icon; rejected = ×. */
 const STATUS_ICON: Record<Order['status'], () => ReactNode> = {
+  planned: () => Icon.cart(16),
   defect: () => Icon.hazard(),
   ordered: () => Icon.clock(18),
   received: () => Icon.trendUp(),

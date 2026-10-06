@@ -76,7 +76,9 @@ def _printer_dict(conn: sqlite3.Connection, row: sqlite3.Row, with_supplies: boo
     d["toners"] = [dict(x) for x in conn.execute(
         "SELECT t.id, t.code, t.color, t.kind, pt.qty, pt.optimal_qty, pt.qty < pt.optimal_qty AS low,"
         " (SELECT COALESCE(SUM(o.qty), 0) FROM orders o WHERE o.status = 'ordered'"
-        "  AND o.printer_id = pt.printer_id AND o.toner_id = pt.toner_id) AS ordered"
+        "  AND o.printer_id = pt.printer_id AND o.toner_id = pt.toner_id) AS ordered,"
+        " (SELECT COALESCE(SUM(o.qty), 0) FROM orders o WHERE o.status = 'ordered' AND o.extra = 1"
+        "  AND o.printer_id = pt.printer_id AND o.toner_id = pt.toner_id) AS ordered_extra"
         " FROM printer_toners pt JOIN toner_models t ON t.id = pt.toner_id"
         " WHERE pt.printer_id = ? ORDER BY t.code", (d["id"],))]
     if locs is None:

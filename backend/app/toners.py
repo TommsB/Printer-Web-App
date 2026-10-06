@@ -142,7 +142,10 @@ SELECT pt.printer_id, p.company, p.location, p.model, p.ip, p.default_location_i
        pt.toner_id, t.code, t.color, t.kind, pt.qty, pt.optimal_qty,
        pt.qty < pt.optimal_qty AS low,
        (SELECT COALESCE(SUM(o.qty), 0) FROM orders o WHERE o.status = 'ordered'
-          AND o.printer_id = pt.printer_id AND o.toner_id = pt.toner_id) AS ordered
+          AND o.printer_id = pt.printer_id AND o.toner_id = pt.toner_id) AS ordered,
+       -- of those, ordered as extras from the basket: they don't count towards the norm
+       (SELECT COALESCE(SUM(o.qty), 0) FROM orders o WHERE o.status = 'ordered' AND o.extra = 1
+          AND o.printer_id = pt.printer_id AND o.toner_id = pt.toner_id) AS ordered_extra
 FROM printer_toners pt
 JOIN printers p ON p.id = pt.printer_id
 JOIN toner_models t ON t.id = pt.toner_id

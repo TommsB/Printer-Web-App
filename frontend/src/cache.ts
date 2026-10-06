@@ -81,6 +81,7 @@ export function prefetchAll(): void {
     ['stock', api.stock],
     ['orders', () => api.orders('ordered')],
     ['defects', () => api.orders('defect')],
+    ['basket', () => api.orders('planned')],
     ['toners', api.toners],
     ['movements', api.movements],
     ['locations', api.locations],

@@ -34,7 +34,7 @@ export const ORDER_EMAIL: EmailFlavor = {
     line: '• {kods} – {krāsa} – {skaits} gab.',
   },
   merge: true,
-  scope: 'Viena veidne abiem sarakstiem — „Jāpasūta” un „Pasūtīts”.',
+  scope: 'Viena veidne abiem sarakstiem — „Grozs” un „Pasūtīts”.',
   linePlaceholders: ['{kods}', '{krāsa}', '{skaits}'],
 }
 /** Warranty claims: separate wording, one line per defective cartridge with where and at what level it failed. */

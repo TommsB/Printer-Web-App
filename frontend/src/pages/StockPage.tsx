@@ -5,7 +5,7 @@ import { useApiData } from '../cache'
 import { DefectDialog, PendingFiles } from '../components/DefectFiles'
 import { ConfirmDialog, DestructiveDialog } from '../components/Dialog'
 import { prepareFiles } from '../files'
-import { fmtNum } from '../lib'
+import { fmtNum, missing } from '../lib'
 import { ORDER_EMAIL, OrderEmailDialog, WARRANTY_EMAIL, type EmailFlavor, type EmailItem } from '../components/OrderEmailDialog'
 import { matches, SearchBox } from '../components/SearchBox'
 import { Stepper } from '../components/Stepper'
@@ -16,8 +16,12 @@ import { useApp } from '../ctx'
 import { Icon } from '../icons'
 import { vtName, withViewTransition } from '../viewTransition'
 
-/** One toner to order: which printer/toner, how many, and its colour for the dot. */
-interface Need { printer_id: number; toner_id: number; code: string; color: string; qty: number }
+/** One toner in the basket ("Grozs"): which printer/toner, its colour for the dot, and how many — what is
+ *  missing to the norm plus what was added by hand (`added`, in the basket entries `plannedIds`). */
+interface Need {
+  printer_id: number; toner_id: number; code: string; color: string; kind: string; company: string; model: string
+  qty: number; added: number; plannedIds: number[]
+}
 
 const COLOR_LV: Record<string, string> = { K: 'melns', C: 'ciāns', M: 'purpurs', Y: 'dzeltens' }
 
@@ -132,7 +136,9 @@ type Dlg =
   | { kind: 'discard'; order: Order } // delete an entry from Defekti
   | { kind: 'defect'; order: Order } // a defect's details, where it is kept, photos/files
   | { kind: 'email'; source: string; flavor: EmailFlavor; items: EmailItem[] }
-  | { kind: 'suggest'; loc: string; items: Need[] }
+  | { kind: 'suggest'; loc: string; items: Need[]; extra: boolean } // order one printer's toners from one part of the basket
+  | { kind: 'unbasket'; loc: string; item: Need } // take one hand-added toner out of the basket
+  | { kind: 'orderAll' } // order the whole basket, both parts
   | { kind: 'receive'; order: Order }
   | { kind: 'cancel'; order: Order }
   | null
@@ -144,6 +150,8 @@ export function StockPage() {
   const ord = useApiData<Order[]>('orders', () => api.orders('ordered'), [])
   // Defective cartridges not yet handed over for warranty (the "Defekti" list).
   const dfc = useApiData<Order[]>('defects', () => api.orders('defect'), [])
+  // Cartridges added to the basket by hand (on top of what is missing to the norm).
+  const bsk = useApiData<Order[]>('basket', () => api.orders('planned'), [])
   const locations = useApiData<StoreLocation[]>('locations', api.locations, [])
   const activeLocs = locations.data.filter((l) => l.active)
   const rows = stock.data
@@ -175,7 +183,7 @@ export function StockPage() {
     return () => clearTimeout(timer)
   }, [flashShown, flash])
 
-  const load = async () => { await Promise.all([stock.reload(), ord.reload(), dfc.reload(), locations.reload()]) }
+  const load = async () => { await Promise.all([stock.reload(), ord.reload(), dfc.reload(), bsk.reload(), locations.reload()]) }
 
   // Same order as Statuss: the user's custom order (the printers list comes back in it; cached, shared).
   const printers = useApiData<Printer[]>('printers', api.printers, [])
@@ -194,22 +202,43 @@ export function StockPage() {
   // Opening a card closes the one that was open. Animated on desktop: the cards grow/shrink and glide into place.
   const toggle = (id: number) => withViewTransition(() => setOpenId((cur) => (cur === id ? null : id)))
 
-  // Suggestions: what is still missing to reach the norm, after subtracting what is already on order.
+  // The basket ("Grozs"), per printer: what is still missing to reach the norm (after subtracting what is
+  // already on order) plus whatever was added by hand ("Pievienot grozam" on a toner) — the two add up.
   const suggest = new Map<number, { loc: string; items: Need[] }>()
-  for (const r of inCompany) {
-    const need = r.optimal_qty - r.qty - r.ordered
-    if (need <= 0) continue
-    const s = suggest.get(r.printer_id) ?? { loc: r.location, items: [] }
-    s.items.push({ printer_id: r.printer_id, toner_id: r.toner_id, code: r.code, color: r.color, qty: need })
-    suggest.set(r.printer_id, s)
+  const line = (printerId: number, loc: string, item: Omit<Need, 'qty' | 'added' | 'plannedIds'>) => {
+    const s = suggest.get(printerId) ?? { loc, items: [] }
+    suggest.set(printerId, s)
+    let it = s.items.find((x) => x.toner_id === item.toner_id)
+    if (!it) s.items.push(it = { ...item, qty: 0, added: 0, plannedIds: [] })
+    return it
   }
-  const needTotal = [...suggest.values()].reduce((n, s) => n + s.items.reduce((m, i) => m + i.qty, 0), 0)
+  for (const r of inCompany) {
+    const need = missing(r)
+    if (need > 0) line(r.printer_id, r.location, { printer_id: r.printer_id, toner_id: r.toner_id, code: r.code, color: r.color, kind: r.kind, company: r.company, model: r.model }).qty += need
+  }
+  for (const o of bsk.data.filter((o) => !company || o.company === company).sort((a, b) => (rank.get(a.printer_id) ?? 1e9) - (rank.get(b.printer_id) ?? 1e9))) {
+    const it = line(o.printer_id, o.location, { printer_id: o.printer_id, toner_id: o.toner_id, code: o.code, color: o.color, kind: o.kind, company: o.company, model: o.model })
+    it.qty += o.qty
+    it.added += o.qty
+    it.plannedIds.push(o.id)
+  }
+  const basket = [...suggest.entries()].sort(([a], [b]) => (rank.get(a) ?? 1e9) - (rank.get(b) ?? 1e9))
+  const needTotal = basket.reduce((n, [, s]) => n + s.items.reduce((m, i) => m + i.qty, 0), 0)
+  const addedTotal = basket.reduce((n, [, s]) => n + s.items.reduce((m, i) => m + i.added, 0), 0)
+  const normTotal = needTotal - addedTotal
+  // The basket is shown in two parts, each a list of printers with their toners: what is missing to the norm
+  // (the app puts it there by itself) and what was added on top by hand. A toner can be in both.
+  const part = (pick: (i: Need) => number) => basket
+    .map(([id, s]) => ({ id, loc: s.loc, items: s.items.filter((i) => pick(i) > 0).map((i) => ({ ...i, qty: pick(i) })) }))
+    .filter((p) => p.items.length > 0)
+  const normPart = part((i) => i.qty - i.added)
+  const extraPart = part((i) => i.added)
   const orderedTotal = openOrders.reduce((n, o) => n + o.qty, 0)
 
   // ✉ on either list: the same e-mail text (one shared template), built from that list's items.
   const emailNeeded = () => setDlg({
-    kind: 'email', source: 'Jāpasūta', flavor: ORDER_EMAIL,
-    items: inCompany.map((r) => ({ company: r.company, model: r.model, code: r.code, color: r.color, kind: r.kind, qty: r.optimal_qty - r.qty - r.ordered })),
+    kind: 'email', source: 'Grozs', flavor: ORDER_EMAIL,
+    items: basket.flatMap(([, s]) => s.items).map((i) => ({ company: i.company, model: i.model, code: i.code, color: i.color, kind: i.kind, qty: i.qty })),
   })
   // "Pasūtīts" holds purchases and warranty claims (tagged). Each has its own e-mail text and template:
   // ✉ in the header = the purchases; "Garantijas e-pasts" on a claim = all open claims.
@@ -247,27 +276,62 @@ export function StockPage() {
       <div className="cols">
         <div className="left">
           <div className="big">
-            <div className="lab">Jāpasūta vienības</div>
+            <div className="lab">Grozā vienības</div>
             <div className={needTotal > 0 ? 'num hot' : 'num'}>{needTotal}</div>
-            <div className="sub">Norma mīnus krājums mīnus jau pasūtītais</div>
+            <div className="sub">Trūkst līdz normai + pielikts papildus</div>
           </div>
 
+          {/* The basket: nothing here is ordered yet. "Pasūtīt" moves a printer's cartridges of that part to
+              "Pasūtīts". Two parts, each with its own heading and count. */}
           <section className="pane">
             <div className="rh">
-              <h3>Jāpasūta</h3>
+              <h3 className="h-ic">{Icon.cart(20)}Grozs</h3>
               <div className="rh-tools">
-                <span className="meta">{suggest.size} printeri</span>
-                {suggest.size > 0 && mailBtn(emailNeeded, 'Jāpasūta')}
+                <span className="meta">{needTotal} gab.</span>
+                {suggest.size > 0 && mailBtn(emailNeeded, 'Grozs')}
               </div>
             </div>
-            {suggest.size === 0 && <p className="muted">Viss kārtībā, nekas nav jāpasūta.</p>}
-            {[...suggest.entries()].map(([id, s]) => (
-              <div key={id} className="ord">
-                <span className="a"><b>{s.loc}</b>
-                  <small className="needs">{s.items.map((i) => <span key={i.toner_id}><Dot color={i.color} />{i.code} ×{i.qty}</span>)}</small></span>
-                <button className="btn small" onClick={() => setDlg({ kind: 'suggest', loc: s.loc, items: s.items })}>Pasūtīt</button>
+            {suggest.size === 0 && <p className="muted">Grozs ir tukšs: nekas netrūkst līdz normai un nekas nav pielikts.</p>}
+
+            {normPart.length > 0 && (
+              <div className="bpart">
+                <div className="bpart__head" title="Lietotne šos ieliek pati: norma mīnus krājums mīnus jau pasūtītais">
+                  <span>Trūkst līdz normai</span><b className="bpart__n hot">{normTotal}</b>
+                </div>
+                {normPart.map((p) => (
+                  <div key={p.id} className="ord">
+                    <span className="a"><b>{p.loc}</b>
+                      <small className="needs">{p.items.map((i) => <span key={i.toner_id}><Dot color={i.color} />{i.code} ×{i.qty}</span>)}</small></span>
+                    <button className="btn small" onClick={() => setDlg({ kind: 'suggest', loc: p.loc, items: p.items, extra: false })}>Pasūtīt</button>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
+
+            {extraPart.length > 0 && (
+              <div className="bpart">
+                <div className="bpart__head" title="Pielikts ar „Pievienot grozam” pie tonera; papildus tam, kas trūkst līdz normai">
+                  <span>Pielikts papildus</span><b className="bpart__n">{addedTotal}</b>
+                </div>
+                {extraPart.map((p) => (
+                  <div key={p.id} className="ord">
+                    <span className="a"><b>{p.loc}</b>
+                      <small className="needs">{p.items.map((i) => (
+                        <span key={i.toner_id}>
+                          <Dot color={i.color} />{i.code} ×{i.qty}
+                          <button className="needs__x" onClick={() => setDlg({ kind: 'unbasket', loc: p.loc, item: i })}
+                            title="Izņemt no groza" aria-label={`Izņemt no groza ${i.code} ×${i.qty}`}>{Icon.close(12)}</button>
+                        </span>
+                      ))}</small></span>
+                    <button className="btn small" onClick={() => setDlg({ kind: 'suggest', loc: p.loc, items: p.items, extra: true })}>Pasūtīt</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* The whole basket at once (with a single line in it, that line's own "Pasūtīt" does the same). */}
+            {normPart.length + extraPart.length > 1 && (
+              <button className="btn primary recv-all-btn" onClick={() => setDlg({ kind: 'orderAll' })}>Pasūtīt visus ({needTotal} gab.)</button>
+            )}
           </section>
 
           {/* Defective cartridges waiting to be handed over for warranty. Not "on order" yet: "Nodots garantijā"
@@ -302,7 +366,7 @@ export function StockPage() {
 
           <section className="pane">
             <div className="rh">
-              <h3>Pasūtīts</h3>
+              <h3 className="h-ic">{Icon.truck(20)}Pasūtīts</h3>
               <div className="rh-tools">
                 <span className="meta">{orderedTotal} gab. ceļā</span>
                 {purchases.length > 0 && mailBtn(emailOrdered, 'Pasūtīts')}
@@ -362,7 +426,7 @@ export function StockPage() {
                 </button>
                 {isOpen && list.map((r) => (
                   <TonerRow key={r.toner_id} printerId={r.printer_id} printerName={r.location} allLocations={locations.data}
-                    toner={{ id: r.toner_id, code: r.code, color: r.color, qty: r.qty, optimal_qty: r.optimal_qty, ordered: r.ordered, locations: r.locations }}
+                    toner={{ id: r.toner_id, code: r.code, color: r.color, qty: r.qty, optimal_qty: r.optimal_qty, ordered: r.ordered, ordered_extra: r.ordered_extra, locations: r.locations }}
                     onChange={load} />
                 ))}
               </article>
@@ -379,7 +443,7 @@ export function StockPage() {
           <ul className="dlg-list toners recv-all">
             {dlg.orders.map((o) => <li key={o.id}><Dot color={o.color} /><b>{o.code}</b><span className="recv-all__to">{o.location}</span></li>)}
           </ul>
-          <p className="dlg-text muted">Ieraksts pāries uz „Pasūtīts” ar atzīmi „Garantija”: tiek gaidīts aizvietotājs, un toneris vairs netiks piedāvāts sarakstā „Jāpasūta”.</p>
+          <p className="dlg-text muted">Ieraksts pāries uz „Pasūtīts” ar atzīmi „Garantija”: tiek gaidīts aizvietotājs, un toneris vairs netiks piedāvāts grozā.</p>
         </ConfirmDialog>
       )}
       {dlg?.kind === 'discard' && (
@@ -393,11 +457,44 @@ export function StockPage() {
       {dlg?.kind === 'receiveAll' &&<ReceiveAllDialog orders={openOrders} places={activeLocs} onClose={() => setDlg(null)} onDone={load} />}
       {dlg?.kind === 'email' && <OrderEmailDialog rows={dlg.items} source={dlg.source} flavor={dlg.flavor} onClose={() => setDlg(null)} />}
       {dlg?.kind === 'suggest' && (
-        <ConfirmDialog title={`Pasūtīt: ${dlg.loc}`} confirmLabel="Pievienot pasūtījumam" onClose={() => setDlg(null)}
-          onConfirm={async () => { await api.createOrders(dlg.items.map(({ printer_id, toner_id, qty }) => ({ printer_id, toner_id, qty }))); await load() }}>
+        <ConfirmDialog title={`Pasūtīt: ${dlg.loc}`} confirmLabel="Atzīmēt kā pasūtītu" onClose={() => setDlg(null)}
+          onConfirm={async () => { await api.createOrders(dlg.items.map(({ printer_id, toner_id, qty }) => ({ printer_id, toner_id, qty })), '', dlg.extra); await load() }}>
+          <p className="dlg-text muted">{dlg.extra ? 'Pielikts papildus' : 'Trūkst līdz normai'}</p>
           <ul className="dlg-list toners">{dlg.items.map((i) => <li key={i.toner_id}><Dot color={i.color} /><b>{i.code}</b> ×{i.qty}</li>)}</ul>
-          <p className="dlg-text muted">Krājums pieaugs tikai tad, kad pasūtījums tiks atzīmēts kā saņemts.</p>
+          <p className="dlg-text muted">Toneri pāries no groza uz sarakstu „Pasūtīts”. Krājums pieaugs tikai tad, kad pasūtījums tiks atzīmēts kā saņemts.</p>
         </ConfirmDialog>
+      )}
+      {dlg?.kind === 'orderAll' && (
+        <ConfirmDialog title="Pasūtīt visu grozu" confirmLabel={`Atzīmēt kā pasūtītu (${needTotal} gab.)`} onClose={() => setDlg(null)}
+          onConfirm={async () => {
+            // Two orders' worth: the part missing to the norm, then the extras (kept apart so the extras
+            // don't count towards the norm). If the second fails, the first is already placed — reload shows it.
+            const items = (list: typeof normPart) => list.flatMap((p) => p.items).map(({ printer_id, toner_id, qty }) => ({ printer_id, toner_id, qty }))
+            try {
+              if (normPart.length) await api.createOrders(items(normPart), '', false)
+              if (extraPart.length) await api.createOrders(items(extraPart), '', true)
+            } finally { await load() }
+          }}>
+          {[{ title: 'Trūkst līdz normai', total: normTotal, list: normPart }, { title: 'Pielikts papildus', total: addedTotal, list: extraPart }]
+            .filter((s) => s.list.length > 0).map((s) => (
+              <div key={s.title} className="recv-co">
+                <div className="recv-co__head"><b>{s.title}</b> · {s.total} gab.</div>
+                <ul className="dlg-list toners recv-all">
+                  {s.list.flatMap((p) => p.items.map((i) => (
+                    <li key={`${p.id}-${i.toner_id}`}><Dot color={i.color} /><b>{i.code}</b> ×{i.qty}<span className="recv-all__to">{p.loc}</span></li>
+                  )))}
+                </ul>
+              </div>
+            ))}
+          <p className="dlg-text muted">Viss grozs pāries uz sarakstu „Pasūtīts”. Krājums pieaugs tikai tad, kad pasūtījumi tiks atzīmēti kā saņemti.</p>
+        </ConfirmDialog>
+      )}
+      {dlg?.kind === 'unbasket' && (
+        <DestructiveDialog title="Izņemt no groza" confirmLabel="Izņemt" onClose={() => setDlg(null)}
+          onConfirm={async () => { for (const id of dlg.item.plannedIds) await api.deleteOrder(id); await load() }}>
+          <p className="dlg-text">Izņemt no groza papildus pielikto <Dot color={dlg.item.color} /> <b>{dlg.item.code} ×{dlg.item.qty}</b> ({dlg.loc})?<br />
+            <span className="muted">Tas, kas trūkst līdz normai, grozā paliek. Krājums un norma nemainās.</span></p>
+        </DestructiveDialog>
       )}
       {dlg?.kind === 'receive' && <ReceiveDialog order={dlg.order} places={activeLocs} onClose={() => setDlg(null)} onDone={load} />}
       {dlg?.kind === 'cancel' && (
@@ -406,7 +503,7 @@ export function StockPage() {
           onConfirm={async () => { await api.cancelOrder(dlg.order.id); await load() }}>
           {dlg.order.warranty
             ? <p className="dlg-text">Atzīmēt <Dot color={dlg.order.color} /> <b>{dlg.order.code}</b> ({dlg.order.location}) garantijas pieteikumu kā noraidītu?<br />
-                <span className="muted">Aizvietotājs netiks gaidīts; krājums nemainās, un toneris atkal var parādīties sarakstā „Jāpasūta”.</span></p>
+                <span className="muted">Aizvietotājs netiks gaidīts; krājums nemainās, un toneris atkal var parādīties grozā.</span></p>
             : <p className="dlg-text">Atcelt <Dot color={dlg.order.color} /> <b>{dlg.order.code} ×{dlg.order.qty}</b> ({dlg.order.location})? Krājums netiks mainīts.</p>}
         </DestructiveDialog>
       )}

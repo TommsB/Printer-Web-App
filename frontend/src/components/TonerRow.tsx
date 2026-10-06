@@ -53,7 +53,7 @@ export function TonerRow({ printerId, printerName, toner: t, allLocations, onCha
           </span>
           <ActionMenu code={t.code} items={[
             { label: 'Izlietots', disabled: t.qty <= 0, run: () => setDialog('use') },
-            { label: 'Pasūtīt', run: () => setDialog('order') },
+            { label: 'Pievienot grozam', run: () => setDialog('order') },
             { label: 'Lokācija', run: () => setDialog('location'), divider: true },
             { label: 'Labot daudzumu', run: () => setDialog('correct') },
             { label: 'Atzīmēt kā bojātu', run: () => setDialog('warranty'), divider: true },
@@ -76,7 +76,7 @@ export function TonerRow({ printerId, printerName, toner: t, allLocations, onCha
  */
 function OrderedMark({ toner: t }: { toner: TonerRowData }) {
   if (t.ordered <= 0) return null
-  const stillMissing = t.optimal_qty - t.qty - t.ordered
+  const stillMissing = t.optimal_qty - t.qty - (t.ordered - (t.ordered_extra ?? 0)) // extras are on top of the norm
   const text = stillMissing > 0
     ? `Pasūtīts ×${t.ordered} — līdz normai vēl trūks ${stillMissing}`
     : `Pasūtīts ×${t.ordered} — trūkstošais daudzums ir pasūtīts`

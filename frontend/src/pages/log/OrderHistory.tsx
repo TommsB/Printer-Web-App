@@ -21,6 +21,7 @@ const STATUS: Record<Order['status'], { label: string; icon: () => ReactNode; cl
   ordered: { label: 'Ceļā', icon: () => Icon.clock(18), cls: 'k-wait' },
   received: { label: 'Saņemts', icon: () => Icon.trendUp(), cls: 'k-in' }, // also a warranty replacement that arrived
   cancelled: { label: 'Atcelts', icon: () => Icon.close(16), cls: 'k-fix' },
+  planned: { label: 'Grozā', icon: () => Icon.cart(16), cls: 'k-fix' }, // not listed here: lives in Krājumi → Grozs
   defect: { label: 'Defekts', icon: () => Icon.hazard(), cls: 'k-fix' }, // not listed here: lives in Krājumi → Defekti
 }
 const PAGE = 60
@@ -66,8 +67,8 @@ export function OrderHistory({ filter, filters }: { filter: string; filters: Rea
   const [deleting, setDeleting] = useState<Order | null>(null)
   const folds = useFoldedDays('log.foldedOrderDays') // date headings fold their day's orders
 
-  // Defects not handed over yet aren't orders: they are on Krājumi → Defekti, not here.
-  const shown = orders.filter((o) => o.status !== 'defect' && (filter === 'all' ? o.status !== 'cancelled' : o.status === filter)
+  // Defects not handed over yet and what is only in the basket aren't orders: they are in Krājumi, not here.
+  const shown = orders.filter((o) => o.status !== 'defect' && o.status !== 'planned' && (filter === 'all' ? o.status !== 'cancelled' : o.status === filter)
     && matches(query, o.code, o.location, o.model, o.company, o.created_by, o.resolved_by, o.note))
   const visible = shown.slice(0, limit)
 
@@ -202,7 +203,7 @@ export function OrderHistory({ filter, filters }: { filter: string; filters: Rea
             Dzēst <b>{deleting.code} ×{deleting.qty}</b> ({STATUS[deleting.status].label.toLowerCase()}, {deleting.location})?<br />
             <span className="muted">
               {deleting.status === 'ordered'
-                ? `${deleting.warranty ? 'Aizvietotājs' : 'Pasūtījums'} vēl nav saņemts: ieraksts pazudīs no „Pasūtīts”, un toneris atkal var parādīties sarakstā „Jāpasūta”.`
+                ? `${deleting.warranty ? 'Aizvietotājs' : 'Pasūtījums'} vēl nav saņemts: ieraksts pazudīs no „Pasūtīts”, un toneris atkal var parādīties grozā.`
                 : 'Tiks dzēsts tikai pasūtījuma ieraksts — krājuma daudzums nemainīsies.'}
               {deleting.files > 0 && ` Kopā ar ierakstu tiks dzēsti arī tam pievienotie faili (${deleting.files}).`}
             </span>
