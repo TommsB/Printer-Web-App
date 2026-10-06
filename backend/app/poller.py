@@ -11,7 +11,7 @@ _lock = asyncio.Lock()
 
 def poll_all_sync(printer_id: int | None = None) -> int:
     with get_db() as conn:
-        sql = "SELECT id, ip FROM printers WHERE active = 1 AND snmp_enabled = 1"
+        sql = "SELECT id, ip FROM printers WHERE active = 1 AND snmp_enabled = 1 AND ip IS NOT NULL"
         args: tuple = ()
         if printer_id is not None:
             sql += " AND id = ?"
@@ -35,6 +35,11 @@ def poll_all_sync(printer_id: int | None = None) -> int:
                 [(cur.lastrowid, s["idx"], s["description"], s["level"], s["max_capacity"], s["pct"])
                  for s in r.supplies],
             )
+            if r.reachable and r.page_count is not None:  # the day's last counter, kept for the monthly figures
+                conn.execute(
+                    "INSERT INTO page_counts (printer_id, day, page_count) VALUES (?,?,?)"
+                    " ON CONFLICT(printer_id, day) DO UPDATE SET page_count = excluded.page_count",
+                    (pid, ts[:10], r.page_count))
             if r.reachable:
                 try:  # a detection problem must never stop the poll from being saved
                     replacements.detect(conn, pid, cur.lastrowid)

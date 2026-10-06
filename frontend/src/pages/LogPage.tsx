@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api, fmtClock, fmtTime, type Movement, type TonerEvent } from '../api'
 import { invalidate, useApiData } from '../cache'
 import { DestructiveDialog } from '../components/Dialog'
@@ -10,12 +11,13 @@ import { useApp } from '../ctx'
 import { Icon } from '../icons'
 import { vtName, withViewTransition } from '../viewTransition'
 import { DayGroup, useFoldedDays } from './log/DayGroup'
+import { DefectList } from './log/DefectList'
 import { ORDER_FILTERS, OrderHistory } from './log/OrderHistory'
 
 /** How each kind of log entry looks. 'added' (old manual additions) is shown with the receipts. */
 const KIND: Record<string, { label: string; icon: () => ReactNode; cls: string }> = {
-  taken: { label: 'Izlietots', icon: () => Icon.out(), cls: 'k-out' },
-  received: { label: 'Saņemts', icon: () => Icon.inbox(), cls: 'k-in' },
+  taken: { label: 'Izlietots', icon: () => Icon.trendDown(), cls: 'k-used' },
+  received: { label: 'Saņemts', icon: () => Icon.trendUp(), cls: 'k-in' },
   added: { label: 'Pievienots', icon: () => Icon.plus(), cls: 'k-in' },
   moved: { label: 'Pārvietots', icon: () => Icon.swap(), cls: 'k-move' },
   correction: { label: 'Korekcija', icon: () => Icon.tune(), cls: 'k-fix' },
@@ -30,7 +32,7 @@ const FILTERS = [
 const filterKey = (reason: string) => (reason === 'added' ? 'received' : reason)
 const COLOR_LV: Record<string, string> = { K: 'melnais', C: 'ciāna', M: 'purpura', Y: 'dzeltenais' }
 const PAGE = 60
-const VIEWS = [{ key: 'moves', label: 'Krājumu kustība' }, { key: 'orders', label: 'Pasūtījumi' }]
+const VIEWS = [{ key: 'moves', label: 'Krājumu kustība' }, { key: 'orders', label: 'Pasūtījumi' }, { key: 'defects', label: 'Defekti' }]
 
 /** The number on the right: −1 / +2, or ⇄ 1 for moves (total unchanged). */
 function delta(m: Movement): { text: string; cls: string } {
@@ -86,6 +88,22 @@ export function LogPage() {
   const [view, setView] = useRemembered('log.view', 'moves')
   const [orderFilter, setOrderFilter] = useRemembered('log.orderFilter', 'all')
 
+  // A tapped "nomainīts toneris" notification arrives as /log?event=12: show the review list, bring that
+  // replacement into view and outline it for a moment. (Already confirmed or ignored = nothing to point at.)
+  const [params, setParams] = useSearchParams()
+  const wanted = Number(params.get('event')) || null
+  const [flash, setFlash] = useState<number | null>(null)
+  if (wanted !== null && flash !== wanted) { setView('moves'); setFlash(wanted) } // adjust state while rendering
+  // One-time: the address goes back to plain /log, so coming back to Vēsture later doesn't jump again.
+  useEffect(() => { if (wanted !== null) setParams({}, { replace: true }) }, [wanted, setParams])
+  const flashShown = flash !== null && view === 'moves' && events.some((e) => e.id === flash)
+  useEffect(() => {
+    if (!flashShown) return
+    document.getElementById(`review-${flash}`)?.scrollIntoView({ block: 'center' })
+    const timer = setTimeout(() => setFlash(null), 2600) // as long as the .flash outline lasts
+    return () => clearTimeout(timer)
+  }, [flashShown, flash])
+
   const seg = (label: string, options: { key: string; label: string }[], value: string, pick: (k: string) => void) => (
     <div className="seg" role="group" aria-label={label}>
       {options.map((o) => (
@@ -101,13 +119,14 @@ export function LogPage() {
   return (
     <>
       <TopBar title={['Kustība', 'un vēsture']}
-        sticky={<div className="cbar__stack">{viewSwitch}{view === 'orders' ? orderFilters : filters}</div>} />
+        sticky={<div className="cbar__stack">{viewSwitch}{view === 'orders' ? orderFilters : view === 'defects' ? null : filters}</div>} />
       <div className="viewsw">{viewSwitch}</div>
 
       {view === 'orders' && <OrderHistory filter={orderFilter} filters={orderFilters} />}
+      {view === 'defects' && <DefectList />}
 
       {/* Detected replacements waiting for review */}
-      {view !== 'orders' && events.length > 0 && (
+      {view === 'moves' && events.length > 0 && (
         <section className="pane review" style={vtName('review', 'pane')}>
           <div className="rh">
             <h3>Jāpārbauda <span className="badge-n">{events.length}</span></h3>
@@ -118,7 +137,7 @@ export function LogPage() {
             {events.map((e) => {
               const canConfirm = e.toner_id !== null && e.qty > 0
               return (
-                <li key={e.id} className="rv" style={vtName(`review-${e.id}`, 'rv')}>
+                <li key={e.id} id={`review-${e.id}`} className={flash === e.id ? 'rv flash' : 'rv'} style={vtName(`review-${e.id}`, 'rv')}>
                   <span className="rv__head">
                     <span className="dot"><i className={e.color ? e.color.toLowerCase() : 'g'} /></span>
                     <span className="rv__txt">
@@ -145,7 +164,7 @@ export function LogPage() {
         </section>
       )}
 
-      {view !== 'orders' && <section className="pane logpane" style={vtName('log', 'pane')}>
+      {view === 'moves' && <section className="pane logpane" style={vtName('log', 'pane')}>
         <div className="log-tools">
           {filters}
           <SearchBox value={query} onChange={(v) => { setQuery(v); setLimit(PAGE) }} placeholder="Meklēt pēc tonera, printera, vietas vai lietotāja…" />
@@ -207,14 +226,17 @@ export function LogPage() {
       {claiming && claiming.toner_id !== null && (
         <WarrantyForm code={claiming.toner_code ?? ''} color={claiming.color} printerName={claiming.printer_location}
           initialPct={claiming.from_pct} onClose={() => setClaiming(null)}
-          onSend={async (v) => {
+          onCreate={async (v) => {
             // The spare that went into the printer comes off the reserve (as "Atzīmēt kā izlietotu" does) —
             // unless the app has none in stock for it; then the detection is just closed.
             if (claiming.qty > 0) await api.confirmEvent(claiming.id, locId)
             else await api.dismissEvent(claiming.id)
-            await api.createWarranty({ printer_id: claiming.printer_id, toner_id: claiming.toner_id!, ...v })
+            // event_id: this replacement is when the defective cartridge came out (for its page count).
+            return api.createWarranty({ printer_id: claiming.printer_id, toner_id: claiming.toner_id!, event_id: claiming.id, ...v })
+          }}
+          onDone={async () => {
             const id = claiming.id
-            invalidate('defects', 'stock', 'printers') // Krājumi must show the new entry on its Defekti list
+            invalidate('defects', 'stock', 'printers', 'orders-all') // Krājumi must show the new entry on its Defekti list
             await withViewTransition(() => { dropEvent(id); setClaiming(null) })
             await Promise.all([reloadEvents(), reload()])
           }}>

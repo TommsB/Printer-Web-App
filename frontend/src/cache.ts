@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { api } from './api'
 
 /**
@@ -7,6 +7,22 @@ import { api } from './api'
  */
 const cache = new Map<string, unknown>()
 const inflight = new Map<string, Promise<unknown>>()
+
+// Readers of the cache itself (useCached: the nav counts) are told when a copy changes. Deferred, because a
+// copy can be replaced inside a state updater, where notifying another component at once isn't allowed.
+const watchers = new Set<() => void>()
+const changed = () => queueMicrotask(() => { for (const w of watchers) w() })
+const watch = (w: () => void) => { watchers.add(w); return () => { watchers.delete(w) } }
+
+/** The cached copy of `key`, kept current whoever reloads it. Does not fetch. `fallback` must be a constant. */
+export function useCached<T>(key: string, fallback: T): T {
+  return useSyncExternalStore(watch, () => (cache.has(key) ? (cache.get(key) as T) : fallback))
+}
+
+/** Reload `key` in the background (joins a request already running). */
+export function refresh<T>(key: string, fetcher: () => Promise<T>): void {
+  load(key, fetcher, true).catch(() => {})
+}
 
 /**
  * Fetch `key` and store it in the cache. With `shared`, a request already in flight for the same key is
@@ -17,7 +33,7 @@ function load<T>(key: string, fn: () => Promise<T>, shared: boolean): Promise<T>
   const running = inflight.get(key)
   if (shared && running) return running as Promise<T>
   const p = fn()
-    .then((v) => { if (inflight.get(key) === p) cache.set(key, v); return v })
+    .then((v) => { if (inflight.get(key) === p) { cache.set(key, v); changed() } return v })
     .finally(() => { if (inflight.get(key) === p) inflight.delete(key) })
   inflight.set(key, p)
   return p
@@ -47,6 +63,7 @@ export function useApiData<T>(key: string, fetcher: () => Promise<T>, fallback: 
     setState((prev) => {
       const v = typeof next === 'function' ? (next as (p: T) => T)(prev) : next
       cache.set(key, v)
+      changed()
       return v
     })
   }, [key])
@@ -63,6 +80,7 @@ export function prefetchAll(): void {
     ['printers', api.printers],
     ['stock', api.stock],
     ['orders', () => api.orders('ordered')],
+    ['defects', () => api.orders('defect')],
     ['toners', api.toners],
     ['movements', api.movements],
     ['locations', api.locations],
@@ -73,10 +91,12 @@ export function prefetchAll(): void {
 /** Drop cached copies that a change made elsewhere has outdated, so those pages load fresh instead of flashing old data. */
 export function invalidate(...keys: string[]): void {
   for (const k of keys) { cache.delete(k); inflight.delete(k) }
+  changed()
 }
 
 /** Forget everything (on logout, so the next user never sees the previous user's data). */
 export function clearCache(): void {
   cache.clear()
   inflight.clear()
+  changed()
 }

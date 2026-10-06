@@ -1,6 +1,8 @@
-import { useState } from 'react'
-import { api, UNASSIGNED, type StockLoc, type StoreLocation } from '../api'
-import { invalidate } from '../cache'
+import { useRef, useState } from 'react'
+import { api, UNASSIGNED, type Order, type StockLoc, type StoreLocation } from '../api'
+import { invalidate, useApiData } from '../cache'
+import { prepareFiles } from '../files'
+import { PendingFiles } from './DefectFiles'
 import { ConfirmDialog, DestructiveDialog, InfoDialog } from './Dialog'
 import { Stepper } from './Stepper'
 
@@ -58,28 +60,47 @@ export function OrderDialog({ printerId, printerName, toner: t, onDone, onClose 
   )
 }
 
-export interface WarrantyValues { removed_pct: number | null; defect: string; note: string }
+export interface WarrantyValues { removed_pct: number | null; defect: string; note: string; held_location_id: number | null }
 
 /**
  * Defekts: put a defective cartridge on the "Defekti" list (Krājumi). Used from a toner's ⋮ menu and from
  * "Jāpārbauda" (which passes the level it was removed at, and its own extra fields as children).
  * Nothing is expected yet and the reserve is not changed. Later, "Nodots garantijā" on that list moves it to
  * "Pasūtīts"; the reserve grows when the replacement is marked "Saņemt" there.
+ *
+ * `onCreate` makes the record; the chosen photos/files are then attached to it here, and `onDone` refreshes
+ * whatever is behind the dialog. If only the files fail, the record stays and confirming again retries just them.
  */
-export function WarrantyForm({ code, color, printerName, initialPct, children, onSend, onClose }: {
+export function WarrantyForm({ code, color, printerName, initialPct, children, onCreate, onDone, onClose }: {
   code: string; color: string; printerName: string
   initialPct?: number | null
   children?: React.ReactNode
-  onSend: (v: WarrantyValues) => Promise<unknown>
+  onCreate: (v: WarrantyValues) => Promise<Order>
+  onDone: () => Promise<unknown> | void
   onClose: () => void
 }) {
+  const locations = useApiData<StoreLocation[]>('locations', api.locations, [])
   const [defect, setDefect] = useState('Smērē')
   const [pctText, setPctText] = useState(initialPct == null ? '' : String(initialPct))
   const [note, setNote] = useState('')
+  const [heldId, setHeldId] = useState(0)
+  const [files, setFiles] = useState<File[]>([])
+  const created = useRef<Order | null>(null)
   const pctOk = pctText.trim() === '' || isInt(pctText, 0, 100)
   return (
-    <ConfirmDialog title={`Defekts: ${code}`} confirmLabel="Pievienot defektiem" disabled={!defect.trim() || !pctOk} onClose={onClose}
-      onConfirm={() => onSend({ removed_pct: pctText.trim() === '' ? null : +pctText, defect: defect.trim(), note: note.trim() })}>
+    <ConfirmDialog title={`Defekts: ${code}`} confirmLabel="Pievienot defektiem" disabled={!defect.trim() || !pctOk}
+      onClose={() => { if (created.current) void onDone(); onClose() }}
+      onConfirm={async () => {
+        created.current ??= await onCreate({
+          removed_pct: pctText.trim() === '' ? null : +pctText, defect: defect.trim(), note: note.trim(), held_location_id: heldId || null,
+        })
+        if (files.length) {
+          try { await api.uploadOrderFiles(created.current.id, await prepareFiles(files)) } catch (err) {
+            throw new Error(`Defekts ir pievienots, bet failus neizdevās saglabāt (${err instanceof Error ? err.message : 'kļūda'}). Mēģiniet vēlreiz vai pievienojiet tos vēlāk sarakstā „Defekti”.`, { cause: err })
+          }
+        }
+        await onDone()
+      }}>
       <p className="dlg-text"><i className={`cdot ${color ? color.toLowerCase() : 'g'}`} /> <b>{code}</b> · {printerName}</p>
       <label>Defekts<input value={defect} onChange={(e) => setDefect(e.target.value)} autoComplete="off" placeholder="piem. Smērē…" /></label>
       <label>Izņemts pie (%, ja zināms)
@@ -87,6 +108,13 @@ export function WarrantyForm({ code, color, printerName, initialPct, children, o
       </label>
       {!pctOk && <span className="error">Procentiem jābūt skaitlim no 0 līdz 100</span>}
       {children}
+      <label>Kur atrodas bojātā kasetne (nav obligāti)
+        <select value={heldId} onChange={(e) => setHeldId(+e.target.value)}>
+          <option value={0}>– nav norādīts –</option>
+          {locations.data.filter((l) => l.active).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
+      </label>
+      <PendingFiles files={files} onChange={setFiles} />
       <label>Piezīme (nav obligāta)<input value={note} onChange={(e) => setNote(e.target.value)} autoComplete="off" /></label>
       <p className="dlg-text muted">Toneris parādīsies sarakstā „Defekti” (Krājumi). Kad to nodosiet garantijā, nospiediet tur „Nodot garantijā” — tad tas pāries uz „Pasūtīts”.</p>
     </ConfirmDialog>
@@ -97,8 +125,8 @@ export function WarrantyForm({ code, color, printerName, initialPct, children, o
 export function WarrantyDialog({ printerId, printerName, toner: t, onDone, onClose }: Common) {
   return (
     <WarrantyForm code={t.code} color={t.color} printerName={printerName} onClose={onClose}
-      onSend={async (v) => {
-        await api.createWarranty({ printer_id: printerId, toner_id: t.id, ...v })
+      onCreate={(v) => api.createWarranty({ printer_id: printerId, toner_id: t.id, ...v })}
+      onDone={() => {
         invalidate('defects') // Krājumi's Defekti list must load fresh (this dialog also opens from Statuss)
         onDone()
       }} />

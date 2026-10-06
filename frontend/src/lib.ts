@@ -1,7 +1,18 @@
-import type { Printer, Role, Supply } from './api'
+import type { Order, Printer, Role, StockRow, Supply } from './api'
 
 export type Col = 'k' | 'c' | 'm' | 'y'
-export interface TonerLevel { col: Col; name: string; pct: number | null }
+export interface TonerLevel { col: Col; name: string; pct: number | null; days: number | null }
+
+/** Forecast at or below this many days is shown as urgent (same limit as the notification, push.py SOON_DAYS). */
+export const SOON_DAYS = 14
+/** "≈ 12 d." next to a toner level; far-off forecasts are capped, they aren't that precise. */
+export const fmtDaysLeft = (d: number) => (d <= 0 ? 'beidzas' : d > 90 ? '> 90 d.' : `≈ ${d} d.`)
+
+/** How many cartridges of this row are still to be ordered: norm minus stock minus what is already on order. */
+export const missing = (r: Pick<StockRow, 'qty' | 'optimal_qty' | 'ordered'>) => Math.max(0, r.optimal_qty - r.qty - r.ordered)
+/** "Jāpasūta vienības": the big number in Krājumi and the count on its nav tab. */
+export const needUnits = (rows: StockRow[], company: string) =>
+  rows.reduce((n, r) => (!company || r.company === company ? n + missing(r) : n), 0)
 
 const COLORS: [string, Col, string][] = [
   ['black', 'k', 'Black'], ['cyan', 'c', 'Cyan'], ['magenta', 'm', 'Magenta'], ['yellow', 'y', 'Yellow'],
@@ -29,12 +40,12 @@ export function splitSupplies(p: Printer): { toners: TonerLevel[]; others: Suppl
   for (const s of supplies) {
     const c = colorOf(s.description)
     if (!c || NOT_TONER.test(s.description)) continue
-    toners.push({ col: c[0], name: c[1], pct: s.pct })
+    toners.push({ col: c[0], name: c[1], pct: s.pct, days: s.days_left ?? null })
     used.add(s.idx)
   }
   if (toners.length === 0 && p.color_type === 'Melnbalts') {
     const s = supplies.find((x) => /toner|cartridge/i.test(x.description) && !NOT_TONER.test(x.description))
-    if (s) { toners.push({ col: 'k', name: 'Black', pct: s.pct }); used.add(s.idx) }
+    if (s) { toners.push({ col: 'k', name: 'Black', pct: s.pct, days: s.days_left ?? null }); used.add(s.idx) }
   }
   toners.sort((a, b) => 'kcmy'.indexOf(a.col) - 'kcmy'.indexOf(b.col))
   return { toners, others: supplies.filter((s) => !used.has(s.idx) && s.pct !== null) }
@@ -58,6 +69,7 @@ export interface PrinterState { offline: boolean; noData: boolean; hot: boolean;
 
 export function printerState(p: Printer): PrinterState {
   const snap = p.snapshot
+  if (!p.ip) return { offline: false, noData: true, hot: false, lineHot: false, line: 'Nav tīklā', tag: 'Nav tīklā', blocked: [] }
   if (!p.snmp_enabled) return { offline: false, noData: true, hot: false, lineHot: false, line: 'SNMP izslēgts', tag: 'SNMP izslēgts', blocked: [] }
   if (!snap) return { offline: false, noData: true, hot: false, lineHot: false, line: 'Nav datu', tag: 'Nav datu', blocked: [] }
   if (!snap.reachable) return { offline: true, noData: false, hot: true, lineHot: true, line: 'Nav pieejams', tag: 'Nav pieejams', blocked: [] }
@@ -68,6 +80,21 @@ export function printerState(p: Printer): PrinterState {
   const hot = snap.alerts.split(' | ').some(isImportantAlert) || lowToner || p.toners.some((t) => t.low)
   const base = STATUS_LV[snap.status] ?? 'Gatavs'
   return { offline: false, noData: false, hot, lineHot: false, line: alert || base, tag: hot ? 'Uzmanību' : base, blocked: [] }
+}
+
+/** Where a defect (warranty claim) stands, by its order status; `cls` colours its icon. */
+export const DEFECT_STATUS: Record<Order['status'], { label: string; cls: string }> = {
+  defect: { label: 'Nav nodots', cls: 'k-out' },
+  ordered: { label: 'Nodots garantijā', cls: 'k-wait' },
+  received: { label: 'Aizvietots', cls: 'k-in' },
+  cancelled: { label: 'Noraidīts', cls: 'k-fix' },
+}
+
+const DATE = new Intl.DateTimeFormat('lv-LV', { day: '2-digit', month: '2-digit', year: 'numeric' })
+/** "06.10.2026." from a server time. */
+export function fmtDate(ts: string): string {
+  const d = new Date(ts.replace(' ', 'T').slice(0, 19))
+  return Number.isNaN(d.getTime()) ? ts.slice(0, 10) : DATE.format(d)
 }
 
 /** autoFocus only with a mouse/trackpad: on phones it would pop the keyboard over the form. */

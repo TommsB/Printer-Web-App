@@ -1,4 +1,7 @@
-export interface Supply { idx: string; description: string; level: number | null; max_capacity: number | null; pct: number | null }
+export interface Supply {
+  idx: string; description: string; level: number | null; max_capacity: number | null; pct: number | null
+  days_left?: number | null // forecast: days until empty at the recent rate of use; null = can't be estimated yet
+}
 /** Two roles with the same rights in the app; only an admin can manage users (Pārvaldība → Lietotāji). */
 export type Role = 'admin' | 'standard'
 export interface Session { username: string; role: Role }
@@ -27,9 +30,18 @@ export interface PrinterToner {
   locations: StockLoc[]
 }
 export interface Printer {
-  id: number; company: string; location: string; model: string; brand: string; ip: string
+  id: number; company: string; location: string; model: string; brand: string
+  ip: string | null // null = not on the network: reserve only, never polled
   color_type: string; snmp_enabled: boolean; active: boolean; notes: string; default_location_id: number | null
   snapshot: Snapshot | null; toners: PrinterToner[]
+}
+/** One month of a printer's use (newest first from the API). */
+export interface UsageMonth {
+  month: string // "2026-10"
+  pages: number | null // null = no page counter readings that month (e.g. a printer that isn't on the network)
+  since: string | null // set in the month the readings began: pages are counted from this day ("2026-10-01")
+  toners: { code: string; color: string; qty: number }[] // cartridges marked "Izlietots"
+  defects: { code: string; color: string; qty: number }[] // cartridges marked defective that month
 }
 export interface PrinterInput {
   company: string; location: string; model: string; brand: string; ip: string
@@ -39,7 +51,7 @@ export interface PrinterInput {
 }
 export interface Toner { id: number; code: string; color: string; kind: string }
 export interface StockRow {
-  printer_id: number; company: string; location: string; model: string; ip: string
+  printer_id: number; company: string; location: string; model: string; ip: string | null
   toner_id: number; code: string; color: string; kind: string; qty: number; optimal_qty: number; low: boolean
   ordered: number // units on open orders
   default_location_id: number | null
@@ -57,7 +69,21 @@ export interface Order {
   defect: string
   sent_ts: string | null // when it was handed over for warranty
   sent_by: string | null
+  // Defects only:
+  pages_printed: number | null // printed while this cartridge was in the printer; null = not known
+  installed_ts: string | null // when it was put in (the detected replacement before it)
+  held_location_id: number | null // where the defective cartridge is kept until it is handed over
+  held_at: string | null // that place's name
+  files: number // attached photos / documents
+  /** Delivery notes ("pavadzīmes") etc. One document covers several orders, so the same one shows on each.
+   *  Only filled in by the order lists. */
+  docs?: DeliveryDoc[]
 }
+export interface DeliveryDoc { id: number; name: string; mime: string; size: number; uploaded_by: string; ts?: string }
+export const deliveryDocUrl = (id: number) => `/api/delivery-docs/${id}`
+/** A photo or document attached to a defect; opened from /api/order-files/{id}. */
+export interface OrderFile { id: number; order_id: number; name: string; mime: string; size: number; uploaded_by: string; ts: string }
+export const orderFileUrl = (id: number) => `/api/order-files/${id}`
 export interface OrderItem { printer_id: number; toner_id: number; qty: number }
 /** Result of "Pārbaudīt savienojumu" in the printer editor (one SNMP read, nothing saved). */
 export type SnmpTest =
@@ -84,11 +110,13 @@ export const setUnauthorizedHandler = (fn: () => void) => { onUnauthorized = fn 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 async function send(method: string, url: string, body?: unknown): Promise<Response> {
+  // A FormData body is a file upload: the browser sets its own multipart Content-Type.
+  const upload = body instanceof FormData
   const init: RequestInit = {
     method,
     credentials: 'same-origin',
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: body === undefined || upload ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : upload ? body : JSON.stringify(body),
   }
   // Reads are safe to repeat: retry a GET up to twice on a network error or 5xx so a brief
   // glitch doesn't leave a page empty. Writes (POST/PUT/DELETE) are never retried.
@@ -114,7 +142,16 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
     const data = await res.json().catch(() => null)
     throw new Error(typeof data?.detail === 'string' ? data.detail : `Kļūda ${res.status}`)
   }
+  if (method !== 'GET' && !url.startsWith('/api/auth/') && !url.startsWith('/api/push/')) for (const fn of changeListeners) fn()
   return res.json()
+}
+
+/** Called after every successful change to the data (non-GET; not sign-in or notification settings) —
+ *  used to keep the nav counts current. */
+const changeListeners = new Set<() => void>()
+export function onChange(fn: () => void): () => void {
+  changeListeners.add(fn)
+  return () => { changeListeners.delete(fn) }
 }
 
 export const api = {
@@ -131,6 +168,7 @@ export const api = {
   printers: () => req<Printer[]>('GET', '/api/printers'),
   printer: (id: number) => req<Printer>('GET', `/api/printers/${id}`),
   refresh: () => req<{ polled: number }>('POST', '/api/printers/refresh'),
+  printerUsage: (id: number) => req<UsageMonth[]>('GET', `/api/printers/${id}/usage`),
   refreshOne: (id: number) => req<{ polled: number }>('POST', `/api/printers/${id}/refresh`),
   createPrinter: (b: PrinterInput) => req<Printer>('POST', '/api/printers', b),
   updatePrinter: (id: number, b: PrinterInput) => req<Printer>('PUT', `/api/printers/${id}`, b),
@@ -161,8 +199,30 @@ export const api = {
   /** "Nodots garantijā": a cartridge from the Defekti list was handed over; it becomes an open (warranty) order. */
   sendWarranty: (id: number) => req<Order>('POST', `/api/orders/${id}/send`),
   /** Puts one defective cartridge on the "Defekti" list. The reserve doesn't change; nothing is expected yet. */
-  createWarranty: (body: { printer_id: number; toner_id: number; removed_pct: number | null; defect: string; note?: string }) =>
-    req<Order>('POST', '/api/orders/warranty', body),
+  createWarranty: (body: {
+    printer_id: number; toner_id: number; removed_pct: number | null; defect: string; note?: string
+    held_location_id?: number | null; event_id?: number // event_id: the replacement (Jāpārbauda) that took it out
+  }) => req<Order>('POST', '/api/orders/warranty', body),
+  setHeld: (id: number, locationId: number | null) => req<Order>('PUT', `/api/orders/${id}/held`, { location_id: locationId }),
+  orderFiles: (id: number) => req<OrderFile[]>('GET', `/api/orders/${id}/files`),
+  /** Attach files to a defect (all or nothing). Returns the record's full file list. */
+  uploadOrderFiles: (id: number, files: File[]) => {
+    const form = new FormData()
+    for (const f of files) form.append('files', f, f.name)
+    return req<OrderFile[]>('POST', `/api/orders/${id}/files`, form)
+  },
+  /** Attach delivery documents to a group of orders; each document then shows on all of them. */
+  uploadDeliveryDocs: (orderIds: number[], files: File[]) => {
+    const form = new FormData()
+    form.append('order_ids', orderIds.join(','))
+    for (const f of files) form.append('files', f, f.name)
+    return req<DeliveryDoc[]>('POST', '/api/delivery-docs', form)
+  },
+  /** Removes the document from every order it is linked to. */
+  deleteDeliveryDoc: (id: number) => req<unknown>('DELETE', `/api/delivery-docs/${id}`),
+  /** Every defect recorded for one printer, newest first. */
+  printerDefects: (printerId: number) => req<Order[]>('GET', `/api/orders/defects?printer_id=${printerId}`),
+  deleteOrderFile: (fileId: number) => req<unknown>('DELETE', `/api/order-files/${fileId}`),
   /** "Saņemt visus": several open orders at their full quantity, each to its location. All or nothing. */
   receiveOrders: (items: { id: number; location_id: number }[]) => req<Order[]>('POST', '/api/orders/receive-all', { items }),
   cancelOrder: (id: number) => req<Order>('POST', `/api/orders/${id}/cancel`),

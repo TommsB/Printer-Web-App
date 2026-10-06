@@ -23,9 +23,11 @@ export const Icon = {
     </svg>
   ),
   // Žurnāls entry types
-  out: (s = 18) => svg(s, <><path d="M12 5v14" /><path d="M6 13l6 6 6-6" /></>),
-  inbox: (s = 18) => svg(s, <><path d="M12 4v10" /><path d="M8 10l4 4 4-4" /><path d="M4 15v4h16v-4" /></>),
-  swap: (s = 18) => svg(s, <><path d="M7 7h11l-3-3" /><path d="M17 17H6l3 3" /></>),
+  // Used = line going down, received = line going up, moved = two arrows passing each other, defect = warning sign
+  trendDown: (s = 18) => svg(s, <><path d="M3 7l6 6 4-4 7.5 7.5" /><path d="M21 11v6h-6" /></>),
+  trendUp: (s = 18) => svg(s, <><path d="M3 17l6-6 4 4 7.5-7.5" /><path d="M15 7h6v6" /></>),
+  swap: (s = 18) => svg(s, <><path d="M7 5L4 8l3 3" /><path d="M4 8h12.5a3.5 3.5 0 0 1 3.5 3.5" /><path d="M17 13l3 3-3 3" /><path d="M20 16H7.5A3.5 3.5 0 0 1 4 12.5" /></>),
+  hazard: (s = 18) => svg(s, <><path d="M12 4.5l8.5 14.5h-17z" /><path d="M12 10v4.5" /><path d="M12 17.2v.01" /></>),
   tune: (s = 18) => svg(s, <><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" /></>),
   plus: (s = 18) => svg(s, <><path d="M12 5v14M5 12h14" /></>),
   info: (s = 20) => svg(s, <><circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 7.5v.01" /></>),
@@ -43,6 +45,7 @@ export const Icon = {
   eyeOff: (s = 18) => svg(s, <><path d="M4 4l16 16" /><path d="M9.6 5.9A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-2.9 3.7M6.3 7.6A17 17 0 0 0 2.5 12s3.5 6.5 9.5 6.5c1.4 0 2.6-.3 3.7-.8" /><path d="M9.9 9.9a2.8 2.8 0 0 0 4 4" /></>),
   bell: (s = 22) => svg(s, <><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z" /><path d="M10 20.5a2.2 2.2 0 0 0 4 0" /></>),
   mail: (s = 18) => svg(s, <><rect x="3" y="5.5" width="18" height="13" rx="2.5" /><path d="M3.5 7.5l8.5 6 8.5-6" /></>),
+  clip: (s = 16) => svg(s, <path d="M19 11.5l-7.4 7.4a4.6 4.6 0 0 1-6.5-6.5l8-8a3.1 3.1 0 0 1 4.4 4.4l-7.8 7.8a1.6 1.6 0 0 1-2.3-2.3l7-7" />),
   check: (s = 12) => svg(s, <path d="M5 12.5l4.5 4.5L19 7.5" />),
   close: (s = 20) => svg(s, <path d="M6 6l12 12M18 6L6 18" />),
 }

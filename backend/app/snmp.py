@@ -164,7 +164,7 @@ def poll_printer(ip: str) -> PollResult:
     raw_status = (snmp_get(ip, OID_DEVICE_STATUS) or "").strip()
     res.status = DEVICE_STATUS_MAP.get(raw_status, raw_status)
     alert_descs = snmp_walk_table(ip, OID_ALERT_DESC)
-    res.alerts = " | ".join(alert_descs.values())
+    res.alerts = " | ".join(d.strip() for d in alert_descs.values() if d.strip())  # some Kyoceras send blank alerts
     flags = _hex_bytes(ip, OID_ERROR_STATE)
     blocking = blocking_reasons(ip, alert_descs, flags)  # alert tables are keyed by alert index
     res.blocking = " | ".join(blocking)

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { api, setUnauthorizedHandler, type Role, type Session, type TonerEvent } from './api'
+import { api, onChange, setUnauthorizedHandler, type Role, type Session, type TonerEvent } from './api'
 import { AppContext } from './ctx'
-import { clearCache, prefetchAll } from './cache'
+import { clearCache, prefetchAll, refresh } from './cache'
+import { useNavCounts } from './navCounts'
 import { clearRemembered, rememberSearch } from './uiMemory'
 import { useTabClick } from './viewTransition'
 import { NAV } from './components/TopBar'
@@ -43,10 +44,8 @@ export default function App() {
   const [role, setRole] = useState<Role>('standard') // only matters for the Lietotāji tab; the server enforces it
   const signIn = (s: Session) => { setRole(s.role); setUser(s.username) }
   const [company, setCompany] = useState('') // '' = all
-  const tabClick = useTabClick()
   const { pathname, search } = useLocation()
   useEffect(() => { rememberSearch(pathname, search) }, [pathname, search])
-  const tabIndex = NAV.findIndex((n) => (n.end ? pathname === n.to : pathname.startsWith(n.to)))
   useScrollPerSection(pathname)
 
   useEffect(() => {
@@ -67,11 +66,17 @@ export default function App() {
     .catch(() => {}), [])
   useEffect(() => {
     if (!user) return
+    // The Krājumi count (to order + defects to hand over) reads the cached stock and defect lists: keep them
+    // fresh the same way, and right after anything is changed anywhere in the app (an order, a received
+    // delivery, a used cartridge, a cartridge marked defective…).
+    const counts = () => { refresh('stock', api.stock); refresh('defects', () => api.orders('defect')) }
+    const tick = () => { reloadEvents(); counts() }
     reloadEvents()
-    const timer = setInterval(reloadEvents, 60_000)
-    const onVisible = () => { if (document.visibilityState === 'visible') reloadEvents() }
+    const timer = setInterval(tick, 60_000)
+    const onVisible = () => { if (document.visibilityState === 'visible') tick() }
     document.addEventListener('visibilitychange', onVisible)
-    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
+    const offChange = onChange(counts)
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); offChange() }
   }, [user, reloadEvents])
 
   const ctx = useMemo(
@@ -99,17 +104,26 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-      {/* Phone tab bar. The white pill is its own element that slides to the active tab (CSS transform). */}
-      <nav className="bnav" aria-label="Navigācija">
-        {tabIndex >= 0 && <span className="bnav__pill" aria-hidden="true" style={{ transform: `translateX(${tabIndex * 100}%)` }} />}
-        {NAV.map((n) => (
-          <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? 'on' : '')} onClick={(e) => tabClick(e, n.to)}
-            aria-label={n.to === '/log' && events.length ? `${n.label} (${events.length} jāpārbauda)` : n.label}>
-            {n.icon()}
-            {n.to === '/log' && events.length > 0 && <span className="badge-n">{events.length}</span>}
-          </NavLink>
-        ))}
-      </nav>
+      <BottomNav pathname={pathname} />
     </AppContext>
+  )
+}
+
+/** Phone tab bar. The white pill is its own element that slides to the active tab (CSS transform). */
+function BottomNav({ pathname }: { pathname: string }) {
+  const tabClick = useTabClick()
+  const counts = useNavCounts()
+  const tabIndex = NAV.findIndex((n) => (n.end ? pathname === n.to : pathname.startsWith(n.to)))
+  return (
+    <nav className="bnav" aria-label="Navigācija">
+      {tabIndex >= 0 && <span className="bnav__pill" aria-hidden="true" style={{ transform: `translateX(${tabIndex * 100}%)` }} />}
+      {NAV.map((n) => (
+        <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? 'on' : '')} onClick={(e) => tabClick(e, n.to)}
+          aria-label={counts[n.to] ? `${n.label} (${counts[n.to].text})` : n.label}>
+          {n.icon()}
+          {counts[n.to] && <span className="badge-n">{counts[n.to].n}</span>}
+        </NavLink>
+      ))}
+    </nav>
   )
 }

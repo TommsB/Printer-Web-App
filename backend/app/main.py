@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import auth, microsoft, orders, printers, push, replacements, settings, toners
+from . import attachments, auth, microsoft, orders, printers, push, replacements, settings, toners
 from .auth import current_username
 from .config import config
 from .db import init_db
@@ -18,6 +18,7 @@ from .poller import poll_loop
 async def lifespan(_: FastAPI):
     init_db()
     auth.bootstrap_users()  # first start: logins from auth_users.json become the first admins
+    attachments.sweep()  # defect files whose record is gone
     task = asyncio.create_task(poll_loop())
     yield
     task.cancel()
@@ -32,6 +33,7 @@ app.include_router(auth.users_router, dependencies=[Depends(auth.require_admin)]
 app.include_router(printers.router, dependencies=[require_auth])
 app.include_router(toners.router, dependencies=[require_auth])
 app.include_router(orders.router, dependencies=[require_auth])
+app.include_router(attachments.router, dependencies=[require_auth])
 app.include_router(replacements.router, dependencies=[require_auth])
 app.include_router(settings.router, dependencies=[require_auth])
 app.include_router(push.router, dependencies=[require_auth])
@@ -62,6 +64,7 @@ async def cache_headers(request, call_next):
 # Serve the built frontend (single port for the LAN). In dev, Vite runs separately
 # and proxies /api here, so a missing dist folder is fine.
 mimetypes.add_type("application/manifest+json", ".webmanifest")  # home-screen app manifest
+mimetypes.add_type("text/javascript", ".mjs")  # the PDF viewer's worker script: browsers refuse it under any other type
 _dist = Path(config["frontend_dist"])
 if _dist.is_dir():
     app.mount("/assets", StaticFiles(directory=_dist / "assets"), name="assets")

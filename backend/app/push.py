@@ -3,7 +3,8 @@
 Three kinds, each user picks which they want (stored per user, applies to all their devices):
   printer      a printer can't print (jam, door open, no paper…) or stopped answering
   replacement  a toner replacement was detected and waits in Vēsture → Jāpārbauda
-  toner        the toner in a printer is below 40% and there is no spare in the reserve ("zems pēdējais toneris")
+  toner        the toner in a printer is below 40% (or forecast to run out within two weeks) and there is no
+               spare in the reserve ("zems pēdējais toneris")
 
 How it works: after every SNMP poll, `after_poll` looks at what changed and returns the messages to send;
 `dispatch` then delivers them in a background thread. `push_state` remembers what was already announced,
@@ -23,6 +24,7 @@ from dataclasses import dataclass
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from . import forecast
 from .auth import current_username
 from .config import config
 from .db import db_dep, get_db
@@ -38,6 +40,9 @@ HISTORY_SHOWN = 60
 # "Low last toner": the cartridge in the printer is below this and there is no spare. Deliberately earlier
 # than the app's orange toner bars (15%), so there is time to order before it runs out.
 LOW_PCT = 40
+# …or, whatever the level, the forecast (forecast.py) says it will be empty within this many days.
+SOON_DAYS = 14
+SOON_MARGIN = 7  # once announced, it counts as gone only when the forecast is back above SOON_DAYS + this
 
 
 @dataclass
@@ -215,21 +220,31 @@ def after_poll(conn: sqlite3.Connection, printer_ids: list[int]) -> list[Message
             " (SELECT COALESCE(SUM(o.qty), 0) FROM orders o WHERE o.status = 'ordered'"
             "  AND o.printer_id = pt.printer_id AND o.toner_id = pt.toner_id) AS ordered"
             " FROM printer_toners pt JOIN toner_models t ON t.id = pt.toner_id WHERE pt.printer_id = ?", (pid,)).fetchall()
-        low_now = set()
-        for s in conn.execute("SELECT description, pct FROM snmp_supplies WHERE snapshot_id = ?", (cur["id"],)):
+        # "Low" = below LOW_PCT, or the forecast says it runs out within SOON_DAYS (a busy printer can be
+        # above 40% and still have only days left).
+        left = forecast.days_left(conn, pid)
+        low_now, hold = set(), set()
+        for s in conn.execute("SELECT idx, description, pct FROM snmp_supplies WHERE snapshot_id = ?", (cur["id"],)):
             col = toner_color(s["description"], mono)
-            if col is None or s["pct"] is None or s["pct"] >= LOW_PCT:
+            if col is None or s["pct"] is None:
                 continue
+            days = left.get(s["idx"])
             match = [t for t in linked if t["color"] == col] or (list(linked) if mono and len(linked) == 1 else [])
-            if match and match[0]["qty"] == 0:
-                t = match[0]
+            if not match or match[0]["qty"] != 0:
+                continue
+            t = match[0]
+            if s["pct"] < LOW_PCT or (days is not None and days <= SOON_DAYS):
                 low_now.add(t["id"])
                 on_order = f" Pasūtīts ×{t['ordered']}." if t["ordered"] else " Nekas nav pasūtīts."
+                lasts = f", pietiks ≈ {days} d" if days else ""  # no forecast, or already empty
                 start(f"lowtoner:{pid}:{t['id']}", Message(
-                    "toner", f"{name}: zems pēdējais toneris", f"{t['code']} — {s['pct']}%, rezervē nav neviena.{on_order}",
-                    "/stock", f"toner-{pid}-{t['id']}"))
+                    "toner", f"{name}: zems pēdējais toneris",
+                    f"{t['code']} — {s['pct']}%{lasts}. Rezervē nav neviena.{on_order}",
+                    f"/stock?p={pid}", f"toner-{pid}-{t['id']}"))
+            elif days is not None and days <= SOON_DAYS + SOON_MARGIN:
+                hold.add(t["id"])  # the forecast wobbles around the limit: don't clear and re-announce
         for t in linked:
-            if t["id"] not in low_now:
+            if t["id"] not in low_now and t["id"] not in hold:
                 stop(f"lowtoner:{pid}:{t['id']}")
 
     # Newly detected replacements (they wait in Vēsture → Jāpārbauda).
@@ -241,7 +256,7 @@ def after_poll(conn: sqlite3.Connection, printer_ids: list[int]) -> list[Message
     for e in events:
         out.append(Message("replacement", f"{e['location']}: nomainīts toneris",
                            f"{e['code'] or e['color']} {e['from_pct']}% → {e['to_pct']}%. Apstipriniet sadaļā Vēsture.",
-                           "/log", f"event-{e['id']}"))
+                           f"/log?event={e['id']}", f"event-{e['id']}"))
     newest = conn.execute("SELECT COALESCE(MAX(id), 0) FROM toner_events").fetchone()[0]
     conn.execute("INSERT OR REPLACE INTO app_kv (key, value) VALUES ('push_last_event', ?)", (str(newest),))
 

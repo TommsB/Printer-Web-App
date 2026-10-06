@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useApp } from '../ctx'
+import { useNavCounts } from '../navCounts'
 import { Icon } from '../icons'
 import { ROLE_LV } from '../lib'
 import { useTabClick } from '../viewTransition'
@@ -21,7 +22,8 @@ export const NAV = [
  * Once the title scrolls away, a compact bar shows it at the top, with the page's filters (`sticky`) if given.
  */
 export function TopBar({ title, children, sticky }: { title: [string, string]; children?: ReactNode; sticky?: ReactNode }) {
-  const { user, role, logout, events } = useApp()
+  const { user, role, logout } = useApp()
+  const counts = useNavCounts()
   const tabClick = useTabClick()
   const [heading, setHeading] = useState<HTMLHeadingElement | null>(null)
   const [profile, setProfile] = useState(false)
@@ -34,7 +36,7 @@ export function TopBar({ title, children, sticky }: { title: [string, string]; c
           {NAV.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? 'on' : '')} onClick={(e) => tabClick(e, n.to)}>
               {n.label}
-              {n.to === '/log' && events.length > 0 && <span className="badge-n" title={`${events.length} jāpārbauda`}>{events.length}</span>}
+              {counts[n.to] && <span className="badge-n" title={counts[n.to].text}>{counts[n.to].n}</span>}
             </NavLink>
           ))}
         </nav>

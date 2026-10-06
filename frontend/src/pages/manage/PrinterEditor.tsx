@@ -15,7 +15,7 @@ const EMPTY: PrinterInput = {
 
 function toForm(p: Printer): PrinterInput {
   return {
-    company: p.company, location: p.location, model: p.model, brand: p.brand, ip: p.ip, color_type: p.color_type,
+    company: p.company, location: p.location, model: p.model, brand: p.brand, ip: p.ip ?? '', color_type: p.color_type,
     snmp_enabled: p.snmp_enabled, active: p.active, notes: p.notes, default_location_id: p.default_location_id,
     toner_ids: p.toners.map((t) => t.id), norms: Object.fromEntries(p.toners.map((t) => [t.id, t.optimal_qty])),
   }
@@ -71,8 +71,16 @@ function TestOk({ result: r }: { result: Extract<SnmpTest, { reachable: true }> 
   )
 }
 
+/** "Dublēt": a new printer that starts as a copy of another — everything that printers of the same model
+ *  share. Its own name, IP address, notes and reserve are not copied (the reserve starts at 0). */
+function copyOf(p: Printer): PrinterInput {
+  return { ...toForm(p), location: '', ip: '', notes: '', active: true }
+}
+
 interface Props {
   printer: Printer | null // null = add a new printer
+  template?: Printer | null // a new printer started with "Dublēt" from this one
+  onDuplicate?: (p: Printer) => void
   toners: Toner[]
   locations: StoreLocation[]
   onClose: () => void
@@ -80,15 +88,17 @@ interface Props {
 }
 
 /** Add / edit a printer: details, network, linked toners with norms, default storage place. */
-export function PrinterEditor({ printer, toners, locations, onClose, onSaved }: Props) {
+export function PrinterEditor({ printer, template, onDuplicate, toners, locations, onClose, onSaved }: Props) {
   const { companies } = useApp()
-  const [form, setForm] = useState<PrinterInput>(() => (printer ? toForm(printer) : { ...EMPTY }))
+  const [form, setForm] = useState<PrinterInput>(() => (printer ? toForm(printer) : template ? copyOf(template) : { ...EMPTY }))
   const [addToner, setAddToner] = useState(0)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const set = <K extends keyof PrinterInput>(k: K, v: PrinterInput[K]) => setForm((f) => ({ ...f, [k]: v }))
 
+  // No IP is allowed: a printer that isn't on the network, kept only for its toner reserve.
+  const noIp = form.ip.trim() === ''
   const ipOk = IP_RE.test(form.ip.trim())
-  const valid = form.location.trim() !== '' && ipOk
+  const valid = form.location.trim() !== '' && (noIp || ipOk)
   const linked = toners.filter((t) => form.toner_ids.includes(t.id))
   const unlinked = toners.filter((t) => !form.toner_ids.includes(t.id))
 
@@ -115,6 +125,9 @@ export function PrinterEditor({ printer, toners, locations, onClose, onSaved }: 
   return (
     <>
       <Dialog.Frame className="wide" title={printer ? form.location || 'Printeris' : 'Jauns printeris'} onClose={onClose} onSubmit={save}>
+        {!printer && template && (
+          <p className="fnote">Kopija no „{template.location}”: modelis, toneri, normas un glabāšanas vieta. Ievadiet nosaukumu un, ja ir, IP adresi. Rezerve sākas no 0.</p>
+        )}
         <div className="fsec">
           <div className="lab">Pamatinformācija</div>
           <label>Nosaukums (atrašanās vieta)<input name="location" autoComplete="off" value={form.location} onChange={(e) => set('location', e.target.value)} placeholder="piem. TXP Main birojs…" /></label>
@@ -135,16 +148,18 @@ export function PrinterEditor({ printer, toners, locations, onClose, onSaved }: 
         <div className="fsec">
           <div className="lab">Tīkls</div>
           <div className="ip-row">
-            <label>IP adrese<input name="ip" autoComplete="off" spellCheck={false} value={form.ip} inputMode="decimal"
+            <label>IP adrese (nav obligāta)<input name="ip" autoComplete="off" spellCheck={false} value={form.ip} inputMode="decimal"
               onChange={(e) => { set('ip', e.target.value); setTest({ state: 'idle' }) }} placeholder="piem. 192.168.0.10…" /></label>
             <button type="button" className={test.state === 'running' ? 'btn small test-btn spin' : 'btn small test-btn'}
               disabled={!ipOk || test.state === 'running'} onClick={runTest}>
               {Icon.refresh(15)}{test.state === 'running' ? 'Pārbauda…' : 'Pārbaudīt savienojumu'}
             </button>
           </div>
-          {form.ip.trim() !== '' && !ipOk && <span className="error">IP adresei jābūt formā 192.168.0.10</span>}
+          {!noIp && !ipOk && <span className="error">IP adresei jābūt formā 192.168.0.10</span>}
+          {noIp && <p className="fnote">Bez IP adreses printeris netiek aptaujāts. Lietotnē tiek uzskaitīta tikai tā toneru rezerve.</p>}
           <SnmpTestResult test={test} />
-          <Toggle label="SNMP aptauja" hint="Nolasīt statusu un toneru līmeņus ik pēc 15 min" checked={form.snmp_enabled} onChange={(v) => set('snmp_enabled', v)} />
+          <Toggle label="SNMP aptauja" hint={noIp ? 'Nav iespējama bez IP adreses' : 'Nolasīt statusu un toneru līmeņus ik pēc 15 min'}
+            checked={!noIp && form.snmp_enabled} disabled={noIp} onChange={(v) => set('snmp_enabled', v)} />
         </div>
 
         <div className="fsec">
@@ -193,7 +208,14 @@ export function PrinterEditor({ printer, toners, locations, onClose, onSaved }: 
         </div>
 
         <Dialog.Footer>
-          {printer && <Dialog.Start><button type="button" className="btn danger" onClick={() => setConfirmDelete(true)}>Dzēst</button></Dialog.Start>}
+          {printer && (
+            <Dialog.Start>
+              <button type="button" className="btn danger" onClick={() => setConfirmDelete(true)}>Dzēst</button>
+              {/* Starts from the saved printer, not from unsaved edits in this form. */}
+              {onDuplicate && <button type="button" className="btn" title="Jauns printeris ar tādu pašu modeli, toneriem un normām"
+                onClick={() => onDuplicate(printer)}>Dublēt</button>}
+            </Dialog.Start>
+          )}
           <Dialog.Cancel />
           <Dialog.Confirm disabled={!valid}>Saglabāt</Dialog.Confirm>
         </Dialog.Footer>

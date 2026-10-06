@@ -1,7 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api, fmtTime, type Order, type Printer, type StockRow, type StoreLocation } from '../api'
 import { useApiData } from '../cache'
+import { DefectDialog, PendingFiles } from '../components/DefectFiles'
 import { ConfirmDialog, DestructiveDialog } from '../components/Dialog'
+import { prepareFiles } from '../files'
+import { fmtNum } from '../lib'
 import { ORDER_EMAIL, OrderEmailDialog, WARRANTY_EMAIL, type EmailFlavor, type EmailItem } from '../components/OrderEmailDialog'
 import { matches, SearchBox } from '../components/SearchBox'
 import { Stepper } from '../components/Stepper'
@@ -23,6 +27,53 @@ function Dot({ color }: { color: string }) {
   return <i className={`cdot ${color ? color.toLowerCase() : 'g'}`} {...(name && { role: 'img', 'aria-label': name, title: name })} />
 }
 
+/** After orders were received: attach the chosen delivery notes, each to its group of orders. The orders stay
+ *  received if this fails; the message says so and where the note can be added later. */
+async function attachNotes(groups: { ids: number[]; files: File[] }[]) {
+  try {
+    for (const g of groups) if (g.files.length) await api.uploadDeliveryDocs(g.ids, await prepareFiles(g.files))
+  } catch (err) {
+    throw new Error(`Saņemts, bet dokumentu neizdevās saglabāt (${err instanceof Error ? err.message : 'kļūda'}). Mēģiniet vēlreiz vai pievienojiet to vēlāk: Vēsture → Pasūtījumi.`, { cause: err })
+  }
+}
+
+/** "Saņemt" on one open order: how many arrived, where they go, and optionally the delivery note. */
+function ReceiveDialog({ order: o, places, onClose, onDone }: {
+  order: Order; places: StoreLocation[]; onClose: () => void; onDone: () => Promise<unknown>
+}) {
+  const [qtyText, setQtyText] = useState(String(o.qty))
+  // Default: the printer's usual location, else the first one.
+  const [place, setPlace] = useState(places.some((l) => l.id === o.default_location_id) ? o.default_location_id! : (places[0]?.id ?? 0))
+  const [note, setNote] = useState<File[]>([])
+  const received = useRef(false) // if only the note fails to upload, confirming again must not receive twice
+  const qty = Number(qtyText)
+  const valid = Number.isInteger(qty) && qty >= 1 && qty <= 1000
+  return (
+    <ConfirmDialog title={o.warranty ? `Saņemt aizvietotāju: ${o.code}` : `Saņemt ${o.code}`}
+      confirmLabel={valid ? `Saņemts (+${qty} krājumā)` : 'Saņemts'} disabled={!valid || !place}
+      onClose={() => { if (received.current) void onDone(); onClose() }}
+      onConfirm={async () => {
+        if (!received.current) { await api.receiveOrder(o.id, qty, place); received.current = true }
+        await attachNotes([{ ids: [o.id], files: note }])
+        await onDone()
+      }}>
+      <p className="dlg-text"><Dot color={o.color} /> <b>{o.code}</b> · {o.location}<br />
+        <span className="muted">{o.warranty
+          ? 'Garantijas aizvietotājs. Tas tiks pievienots rezervei.'
+          : `Pasūtīts ×${o.qty}. Ja saņemts mazāk vai vairāk, izmainiet skaitu.`}</span></p>
+      <div className="field"><span>Saņemtais daudzums</span>
+        <Stepper label="Saņemtais daudzums" value={qtyText} onChange={setQtyText} min={1} max={1000} />
+      </div>
+      <label>Kur novietot
+        <select value={place} onChange={(e) => setPlace(+e.target.value)}>
+          {places.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
+      </label>
+      <PendingFiles files={note} onChange={setNote} label="Dokumenti (nav obligāti)" button="Pievienot dokumentu" />
+    </ConfirmDialog>
+  )
+}
+
 /**
  * "Saņemt visus": every open order at its full ordered quantity, in one step, all into one storage place
  * (pre-selected, changeable; the one used is remembered for next time). A delivery that came short is received one by
@@ -35,20 +86,36 @@ function ReceiveAllDialog({ orders, places, onClose, onDone }: {
   // Pre-selected: the place used last time, else the first one in the list (SP Noliktava — the usual delivery place).
   const [place, setPlace] = useState(places.some((l) => l.id === last) ? last : (places[0]?.id ?? 0))
   const total = orders.reduce((n, o) => n + o.qty, 0)
-  const list = [...orders].sort((a, b) => a.location.localeCompare(b.location, 'lv') || a.code.localeCompare(b.code))
+  // By company: each company's cartridges come with their own delivery note, which can be attached right here.
+  const companies = [...new Set(orders.map((o) => o.company))].sort((a, b) => (a === '') === (b === '') ? a.localeCompare(b, 'lv') : a === '' ? 1 : -1)
+  const of = (company: string) => orders.filter((o) => o.company === company)
+    .sort((a, b) => a.location.localeCompare(b.location, 'lv') || a.code.localeCompare(b.code))
+  const [notes, setNotes] = useState<Record<string, File[]>>({})
+  const received = useRef(false) // if only a note fails to upload, confirming again must not receive twice
 
   return (
-    <ConfirmDialog title="Saņemt visus pasūtījumus" confirmLabel={`Saņemt ${total} gab.`} onClose={onClose} disabled={!place}
+    <ConfirmDialog title="Saņemt visus pasūtījumus" confirmLabel={`Saņemt ${total} gab.`} disabled={!place}
+      onClose={() => { if (received.current) void onDone(); onClose() }}
       onConfirm={async () => {
-        await api.receiveOrders(orders.map((o) => ({ id: o.id, location_id: place })))
-        setLast(place)
+        if (!received.current) {
+          await api.receiveOrders(orders.map((o) => ({ id: o.id, location_id: place })))
+          received.current = true
+          setLast(place)
+        }
+        await attachNotes(companies.map((c) => ({ ids: of(c).map((o) => o.id), files: notes[c] ?? [] })))
         await onDone()
       }}>
-      <ul className="dlg-list toners recv-all">
-        {list.map((o) => (
-          <li key={o.id}><Dot color={o.color} /><b>{o.code}</b> ×{o.qty}{!!o.warranty && <span className="tag-w">Garantija</span>}<span className="recv-all__to">{o.location}</span></li>
-        ))}
-      </ul>
+      {companies.map((c) => (
+        <div key={c} className="recv-co">
+          <div className="recv-co__head"><b>{c || 'Bez uzņēmuma'}</b></div>
+          <ul className="dlg-list toners recv-all">
+            {of(c).map((o) => (
+              <li key={o.id}><Dot color={o.color} /><b>{o.code}</b> ×{o.qty}{!!o.warranty && <span className="tag-w">Garantija</span>}<span className="recv-all__to">{o.location}</span></li>
+            ))}
+          </ul>
+          <PendingFiles files={notes[c] ?? []} onChange={(f) => setNotes((n) => ({ ...n, [c]: f }))} label="Dokumenti (nav obligāti)" button="Pievienot dokumentu" />
+        </div>
+      ))}
       <label>Kur novietot
         <select value={place} onChange={(e) => setPlace(+e.target.value)}>
           {places.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -63,6 +130,7 @@ type Dlg =
   | { kind: 'receiveAll' }
   | { kind: 'send'; orders: Order[] } // Defekti → "Nodots garantijā" (one, or the whole list)
   | { kind: 'discard'; order: Order } // delete an entry from Defekti
+  | { kind: 'defect'; order: Order } // a defect's details, where it is kept, photos/files
   | { kind: 'email'; source: string; flavor: EmailFlavor; items: EmailItem[] }
   | { kind: 'suggest'; loc: string; items: Need[] }
   | { kind: 'receive'; order: Order }
@@ -78,15 +146,34 @@ export function StockPage() {
   const dfc = useApiData<Order[]>('defects', () => api.orders('defect'), [])
   const locations = useApiData<StoreLocation[]>('locations', api.locations, [])
   const activeLocs = locations.data.filter((l) => l.active)
-  const [recvLoc, setRecvLoc] = useState(0)
   const rows = stock.data
   const orders = ord.data
   const [onlyLow, setOnlyLow] = useState(false)
   const [query, setQuery] = useState('')
   const [dlg, setDlg] = useState<Dlg>(null)
-  const [qtyText, setQtyText] = useState('1')
   // One card open at a time; remembered when you switch sections and come back.
   const [openId, setOpenId] = useRemembered<number | null>('stock.open', null)
+
+  // A tapped "zems pēdējais toneris" notification arrives as /stock?p=12: open that printer's card, bring it
+  // into view and outline it for a moment.
+  const [params, setParams] = useSearchParams()
+  const wanted = Number(params.get('p')) || null
+  const [flash, setFlash] = useState<number | null>(null)
+  if (wanted !== null && flash !== wanted) { // adjust state while rendering
+    setOpenId(wanted)
+    setOnlyLow(false)
+    setQuery('')
+    setFlash(wanted)
+  }
+  // One-time: the address goes back to plain /stock, so coming back to Krājumi later doesn't jump again.
+  useEffect(() => { if (wanted !== null) setParams({}, { replace: true }) }, [wanted, setParams])
+  const flashShown = flash !== null && rows.some((r) => r.printer_id === flash)
+  useEffect(() => {
+    if (!flashShown) return
+    document.getElementById(`stock-${flash}`)?.scrollIntoView({ block: 'center' })
+    const timer = setTimeout(() => setFlash(null), 2600) // as long as the .flash outline lasts
+    return () => clearTimeout(timer)
+  }, [flashShown, flash])
 
   const load = async () => { await Promise.all([stock.reload(), ord.reload(), dfc.reload(), locations.reload()]) }
 
@@ -130,7 +217,7 @@ export function StockPage() {
   const byPrinterOrder = (a: Order, b: Order) => (rank.get(a.printer_id) ?? 1e9) - (rank.get(b.printer_id) ?? 1e9)
   const claimItems = (list: Order[]): EmailItem[] => [...list].sort(byPrinterOrder).map((o) => ({
     company: o.company, model: o.model, code: o.code, color: o.color, kind: o.kind, qty: o.qty,
-    printer: o.location, pct: o.removed_pct, defect: o.defect,
+    printer: o.location, pct: o.removed_pct, defect: o.defect, pages: o.pages_printed,
   }))
   const emailDefects = () => setDlg({ kind: 'email', source: 'Defekti', flavor: WARRANTY_EMAIL, items: claimItems(defects) })
   const purchases = openOrders.filter((o) => !o.warranty)
@@ -142,13 +229,17 @@ export function StockPage() {
   const emailWarranty = () => setDlg({
     kind: 'email', source: 'Pasūtīts (garantija)', flavor: WARRANTY_EMAIL, items: claimItems(openOrders.filter((o) => o.warranty)),
   })
-  const claimNote = (o: Order) => `${o.defect || 'defekts'}${o.removed_pct == null ? '' : `, izņemts pie ${o.removed_pct}%`}`
+  const claimNote = (o: Order) => `${o.defect || 'defekts'}${o.removed_pct == null ? '' : `, izņemts pie ${o.removed_pct}%`}${
+    o.pages_printed == null ? '' : `, ${fmtNum(o.pages_printed)} lapas`}`
+  // Paperclip + count when a defect has photos/files; opens the same window as "Dati un faili" in its menu.
+  const filesMark = (o: Order) => o.files > 0 && (
+    <button className="files-mark" onClick={() => setDlg({ kind: 'defect', order: o })} title="Pievienotie faili"
+      aria-label={`Faili: ${o.files}`}>{Icon.clip(13)}{o.files}</button>
+  )
   const mailBtn = (onClick: () => void, list: string) => (
     <button className="icon-btn" onClick={onClick} aria-label={`E-pasta teksts: ${list}`} title={`E-pasta teksts no saraksta „${list}”`}>{Icon.mail(18)}</button>
   )
 
-  const qtyN = Number(qtyText)
-  const qtyValid = Number.isInteger(qtyN) && qtyN >= 1 && qtyN <= 1000
 
   return (
     <>
@@ -193,11 +284,12 @@ export function StockPage() {
               {defects.map((o) => (
                 <div key={o.id} className="ord">
                   <span className="a">
-                    <b><Dot color={o.color} /> {o.code}</b>
-                    <small>{o.location} · {fmtTime(o.created_ts)} · {claimNote(o)}{o.note && ` · ${o.note}`}</small>
+                    <b><Dot color={o.color} /> {o.code}{filesMark(o)}</b>
+                    <small>{o.location} · {fmtTime(o.created_ts)} · {claimNote(o)}{o.held_at && ` · atrodas: ${o.held_at}`}{o.note && ` · ${o.note}`}</small>
                   </span>
                   <ActionMenu code={`${o.code}, ${o.location}`} items={[
                     { label: 'Nodot garantijā', run: () => setDlg({ kind: 'send', orders: [o] }) },
+                    { label: 'Dati un faili', run: () => setDlg({ kind: 'defect', order: o }) },
                     { label: 'Dzēst', run: () => setDlg({ kind: 'discard', order: o }), divider: true },
                   ]} />
                 </div>
@@ -220,7 +312,7 @@ export function StockPage() {
             {openOrders.map((o) => (
               <div key={o.id} className="ord">
                 <span className="a">
-                  <b><Dot color={o.color} /> {o.code} <span className="pv solid sm">×{o.qty}</span>{!!o.warranty && <span className="tag-w">Garantija</span>}</b>
+                  <b><Dot color={o.color} /> {o.code} <span className="pv solid sm">×{o.qty}</span>{!!o.warranty && <span className="tag-w">Garantija</span>}{filesMark(o)}</b>
                   <small>
                     {o.location} · {fmtTime(o.created_ts)} · {o.created_by}
                     {!!o.warranty && ` · ${claimNote(o)}`}
@@ -230,13 +322,11 @@ export function StockPage() {
                 {/* One ⋮ per order (like the toner rows) instead of two buttons on every row.
                     A warranty claim: Saņemt = the replacement arrived, Noraidīts = the claim was rejected. */}
                 <ActionMenu code={`${o.code}, ${o.location}`} items={[
-                  { label: 'Saņemt', run: () => {
-                    setQtyText(String(o.qty))
-                    // Default: the printer's usual location, else the first one.
-                    setRecvLoc(activeLocs.some((l) => l.id === o.default_location_id) ? o.default_location_id! : (activeLocs[0]?.id ?? 0))
-                    setDlg({ kind: 'receive', order: o })
-                  } },
-                  ...(o.warranty ? [{ label: 'Garantijas e-pasts', run: emailWarranty }] : []),
+                  { label: 'Saņemt', run: () => setDlg({ kind: 'receive', order: o }) },
+                  ...(o.warranty ? [
+                    { label: 'Garantijas e-pasts', run: emailWarranty },
+                    { label: 'Dati un faili', run: () => setDlg({ kind: 'defect', order: o }) },
+                  ] : []),
                   { label: o.warranty ? 'Noraidīts' : 'Atcelt', run: () => setDlg({ kind: 'cancel', order: o }), divider: true },
                 ]} />
               </div>
@@ -264,7 +354,7 @@ export function StockPage() {
               const anyLow = list.some((r) => r.low)
               const isOpen = openId === pid || query !== '' // searching opens the matches
               return (
-              <article key={pid} className={isOpen ? 'grp open' : 'grp'} style={vtName(`stock-${pid}`, 'card')}>
+              <article key={pid} id={`stock-${pid}`} className={`grp${isOpen ? ' open' : ''}${flash === pid ? ' flash' : ''}`} style={vtName(`stock-${pid}`, 'card')}>
                 <button className="gh-btn" aria-expanded={isOpen} onClick={() => toggle(pid)}>
                   <span className="gh-t"><b>{list[0].location}</b><span>{list[0].model}</span></span>
                   <span className={anyLow ? 'tot hot' : 'tot'} title={anyLow ? 'Kāds toneris ir zem normas' : 'Krājumā / norma'}>{qty}<small>/{norm}</small></span>
@@ -299,6 +389,7 @@ export function StockPage() {
             <span className="muted">Tas netiks nodots garantijā. Krājums nemainās.</span></p>
         </DestructiveDialog>
       )}
+      {dlg?.kind === 'defect' && <DefectDialog order={dlg.order} onClose={() => setDlg(null)} onChange={load} />}
       {dlg?.kind === 'receiveAll' &&<ReceiveAllDialog orders={openOrders} places={activeLocs} onClose={() => setDlg(null)} onDone={load} />}
       {dlg?.kind === 'email' && <OrderEmailDialog rows={dlg.items} source={dlg.source} flavor={dlg.flavor} onClose={() => setDlg(null)} />}
       {dlg?.kind === 'suggest' && (
@@ -308,24 +399,7 @@ export function StockPage() {
           <p className="dlg-text muted">Krājums pieaugs tikai tad, kad pasūtījums tiks atzīmēts kā saņemts.</p>
         </ConfirmDialog>
       )}
-      {dlg?.kind === 'receive' && (
-        <ConfirmDialog title={dlg.order.warranty ? `Saņemt aizvietotāju: ${dlg.order.code}` : `Saņemt ${dlg.order.code}`}
-          confirmLabel={qtyValid ? `Saņemts (+${qtyN} krājumā)` : 'Saņemts'} disabled={!qtyValid || !recvLoc} onClose={() => setDlg(null)}
-          onConfirm={async () => { await api.receiveOrder(dlg.order.id, qtyN, recvLoc); await load() }}>
-          <p className="dlg-text"><Dot color={dlg.order.color} /> <b>{dlg.order.code}</b> · {dlg.order.location}<br />
-            <span className="muted">{dlg.order.warranty
-              ? 'Garantijas aizvietotājs. Tas tiks pievienots rezervei.'
-              : `Pasūtīts ×${dlg.order.qty}. Ja saņemts mazāk vai vairāk, izmainiet skaitu.`}</span></p>
-          <div className="field"><span>Saņemtais daudzums</span>
-            <Stepper label="Saņemtais daudzums" value={qtyText} onChange={setQtyText} min={1} max={1000} />
-          </div>
-          <label>Kur novietot
-            <select value={recvLoc} onChange={(e) => setRecvLoc(+e.target.value)}>
-              {activeLocs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
-          </label>
-        </ConfirmDialog>
-      )}
+      {dlg?.kind === 'receive' && <ReceiveDialog order={dlg.order} places={activeLocs} onClose={() => setDlg(null)} onDone={load} />}
       {dlg?.kind === 'cancel' && (
         <DestructiveDialog title={dlg.order.warranty ? 'Garantija noraidīta' : 'Atcelt pasūtījumu'}
           confirmLabel={dlg.order.warranty ? 'Jā, noraidīts' : 'Jā, atcelt'} onClose={() => setDlg(null)}

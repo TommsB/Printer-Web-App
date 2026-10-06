@@ -1,15 +1,16 @@
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { api, fmtClock, fmtTime, type Printer, type StoreLocation, type Supply } from '../api'
+import { api, fmtClock, fmtTime, type Order, type Printer, type StoreLocation, type Supply, type UsageMonth } from '../api'
 import { useApiData } from '../cache'
 import { CompactBar } from '../components/CompactBar'
+import { DefectDialog } from '../components/DefectFiles'
 import { ReorderList } from '../components/ReorderList'
 import { matches, SearchBox } from '../components/SearchBox'
 import { TonerRow } from '../components/TonerRow'
 import { TopBar } from '../components/TopBar'
 import { useApp } from '../ctx'
 import { Icon } from '../icons'
-import { attentionReasons, fmtHours, fmtNum, isImportantAlert, LOW_PCT, printerState, splitSupplies, type Col } from '../lib'
+import { attentionReasons, DEFECT_STATUS, fmtDate, fmtDaysLeft, fmtHours, fmtNum, isImportantAlert, LOW_PCT, printerState, SOON_DAYS, splitSupplies, type Col } from '../lib'
 import { vtName, withViewTransition } from '../viewTransition'
 
 /** Snapshot times are local (no timezone), so compare with the local date. */
@@ -150,7 +151,7 @@ export function PrintersPage() {
             ? <ReorderList items={inScope} label={(p) => p.location} onReorder={reorder}
                 render={(p) => <>
                   <span className="ic">{Icon.printer(18)}</span>
-                  <span className="rrow__txt"><b>{p.location}</b><small>{p.model} · {p.ip}</small></span>
+                  <span className="rrow__txt"><b>{p.location}</b><small>{[p.model, p.ip].filter(Boolean).join(' · ')}</small></span>
                 </>} />
             : <div className="list">
             {rows.map((p) => {
@@ -163,7 +164,7 @@ export function PrintersPage() {
                   <span className="nm">
                     <span className="nm-t">{p.location}</span>
                   </span>
-                  <span className="md">{p.model} · {p.ip}</span>
+                  <span className="md">{[p.model, p.ip].filter(Boolean).join(' · ')}</span>
                   <span className={st.lineHot ? 'st bad' : 'st'}>{st.line}</span>
                   <Bars p={p} emptyText={st.offline ? 'Nav SNMP datu' : '–'} />
                   <span className="pg">{fmtNum(p.snapshot?.pages_today)}<small>lapas šodien</small></span>
@@ -186,8 +187,8 @@ export function PrintersPage() {
 }
 
 /** A section that opens/closes from its heading; collapsed by default. Detail is keyed per printer, so it re-collapses. */
-function Fold({ label, count, hot, children }: { label: string; count: ReactNode; hot?: boolean; children: ReactNode }) {
-  const [open, setOpen] = useState(false)
+function Fold({ label, count, hot, startOpen = false, children }: { label: string; count: ReactNode; hot?: boolean; startOpen?: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(startOpen)
   return (
     <div className={open ? 'fold open' : 'fold'}>
       <button className="fold-btn" aria-expanded={open} onClick={() => setOpen(!open)}>
@@ -221,6 +222,93 @@ function Row({ k, children }: { k: string; children: React.ReactNode }) {
   return <div className="irow"><dt>{k}</dt><dd>{children ?? '–'}</dd></div>
 }
 
+const MONTH_NAME = new Intl.DateTimeFormat('lv-LV', { month: 'long' })
+const monthLabel = (m: string) => { const [y, mo] = m.split('-').map(Number); return `${MONTH_NAME.format(new Date(y, mo - 1, 1))} ${y}` }
+const currentMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
+
+/** Pages printed and cartridges used per month (last 12 with anything in them). The running month and the
+ *  month the readings began are marked, and left out of the average, because they aren't whole months. */
+function Usage({ printerId }: { printerId: number }) {
+  const { data, loading } = useApiData<UsageMonth[]>(`usage-${printerId}`, () => api.printerUsage(printerId), [])
+  const now = currentMonth()
+  const whole = data.filter((m) => m.pages !== null && m.since === null && m.month !== now)
+  const average = whole.length ? Math.round(whole.reduce((n, m) => n + m.pages!, 0) / whole.length) : null
+  return (
+    <section className="icard usage">
+      <h3 className="lab">Lietojums pa mēnešiem</h3>
+      {data.length === 0
+        ? <p className="muted">{loading ? 'Ielādē…' : 'Vēl nav datu.'}</p>
+        : <table>
+            <thead><tr><th scope="col">Mēnesis</th><th scope="col" className="un">Lapas</th><th scope="col">Izlietotie toneri</th></tr></thead>
+            <tbody>
+              {data.map((m) => (
+                <tr key={m.month}>
+                  <td>{monthLabel(m.month)}{m.month === now && <small>līdz šim</small>}</td>
+                  <td className="un">
+                    {fmtNum(m.pages)}
+                    {m.since && <small title="Lapu skaitītājs tiek uzskaitīts no šīs dienas">no {m.since.slice(8)}.{m.since.slice(5, 7)}.</small>}
+                  </td>
+                  <td>
+                    {m.toners.length === 0 && m.defects.length === 0 ? '–' : m.toners.map((t) => (
+                      <span key={t.code} className="ut"><i className={`cdot ${t.color ? t.color.toLowerCase() : 'g'}`} />{t.code} ×{t.qty}</span>
+                    ))}
+                    {/* Cartridges marked defective that month: listed like the used ones, tagged "(Defekts)". */}
+                    {m.defects.map((t) => (
+                      <span key={`d-${t.code}`} className="ut"><i className={`cdot ${t.color ? t.color.toLowerCase() : 'g'}`} />{t.code} ×{t.qty} <span className="udef">(Defekts)</span></span>
+                    ))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>}
+      {average !== null && <p className="usage__avg">Vidēji {fmtNum(average)} lapas mēnesī (pilnie mēneši: {whole.length}).</p>}
+    </section>
+  )
+}
+
+/** Printer info → "Defekti": how many defective cartridges this printer has had and how they ended, then each
+ *  one (toner, what was wrong, date, status). Tapping one opens its details and photos/files. */
+function Defects({ printerId }: { printerId: number }) {
+  const { data, loading, reload } = useApiData<Order[]>(`defects-${printerId}`, () => api.printerDefects(printerId), [])
+  const [details, setDetails] = useState<Order | null>(null)
+  const n = (status: Order['status']) => data.filter((o) => o.status === status).length
+  const summary = [
+    n('received') > 0 && `aizvietoti ${n('received')}`,
+    n('cancelled') > 0 && `noraidīti ${n('cancelled')}`,
+    n('ordered') > 0 && `garantijā ${n('ordered')}`,
+    n('defect') > 0 && `nav nodoti ${n('defect')}`,
+  ].filter(Boolean).join(' · ')
+  return (
+    <section className="icard usage">
+      <h3 className="lab">Defekti{data.length > 0 && <small className="lab__n">{data.length}</small>}</h3>
+      {data.length === 0
+        ? <p className="muted">{loading ? 'Ielādē…' : 'Šim printerim nav bijis neviena defektēta tonera.'}</p>
+        : <>
+            <p className="usage__avg">Kopā {data.length}: {summary}.</p>
+            <ul className="evlist">
+              {data.map((o) => (
+                <li key={o.id} className="ev">
+                  <button className="ev__main" onClick={() => setDetails(o)} aria-haspopup="dialog">
+                    <span className="ev__body">
+                      <span className="ev__l1"><i className={`cdot ${o.color ? o.color.toLowerCase() : 'g'}`} /><b>{o.code}</b></span>
+                      <span className="ev__l2">
+                        {o.defect || 'Defekts'}
+                        {o.removed_pct != null && ` · izņemts pie ${o.removed_pct}%`}
+                        {o.pages_printed != null && ` · ${fmtNum(o.pages_printed)} lapas`}
+                        {o.files > 0 && <span className="ev__files">{Icon.clip(12)}{o.files}</span>}
+                      </span>
+                    </span>
+                    <span className="dfx"><b className={`dfx__st ${o.status}`}>{DEFECT_STATUS[o.status].label}</b><small>{fmtDate(o.created_ts)}</small></span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>}
+      {details && <DefectDialog order={details} onClose={() => setDetails(null)} onChange={() => { reload().catch(() => {}) }} />}
+    </section>
+  )
+}
+
 /** Printer info sub-view: identity, network and all the counters we have. */
 function PrinterInfo({ p, onBack, headRef }: { p: Printer; onBack: () => void; headRef: (el: HTMLHeadingElement | null) => void }) {
   const snap = p.snapshot
@@ -247,10 +335,14 @@ function PrinterInfo({ p, onBack, headRef }: { p: Printer; onBack: () => void; h
         <section className="icard">
           <h3 className="lab">Tīkls</h3>
           <dl>
-            <Row k="IP adrese"><a href={`http://${p.ip}`} target="_blank" rel="noreferrer">{p.ip}</a></Row>
-            <Row k="Hostname">{snap?.hostname || '–'}</Row>
-            <Row k="SNMP">{p.snmp_enabled ? (st.offline ? 'Nav atbildes' : 'Ieslēgts') : 'Izslēgts'}</Row>
-            <Row k="Tīmekļa saskarne"><a href={`http://${p.ip}`} target="_blank" rel="noreferrer">Atvērt ↗</a></Row>
+            {p.ip
+              ? <>
+                  <Row k="IP adrese"><a href={`http://${p.ip}`} target="_blank" rel="noreferrer">{p.ip}</a></Row>
+                  <Row k="Hostname">{snap?.hostname || '–'}</Row>
+                  <Row k="SNMP">{p.snmp_enabled ? (st.offline ? 'Nav atbildes' : 'Ieslēgts') : 'Izslēgts'}</Row>
+                  <Row k="Tīmekļa saskarne"><a href={`http://${p.ip}`} target="_blank" rel="noreferrer">Atvērt ↗</a></Row>
+                </>
+              : <Row k="IP adrese">Nav tīklā</Row>}
           </dl>
         </section>
         <section className="icard">
@@ -263,6 +355,8 @@ function PrinterInfo({ p, onBack, headRef }: { p: Printer; onBack: () => void; h
             <Row k="Atjaunots">{snap ? fmtTime(snap.ts) : '–'}</Row>
           </dl>
         </section>
+        <Usage printerId={p.id} />
+        <Defects printerId={p.id} />
       </div>
     </div>
   )
@@ -299,7 +393,11 @@ function DetailMain({ p, busy, spinning, onRefresh, onClose, onChange, allLocati
   const { toners, others } = splitSupplies(p)
   // Show the cartridge code (from the printer's linked toners) instead of "Toner Black"; the dot already shows the colour.
   const codeFor = (col: Col) => p.toners.find((t) => t.color.toLowerCase() === col)?.code
-  const alerts = snap?.reachable && snap.alerts ? snap.alerts.split(' | ') : []
+  // Reserve in the same colour order as the levels (K, C, M, Y; anything without a colour last), so on
+  // desktop each toner sits beside its own reserve row.
+  const rank = (color: string) => { const i = 'kcmy'.indexOf(color.toLowerCase()); return color && i >= 0 ? i : 9 }
+  const reserve = [...p.toners].sort((a, b) => rank(a.color) - rank(b.color) || a.code.localeCompare(b.code))
+  const alerts = snap?.reachable && snap.alerts ? snap.alerts.split(' | ').filter((a) => a.trim()) : [] // blank = a printer sent an empty alert
   // Reasons it can't print first (from error flags / critical alerts), then the other important messages.
   const important = [...st.blocked, ...alerts.filter((a) => isImportantAlert(a) && !st.blocked.includes(a))]
   const info = alerts.filter((a) => !isImportantAlert(a) && !st.blocked.includes(a))
@@ -311,7 +409,7 @@ function DetailMain({ p, busy, spinning, onRefresh, onClose, onChange, allLocati
         <h2 ref={headRef}>{p.location}</h2>
         <div className="dacts">
           <button className="icon-btn" onClick={onInfo} aria-label="Printera informācija" title="Printera informācija">{Icon.info(18)}</button>
-          <button className={spinning ? 'icon-btn spin' : 'icon-btn'} onClick={onRefresh} disabled={busy} aria-busy={spinning} aria-label="Atjaunot printeri" title="Atjaunot šo printeri">{Icon.refresh(18)}</button>
+          {p.ip && <button className={spinning ? 'icon-btn spin' : 'icon-btn'} onClick={onRefresh} disabled={busy} aria-busy={spinning} aria-label="Atjaunot printeri" title="Atjaunot šo printeri">{Icon.refresh(18)}</button>}
           <button className="icon-btn close-x" onClick={onClose} aria-label="Aizvērt">{Icon.close(18)}</button>
         </div>
       </div>
@@ -322,7 +420,9 @@ function DetailMain({ p, busy, spinning, onRefresh, onClose, onChange, allLocati
         <div className="d-stats">
           {/* One compact line: uptime, last update, pages today (value + small label inline). */}
           <div className="stats-row">
-            {st.offline
+            {!p.ip
+              ? <span className="stat"><span className="tag ok">Nav tīklā</span></span>
+              : st.offline
               ? <span className="stat"><span className="tag bad">Nav pieejams</span></span>
               : <>
                   {st.blocked.length > 0 && <span className="stat"><span className="tag stop">Nevar drukāt</span></span>}
@@ -348,12 +448,19 @@ function DetailMain({ p, busy, spinning, onRefresh, onClose, onChange, allLocati
         <div className="d-toners">
           <div className="lab">Toneri</div>
           {toners.length === 0 && (
-            <p className="muted pad">{st.offline ? `Nav SNMP datu. Pēdējais mēģinājums ${snap ? fmtTime(snap.ts) : ''}.` : 'Nav SNMP datu par toneriem.'}</p>
+            <p className="muted pad">{!p.ip ? 'Printeris nav tīklā, tāpēc toneru līmeņi netiek nolasīti. Zemāk ir tā rezerve.' : st.offline ? `Nav SNMP datu. Pēdējais mēģinājums ${snap ? fmtTime(snap.ts) : ''}.` : 'Nav SNMP datu par toneriem.'}</p>
           )}
           {toners.map((t) => (
             <div key={t.col} className="sp">
               <span className="dot"><i className={t.col} /></span>
-              <span className="n" title={`Toner ${t.name}`}>{codeFor(t.col) ?? `Toner ${t.name}`}</span>
+              <span className="n" title={`Toner ${t.name}`}>
+                {codeFor(t.col) ?? `Toner ${t.name}`}
+                {/* Forecast from this cartridge's own history; absent until there are a few days of readings. */}
+                {t.days !== null && (
+                  <small className={t.days <= SOON_DAYS ? 'left hot' : 'left'}
+                    title={`Prognoze pēc pēdējo dienu patēriņa: pietiks apmēram ${t.days} d.`}>{fmtDaysLeft(t.days)}</small>
+                )}
+              </span>
               <span className="tr"><i className={barClass(t.col, t.pct)} style={{ width: `${t.pct ?? 0}%` }} /></span>
               <span className={t.pct !== null && t.pct < LOW_PCT ? 'pv hot' : 'pv'}>{t.pct === null ? '–' : `${t.pct}%`}</span>
             </div>
@@ -364,10 +471,12 @@ function DetailMain({ p, busy, spinning, onRefresh, onClose, onChange, allLocati
 
         {/* Collapsed: the heading still shows the total (krājumā / norma), orange if something is below norm. */}
         <div className="d-reserve">
-          <Fold label="Rezerve" hot={p.toners.some((t) => t.qty < t.optimal_qty)}
+          {/* Desktop has the room (it sits beside the toner levels), so it starts open there; on the phone it
+              starts closed, except for a printer that isn't on the network, where it is all there is to see. */}
+          <Fold label="Rezerve" startOpen={!p.ip || window.matchMedia('(min-width: 801px)').matches} hot={p.toners.some((t) => t.qty < t.optimal_qty)}
             count={`${p.toners.reduce((n, t) => n + t.qty, 0)}/${p.toners.reduce((n, t) => n + t.optimal_qty, 0)}`}>
             {p.toners.length === 0 && <p className="muted pad">Printerim nav piesaistītu toneru. Pievienojiet tos sadaļā Pārvaldība.</p>}
-            {p.toners.map((t) => (
+            {reserve.map((t) => (
               <TonerRow key={t.id} printerId={p.id} printerName={p.location} toner={t} allLocations={allLocations} onChange={onChange} />
             ))}
           </Fold>

@@ -50,7 +50,7 @@ export const WARRANTY_EMAIL: EmailFlavor = {
   },
   merge: false,
   scope: 'Atsevišķa veidne garantijas pieteikumiem (pasūtījumu veidni tā nemaina).',
-  linePlaceholders: ['{kods}', '{krāsa}', '{defekts}', '{procenti}', '{printeris}'],
+  linePlaceholders: ['{kods}', '{krāsa}', '{defekts}', '{procenti}', '{lapas}', '{printeris}'],
 }
 const COLOR_EN: Record<string, string> = { K: 'Black', C: 'Cyan', M: 'Magenta', Y: 'Yellow' }
 const KIND_NOTE: Record<string, string> = { drum: ' (drams)' }
@@ -66,6 +66,7 @@ const fill = (tpl: string, values: Record<string, string>) =>
 export interface EmailItem {
   company: string; model: string; code: string; color: string; kind: string; qty: number
   printer?: string; pct?: number | null; defect?: string
+  pages?: number | null // printed with the cartridge, if known
 }
 
 /**
@@ -92,6 +93,7 @@ function orderEmailText(rows: EmailItem[], tpl: Template, merge: boolean): strin
         kods: t.code, skaits: String(t.qty),
         'krāsa': (COLOR_EN[t.color.toUpperCase()] ?? '') + (KIND_NOTE[t.kind] ?? ''),
         printeris: t.printer ?? '', defekts: t.defect || 'defekts', procenti: t.pct == null ? '?' : String(t.pct),
+        lapas: t.pages == null ? '?' : String(t.pages),
       })),
     ]),
   ].join('\n'))

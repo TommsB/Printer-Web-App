@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS printers (
     location TEXT NOT NULL,
     model TEXT NOT NULL DEFAULT '',
     brand TEXT NOT NULL DEFAULT '',
-    ip TEXT NOT NULL UNIQUE,
+    ip TEXT UNIQUE,  -- NULL = not on the network: only its toner reserve is tracked, never polled
     color_type TEXT NOT NULL DEFAULT 'Krāsains',
     snmp_enabled INTEGER NOT NULL DEFAULT 1,
     active INTEGER NOT NULL DEFAULT 1,
@@ -31,6 +31,21 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT NOT NULL DEFAULT 'standard',
     created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
     created_by TEXT
+);
+-- Who is logged in where (auth.py). Kept here so an update or restart of the app doesn't log everyone out.
+-- Only a hash of the cookie's token is stored: a copy of the database can't be used to log in as someone.
+CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,
+    username TEXT NOT NULL,
+    expires_ts TEXT NOT NULL  -- UTC, ISO
+);
+-- The page counter at the end of each day, kept for good (snmp_snapshots only go back snapshot_keep_days):
+-- what "pages per month" is worked out from (printers.py → usage).
+CREATE TABLE IF NOT EXISTS page_counts (
+    printer_id INTEGER NOT NULL REFERENCES printers(id) ON DELETE CASCADE,
+    day TEXT NOT NULL,  -- YYYY-MM-DD, local
+    page_count INTEGER NOT NULL,
+    PRIMARY KEY (printer_id, day)
 );
 -- Push notifications (push.py): one row per browser/phone that turned them on;
 -- app_kv holds server-wide values (the VAPID key pair); push_state remembers which problems were already
@@ -110,6 +125,36 @@ CREATE TABLE IF NOT EXISTS orders (
     defect TEXT NOT NULL DEFAULT ''     -- what was wrong, e.g. "Smērē"
 );
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+-- Photos / documents attached to a defect (attachments.py). The files themselves are on disk next to the
+-- database (data/attachments/<stored>); `name` is what the user called the file.
+CREATE TABLE IF NOT EXISTS order_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    mime TEXT NOT NULL DEFAULT '',
+    size INTEGER NOT NULL DEFAULT 0,
+    stored TEXT NOT NULL UNIQUE,
+    uploaded_by TEXT NOT NULL,
+    ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_order_files_order ON order_files(order_id);
+-- Delivery notes ("pavadzīmes") and other documents that come with a delivery. One document covers several
+-- orders (all of one company's cartridges in that delivery), so it is linked to each of them.
+CREATE TABLE IF NOT EXISTS delivery_docs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    mime TEXT NOT NULL DEFAULT '',
+    size INTEGER NOT NULL DEFAULT 0,
+    stored TEXT NOT NULL UNIQUE,
+    uploaded_by TEXT NOT NULL,
+    ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+);
+CREATE TABLE IF NOT EXISTS delivery_doc_orders (
+    doc_id INTEGER NOT NULL REFERENCES delivery_docs(id) ON DELETE CASCADE,
+    order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    PRIMARY KEY (doc_id, order_id)
+);
+CREATE INDEX IF NOT EXISTS idx_delivery_doc_orders_order ON delivery_doc_orders(order_id);
 CREATE TABLE IF NOT EXISTS stock_movements (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     toner_id INTEGER NOT NULL REFERENCES toner_models(id) ON DELETE CASCADE,
@@ -200,7 +245,40 @@ def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
 
 
+def _make_ip_optional() -> None:
+    """printers.ip used to be NOT NULL; a printer that isn't on the network has none. SQLite can't drop
+    NOT NULL from a column, so the table is rebuilt the documented way: foreign keys off (otherwise dropping
+    the old table would cascade into the reserve and history), copy, swap, check — all in one transaction."""
+    conn = connect()
+    try:
+        ip = next((r for r in conn.execute("PRAGMA table_info(printers)") if r["name"] == "ip"), None)
+        if ip is None or not ip["notnull"]:
+            return  # new database, or already done
+        old = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'printers'").fetchone()[0]
+        new = old.replace("CREATE TABLE printers", "CREATE TABLE printers_new", 1) \
+                 .replace("ip TEXT NOT NULL UNIQUE", "ip TEXT UNIQUE", 1)
+        if "printers_new" not in new or "ip TEXT UNIQUE" not in new:
+            raise RuntimeError("printers table has an unexpected definition; ip left as required")
+        conn.isolation_level = None  # explicit BEGIN/COMMIT below
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(new)
+            conn.execute("INSERT INTO printers_new SELECT * FROM printers")
+            conn.execute("DROP TABLE printers")
+            conn.execute("ALTER TABLE printers_new RENAME TO printers")
+            if conn.execute("PRAGMA foreign_key_check").fetchall():
+                raise RuntimeError("foreign key check failed while rebuilding printers")
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+    finally:
+        conn.close()
+
+
 def init_db() -> None:
+    _make_ip_optional()
     with get_db() as conn:
         conn.executescript(SCHEMA)
 
@@ -225,6 +303,10 @@ def init_db() -> None:
         if "sent_ts" not in ocols:
             conn.execute("ALTER TABLE orders ADD COLUMN sent_ts TEXT")
             conn.execute("ALTER TABLE orders ADD COLUMN sent_by TEXT")
+        if "pages_printed" not in ocols:  # defects: what the cartridge printed, since when, where it is kept
+            conn.execute("ALTER TABLE orders ADD COLUMN pages_printed INTEGER")
+            conn.execute("ALTER TABLE orders ADD COLUMN installed_ts TEXT")
+            conn.execute("ALTER TABLE orders ADD COLUMN held_location_id INTEGER REFERENCES locations(id) ON DELETE SET NULL")
         mcols = _columns(conn, "stock_movements")
         if "location_id" not in mcols:
             conn.execute("ALTER TABLE stock_movements ADD COLUMN location_id INTEGER")
@@ -239,6 +321,15 @@ def init_db() -> None:
                 " SELECT username, printer_id, (SELECT COUNT(*) FROM user_pins p2"
                 "  WHERE p2.username = p.username AND p2.rowid < p.rowid) FROM user_pins p")
             conn.execute("DROP TABLE user_pins")
+
+        # First start with page_counts: fill it from the readings that are still kept, so the monthly
+        # figures don't start from nothing.
+        if not conn.execute("SELECT 1 FROM page_counts LIMIT 1").fetchone():
+            conn.execute(
+                "INSERT OR IGNORE INTO page_counts (printer_id, day, page_count)"
+                " SELECT printer_id, substr(ts, 1, 10), page_count FROM snmp_snapshots WHERE id IN ("
+                "  SELECT MAX(id) FROM snmp_snapshots WHERE reachable = 1 AND page_count IS NOT NULL"
+                "  GROUP BY printer_id, substr(ts, 1, 10))")
 
         if conn.execute("SELECT COUNT(*) FROM locations").fetchone()[0] == 0:
             conn.executemany("INSERT INTO locations (name, sort) VALUES (?, ?)",

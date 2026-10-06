@@ -8,9 +8,14 @@ A user with an empty password hash can only use Microsoft.
 
 auth_users.json (project root, {"users": {name: bcrypt_hash}}) is only the bootstrap: when the users table is
 empty — first start, or first start after this was added — its users are imported as admins. To recover a lost
-admin login use scripts/set_user.py. Sessions are in-memory, so a backend restart logs everyone out.
+admin login use scripts/set_user.py.
+
+Sessions are kept in the database (table `sessions`), so updating or restarting the app doesn't log anyone
+out. A login lasts SESSION_TTL from the last time the app was used: it is extended while someone keeps using it
+and ends only after that long without a visit (or on Iziet, a password reset, or the user being deleted).
 """
 
+import hashlib
 import json
 import re
 import secrets
@@ -26,13 +31,32 @@ from .db import db_dep, get_db
 
 USERS_PATH = PROJECT_ROOT / "auth_users.json"
 SESSION_COOKIE = "session"
-SESSION_TTL = timedelta(days=7)
+SESSION_TTL = timedelta(days=30)
+RENEW_AFTER = timedelta(days=1)  # a session in use is pushed out to the full SESSION_TTL again at most this often
 ROLES = ("admin", "standard")
 USERNAME_RE = re.compile(r"^[\w.\-@]{1,40}$")  # letters (any alphabet), digits, _ . - @ — no spaces
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 users_router = APIRouter(prefix="/api/users", tags=["users"])
+# In-memory copy of the sessions table (token hash -> {username, expires_at}), so a request doesn't need a
+# database read to know who is asking. Filled on login and, after a restart, on each session's first request.
 _sessions: dict[str, dict] = {}
+
+
+def _key(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _set_cookie(response: Response, token: str) -> None:
+    """The cookie is marked Secure when the app is served over https (PUBLIC_URL)."""
+    response.set_cookie(
+        SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=int(SESSION_TTL.total_seconds()),
+        secure=config["public_url"].lower().startswith("https://"),
+    )
 
 
 def hash_password(password: str) -> str:
@@ -55,15 +79,17 @@ def microsoft_enabled() -> bool:
     return all(config[k] for k in ("entra_tenant_id", "entra_client_id", "entra_client_secret", "public_url"))
 
 
-def start_session(response: Response, username: str) -> None:
+def start_session(response: Response, username: str, conn: sqlite3.Connection) -> None:
     """Log `username` in on this browser: remember the session and set its cookie on `response`.
-    The cookie is marked Secure when the app is served over https (PUBLIC_URL)."""
+    Written with the request's own connection (`conn`), so it is saved together with whatever else the
+    login did. Also the moment old, expired sessions are cleared out."""
     token = secrets.token_urlsafe(32)
-    _sessions[token] = {"username": username, "expires_at": datetime.now(timezone.utc) + SESSION_TTL}
-    response.set_cookie(
-        SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=int(SESSION_TTL.total_seconds()),
-        secure=config["public_url"].lower().startswith("https://"),
-    )
+    expires = _now() + SESSION_TTL
+    conn.execute("DELETE FROM sessions WHERE expires_ts < ?", (_now().isoformat(),))
+    conn.execute("INSERT INTO sessions (token_hash, username, expires_ts) VALUES (?,?,?)",
+                 (_key(token), username, expires.isoformat()))
+    _sessions[_key(token)] = {"username": username, "expires_at": expires}
+    _set_cookie(response, token)
 
 
 @router.get("/config")
@@ -85,23 +111,41 @@ def login(body: LoginBody, response: Response, conn: sqlite3.Connection = Depend
     # An empty hash = a Microsoft-only user: no password can match it.
     if not row or not row["password_hash"] or not bcrypt.checkpw(body.password.encode(), row["password_hash"].encode()):
         raise HTTPException(401, "Nepareizs lietotājvārds vai parole")
-    start_session(response, body.username)
+    start_session(response, body.username, conn)
     return {"username": body.username, "role": row["role"]}
 
 
 @router.post("/logout")
 def logout(response: Response, session: str | None = Cookie(default=None)) -> dict:
     if session:
-        _sessions.pop(session, None)
+        _sessions.pop(_key(session), None)
+        with get_db() as conn:
+            conn.execute("DELETE FROM sessions WHERE token_hash = ?", (_key(session),))
     response.delete_cookie(SESSION_COOKIE)
     return {"ok": True}
 
 
-def current_username(session: str | None = Cookie(default=None)) -> str:
-    entry = _sessions.get(session or "")
-    if not entry or entry["expires_at"] < datetime.now(timezone.utc):
-        _sessions.pop(session or "", None)
+def current_username(response: Response, session: str | None = Cookie(default=None)) -> str:
+    key = _key(session) if session else ""
+    entry = _sessions.get(key)
+    if entry is None and key:  # not in memory: the app was restarted since this login
+        with get_db() as conn:
+            row = conn.execute("SELECT username, expires_ts FROM sessions WHERE token_hash = ?", (key,)).fetchone()
+        if row:
+            entry = _sessions[key] = {"username": row["username"], "expires_at": datetime.fromisoformat(row["expires_ts"])}
+    now = _now()
+    if not entry or entry["expires_at"] < now:
+        _sessions.pop(key, None)
         raise HTTPException(401, "Not logged in")
+    if entry["expires_at"] - now < SESSION_TTL - RENEW_AFTER:
+        # Still in use: start the full period again (and the cookie's with it).
+        entry["expires_at"] = now + SESSION_TTL
+        try:
+            with get_db() as conn:
+                conn.execute("UPDATE sessions SET expires_ts = ? WHERE token_hash = ?", (entry["expires_at"].isoformat(), key))
+            _set_cookie(response, session)
+        except sqlite3.Error as e:  # extending is a convenience: never fail the request over it
+            print(f"[auth] could not extend a session: {e}")
     return entry["username"]
 
 
@@ -145,9 +189,10 @@ def _admins(conn: sqlite3.Connection) -> int:
     return conn.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'").fetchone()[0]
 
 
-def _drop_sessions(username: str) -> None:
-    for token in [t for t, s in _sessions.items() if s["username"] == username]:
-        _sessions.pop(token, None)
+def _drop_sessions(conn: sqlite3.Connection, username: str) -> None:
+    conn.execute("DELETE FROM sessions WHERE username = ?", (username,))
+    for key in [k for k, s in _sessions.items() if s["username"] == username]:
+        _sessions.pop(key, None)
 
 
 @users_router.get("")
@@ -191,7 +236,7 @@ def update_user(username: str, body: UserUpdate, conn: sqlite3.Connection = Depe
     if body.password:
         conn.execute("UPDATE users SET password_hash = ? WHERE username = ?", (hash_password(body.password), username))
         if username != admin:
-            _drop_sessions(username)  # a reset password logs that user out everywhere
+            _drop_sessions(conn, username)  # a reset password logs that user out everywhere
     return dict(conn.execute("SELECT username, role FROM users WHERE username = ?", (username,)).fetchone())
 
 
@@ -209,5 +254,5 @@ def delete_user(username: str, conn: sqlite3.Connection = Depends(db_dep), admin
     conn.execute("DELETE FROM user_printer_order WHERE username = ?", (username,))
     conn.execute("DELETE FROM user_settings WHERE username = ?", (username,))
     conn.execute("DELETE FROM push_subscriptions WHERE username = ?", (username,))  # no more notifications
-    _drop_sessions(username)
+    _drop_sessions(conn, username)
     return {"deleted": username}

@@ -21,7 +21,7 @@ const KIND_LV: Record<string, string> = { toner: 'Toneris', drum: 'Drums', other
 
 /** Which editor is open (null item = adding a new one). Each editor owns its own form state. */
 type OpenEditor =
-  | { kind: 'printer'; item: Printer | null }
+  | { kind: 'printer'; item: Printer | null; template?: Printer } // template: new printer copied with "Dublēt"
   | { kind: 'toner'; item: Toner | null }
   | { kind: 'location'; item: StoreLocation | null }
   | null
@@ -153,7 +153,10 @@ export function ManagePage() {
       </section>
 
       {editor?.kind === 'printer' && (
-        <PrinterEditor printer={editor.item} toners={tn.data} locations={lc.data} onClose={close} onSaved={reloadAll} />
+        // key: "Dublēt" swaps the open editor for a new-printer one, which must start with a fresh form.
+        <PrinterEditor key={editor.item ? editor.item.id : `new-${editor.template?.id ?? ''}`} printer={editor.item} template={editor.template}
+          onDuplicate={(p) => setEditor({ kind: 'printer', item: null, template: p })}
+          toners={tn.data} locations={lc.data} onClose={close} onSaved={reloadAll} />
       )}
       {editor?.kind === 'toner' && (
         <TonerEditor toner={editor.item} users={editor.item ? usage.get(editor.item.id) ?? [] : []} onClose={close} onSaved={reloadAll} />

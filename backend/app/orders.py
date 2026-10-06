@@ -12,7 +12,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from . import stockloc
+from . import attachments, stockloc
 from .auth import current_username
 from .db import db_dep
 
@@ -38,10 +38,13 @@ class ReceiveIn(BaseModel):
 _SQL = """
 SELECT o.id, o.printer_id, o.toner_id, o.qty, o.status, o.note, o.created_by, o.created_ts,
        o.resolved_by, o.resolved_ts, o.received_qty, o.warranty, o.removed_pct, o.defect, o.sent_ts, o.sent_by,
-       p.location, p.model, p.company, p.default_location_id, t.code, t.color, t.kind
+       p.location, p.model, p.company, p.default_location_id, t.code, t.color, t.kind,
+       o.pages_printed, o.installed_ts, o.held_location_id, h.name AS held_at,
+       (SELECT COUNT(*) FROM order_files f WHERE f.order_id = o.id) AS files
 FROM orders o
 JOIN printers p ON p.id = o.printer_id
 JOIN toner_models t ON t.id = o.toner_id
+LEFT JOIN locations h ON h.id = o.held_location_id
 """
 
 
@@ -58,7 +61,8 @@ def list_orders(status: str = "ordered", conn: sqlite3.Connection = Depends(db_d
         raise HTTPException(400, "bad status")
     where, args = ("", ()) if status == "all" else (" WHERE o.status = ?", (status,))
     rows = conn.execute(_SQL + where + " ORDER BY o.created_ts DESC, o.id DESC LIMIT 500", args)
-    return [dict(r) for r in rows]
+    docs = attachments.docs_by_order(conn)  # delivery notes etc., shared by the orders they cover
+    return [{**dict(r), "docs": docs.get(r["id"], [])} for r in rows]
 
 
 @router.post("", status_code=201)
@@ -104,6 +108,45 @@ class WarrantyIn(BaseModel):
     removed_pct: int | None = Field(default=None, ge=0, le=100)  # level when it was taken out, if known
     defect: str = Field(default="", max_length=200)
     note: str = Field(default="", max_length=500)
+    held_location_id: int | None = None  # where the defective cartridge is kept until it is handed over
+    event_id: int | None = None  # from "Jāpārbauda": the detected replacement that took this cartridge out
+
+
+def _counter_at(conn: sqlite3.Connection, printer_id: int, ts: str) -> int | None:
+    """The printer's page counter at a moment: the last reading up to then — exact while the readings are
+    still kept, else the end of that day (page_counts)."""
+    row = conn.execute(
+        "SELECT page_count FROM snmp_snapshots WHERE printer_id = ? AND reachable = 1 AND page_count IS NOT NULL"
+        " AND ts <= ? ORDER BY ts DESC LIMIT 1", (printer_id, ts)).fetchone()
+    if not row:
+        row = conn.execute("SELECT page_count FROM page_counts WHERE printer_id = ? AND day <= ? ORDER BY day DESC LIMIT 1",
+                           (printer_id, ts[:10])).fetchone()
+    return row["page_count"] if row else None
+
+
+def cartridge_life(conn: sqlite3.Connection, printer_id: int, toner_id: int, event_id: int | None) -> tuple[str | None, int | None]:
+    """(when the defective cartridge was put in, pages printed with it) — None where it isn't known.
+
+    Put in = the detected replacement (toner_events) of that colour before it came out. Taken out = the
+    replacement being reviewed (`event_id`, from "Jāpārbauda"), or now when it is marked from a toner's menu.
+    Pages = the page counter then minus the counter when it went in (all colours and mono pages together:
+    it is how much the printer printed while this cartridge was in it).
+    """
+    color = conn.execute("SELECT UPPER(color) FROM toner_models WHERE id = ?", (toner_id,)).fetchone()[0]
+    same = "printer_id = ? AND (toner_id = ? OR (color != '' AND color = ?))"
+    removed_ts = conn.execute("SELECT strftime('%Y-%m-%dT%H:%M:%S','now','localtime')").fetchone()[0]
+    before = ""
+    args: tuple = (printer_id, toner_id, color)
+    if event_id is not None:
+        ev = conn.execute("SELECT ts FROM toner_events WHERE id = ? AND printer_id = ?", (event_id, printer_id)).fetchone()
+        if ev:
+            removed_ts, before, args = ev["ts"], " AND id < ?", (*args, event_id)
+    put_in = conn.execute(f"SELECT ts FROM toner_events WHERE {same}{before} ORDER BY id DESC LIMIT 1", args).fetchone()
+    if not put_in:
+        return None, None
+    start, end = _counter_at(conn, printer_id, put_in["ts"]), _counter_at(conn, printer_id, removed_ts)
+    pages = end - start if start is not None and end is not None and end >= start else None
+    return put_in["ts"], pages
 
 
 @router.post("/warranty", status_code=201)
@@ -115,11 +158,37 @@ def create_warranty(body: WarrantyIn, conn: sqlite3.Connection = Depends(db_dep)
     if not conn.execute("SELECT 1 FROM printer_toners WHERE printer_id = ? AND toner_id = ?",
                         (body.printer_id, body.toner_id)).fetchone():
         raise HTTPException(404, "Printer/toner link not found")
+    if body.held_location_id is not None:
+        stockloc.location_or_404(conn, body.held_location_id)
+    installed_ts, pages = cartridge_life(conn, body.printer_id, body.toner_id, body.event_id)
     cur = conn.execute(
-        "INSERT INTO orders (printer_id, toner_id, qty, status, note, created_by, warranty, removed_pct, defect)"
-        " VALUES (?,?,1,'defect',?,?,1,?,?)",
-        (body.printer_id, body.toner_id, body.note.strip(), username, body.removed_pct, body.defect.strip()))
+        "INSERT INTO orders (printer_id, toner_id, qty, status, note, created_by, warranty, removed_pct, defect,"
+        " held_location_id, installed_ts, pages_printed) VALUES (?,?,1,'defect',?,?,1,?,?,?,?,?)",
+        (body.printer_id, body.toner_id, body.note.strip(), username, body.removed_pct, body.defect.strip(),
+         body.held_location_id, installed_ts, pages))
     return dict(_get(conn, cur.lastrowid))
+
+
+class HeldIn(BaseModel):
+    location_id: int | None = None  # None = not recorded
+
+
+@router.put("/{order_id}/held")
+def set_held(order_id: int, body: HeldIn, conn: sqlite3.Connection = Depends(db_dep)) -> dict:
+    """Where the defective cartridge is kept (it can be moved before it is handed over)."""
+    if not _get(conn, order_id)["warranty"]:
+        raise HTTPException(400, "Tikai defektiem")
+    if body.location_id is not None:
+        stockloc.location_or_404(conn, body.location_id)
+    conn.execute("UPDATE orders SET held_location_id = ? WHERE id = ?", (body.location_id, order_id))
+    return dict(_get(conn, order_id))
+
+
+@router.get("/defects")
+def list_defects(printer_id: int, conn: sqlite3.Connection = Depends(db_dep)) -> list[dict]:
+    """Every defect recorded for one printer, newest first (the printer's info view)."""
+    return [dict(r) for r in conn.execute(
+        _SQL + " WHERE o.warranty = 1 AND o.printer_id = ? ORDER BY o.created_ts DESC, o.id DESC", (printer_id,))]
 
 
 @router.post("/{order_id}/send")
@@ -170,6 +239,7 @@ def delete_order(order_id: int, conn: sqlite3.Connection = Depends(db_dep)) -> d
     """Remove an order record from the history. Stock is not touched: cartridges already received stay in the
     reserve (and their 'Saņemts' movement stays in the log); an open order just stops counting as ordered."""
     _get(conn, order_id)  # 404 if it doesn't exist
+    attachments.remove_for_order(conn, order_id)  # a defect's photos go with it
     conn.execute("DELETE FROM orders WHERE id = ?", (order_id,))
     return {"deleted": order_id}
 

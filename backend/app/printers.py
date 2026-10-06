@@ -4,7 +4,7 @@ from ipaddress import IPv4Address
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from . import snmp, stockloc
+from . import forecast, snmp, stockloc
 from .auth import current_username
 from .db import db_dep
 from .poller import poll_all
@@ -17,7 +17,7 @@ class PrinterIn(BaseModel):
     location: str
     model: str = ""
     brand: str = ""
-    ip: str
+    ip: str | None = None  # empty = not on the network: only the toner reserve is tracked
     color_type: str = "Krāsains"
     snmp_enabled: bool = True
     active: bool = True
@@ -54,10 +54,11 @@ def _printer_dict(conn: sqlite3.Connection, row: sqlite3.Row, with_supplies: boo
     d = dict(row)
     d["snmp_enabled"] = bool(d["snmp_enabled"])
     d["active"] = bool(d["active"])
+    # No IP = not polled; readings left from when it still had an address would only mislead.
     snap = conn.execute(
         "SELECT * FROM snmp_snapshots WHERE printer_id = ? ORDER BY ts DESC, id DESC LIMIT 1",
         (d["id"],),
-    ).fetchone()
+    ).fetchone() if d["ip"] else None
     d["snapshot"] = None
     if snap:
         s = dict(snap)
@@ -66,6 +67,10 @@ def _printer_dict(conn: sqlite3.Connection, row: sqlite3.Row, with_supplies: boo
             s["supplies"] = [dict(x) for x in conn.execute(
                 "SELECT idx, description, level, max_capacity, pct FROM snmp_supplies"
                 " WHERE snapshot_id = ? ORDER BY CAST(idx AS INTEGER)", (snap["id"],))]
+            # Run-out forecast per supply (days), None when it can't be estimated — see forecast.py.
+            left = forecast.days_left(conn, d["id"]) if s["reachable"] else {}
+            for x in s["supplies"]:
+                x["days_left"] = left.get(x["idx"])
         s.update(_pages_today(conn, d["id"], s["page_count"]))
         d["snapshot"] = s
     d["toners"] = [dict(x) for x in conn.execute(
@@ -148,18 +153,70 @@ def get_printer(printer_id: int, conn: sqlite3.Connection = Depends(db_dep)) -> 
     return _printer_dict(conn, row, with_supplies=True)
 
 
+USAGE_MONTHS = 12
+
+
+@router.get("/{printer_id}/usage")
+def usage(printer_id: int, conn: sqlite3.Connection = Depends(db_dep)) -> list[dict]:
+    """Per month, newest first: pages printed and cartridges used (the printer's info view).
+
+    Pages come from the daily page counter (page_counts): each day's growth is added to its month. A counter
+    that went down (printer reset or replaced) adds nothing. In the month the readings begin, counting starts
+    at the first reading — `since` says from which day, so the UI can show that the month is incomplete.
+    Cartridges are the "Izlietots" entries of the history for this printer.
+    """
+    months: dict[str, dict] = {}
+
+    def month(key: str) -> dict:
+        return months.setdefault(key, {"month": key, "pages": None, "since": None, "toners": [], "defects": []})
+
+    prev = None
+    for r in conn.execute("SELECT day, page_count FROM page_counts WHERE printer_id = ? ORDER BY day", (printer_id,)):
+        m = month(r["day"][:7])
+        if m["pages"] is None:
+            m["pages"] = 0
+        if prev is None:
+            m["since"] = r["day"]
+        elif r["page_count"] >= prev:
+            m["pages"] += r["page_count"] - prev
+        prev = r["page_count"]
+    for r in conn.execute(
+            "SELECT substr(m.ts, 1, 7) AS month, t.code, t.color, -SUM(m.delta) AS qty FROM stock_movements m"
+            " JOIN toner_models t ON t.id = m.toner_id WHERE m.printer_id = ? AND m.reason = 'taken'"
+            " GROUP BY month, t.id HAVING qty > 0 ORDER BY t.code", (printer_id,)):
+        month(r["month"])["toners"].append({"code": r["code"], "color": r["color"], "qty": r["qty"]})
+    for r in conn.execute(  # defective cartridges, in the month they were noted
+            "SELECT substr(o.created_ts, 1, 7) AS month, t.code, t.color, COUNT(*) AS qty FROM orders o"
+            " JOIN toner_models t ON t.id = o.toner_id WHERE o.printer_id = ? AND o.warranty = 1"
+            " GROUP BY month, t.id ORDER BY t.code", (printer_id,)):
+        month(r["month"])["defects"].append({"code": r["code"], "color": r["color"], "qty": r["qty"]})
+    return sorted(months.values(), key=lambda m: m["month"], reverse=True)[:USAGE_MONTHS]
+
+
 @router.post("/{printer_id}/refresh")
 async def refresh_one(printer_id: int) -> dict:
     return {"polled": await poll_all(printer_id)}
 
 
+def _ip(body: PrinterIn) -> str | None:
+    """The address to store: a valid IPv4, or None for a printer that isn't on the network."""
+    ip = (body.ip or "").strip()
+    if not ip:
+        return None
+    try:
+        return str(IPv4Address(ip))
+    except ValueError:
+        raise HTTPException(422, "IP adresei jābūt formā 192.168.0.10")
+
+
 @router.post("", status_code=201)
 def create_printer(body: PrinterIn, conn: sqlite3.Connection = Depends(db_dep)) -> dict:
+    ip = _ip(body)
     try:
         cur = conn.execute(
             "INSERT INTO printers (company, location, model, brand, ip, color_type, snmp_enabled, active, notes,"
             " default_location_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (body.company, body.location, body.model, body.brand, body.ip.strip(), body.color_type,
+            (body.company, body.location, body.model, body.brand, ip, body.color_type,
              int(body.snmp_enabled), int(body.active), body.notes, body.default_location_id))
     except sqlite3.IntegrityError:
         raise HTTPException(409, "Printeris ar šādu IP jau eksistē")
@@ -169,16 +226,20 @@ def create_printer(body: PrinterIn, conn: sqlite3.Connection = Depends(db_dep)) 
 
 @router.put("/{printer_id}")
 def update_printer(printer_id: int, body: PrinterIn, conn: sqlite3.Connection = Depends(db_dep)) -> dict:
+    ip = _ip(body)
     try:
         cur = conn.execute(
             "UPDATE printers SET company=?, location=?, model=?, brand=?, ip=?, color_type=?,"
             " snmp_enabled=?, active=?, notes=?, default_location_id=? WHERE id=?",
-            (body.company, body.location, body.model, body.brand, body.ip.strip(), body.color_type,
+            (body.company, body.location, body.model, body.brand, ip, body.color_type,
              int(body.snmp_enabled), int(body.active), body.notes, body.default_location_id, printer_id))
     except sqlite3.IntegrityError:
         raise HTTPException(409, "Printeris ar šādu IP jau eksistē")
     if cur.rowcount == 0:
         raise HTTPException(404, "Printer not found")
+    if ip is None:  # taken off the network: forget what was announced, so a later return starts clean
+        conn.execute("DELETE FROM push_state WHERE key IN (?, ?) OR key LIKE ?",
+                     (f"offline:{printer_id}", f"blocked:{printer_id}", f"lowtoner:{printer_id}:%"))
     _set_toners(conn, printer_id, body.toner_ids, body.norms)
     return get_printer(printer_id, conn)
 

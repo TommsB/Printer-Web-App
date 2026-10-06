@@ -33,7 +33,7 @@ router = APIRouter(prefix="/api/auth/microsoft", tags=["auth"])
 
 AUTHORITY = "https://login.microsoftonline.com"
 PENDING_TTL = 600  # seconds a started sign-in stays valid
-_pending: dict[str, dict] = {}  # state -> {nonce, verifier, expires}; in memory, like the sessions
+_pending: dict[str, dict] = {}  # state -> {nonce, verifier, expires}; in memory (a sign-in only takes seconds)
 
 
 def _redirect_uri() -> str:
@@ -154,5 +154,5 @@ def callback(code: str | None = None, state: str | None = None, error: str | Non
     if not username:
         return _back(f"Kontam {upn or '?'} nav piekļuves šai lietotnei. Lūdziet administratoram jūs pievienot.")
     response = _back()
-    start_session(response, username)
+    start_session(response, username, conn)
     return response

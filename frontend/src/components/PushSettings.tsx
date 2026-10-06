@@ -12,7 +12,7 @@ const WHY_NOT: Record<Exclude<PushSupport, 'ok'>, string> = {
 const KINDS: { key: keyof PushPrefs; label: string; hint: string }[] = [
   { key: 'printer', label: 'Printeris nevar drukāt', hint: 'Iestrēdzis papīrs, atvērtas durtiņas, nav papīra, vai printeris neatbild' },
   { key: 'replacement', label: 'Nomainīts toneris', hint: 'Jāapstiprina sadaļā Vēsture' },
-  { key: 'toner', label: 'Zems pēdējais toneris', hint: 'Toneris zem 40% un rezervē nav neviena' },
+  { key: 'toner', label: 'Zems pēdējais toneris', hint: 'Toneris zem 40% vai beigsies 2 nedēļu laikā, un rezervē nav neviena' },
 ]
 
 /**
