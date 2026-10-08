@@ -3,7 +3,6 @@ import { api, type Analytics, type Printer } from '../api'
 import { Icon } from '../icons'
 import { classifySupply, fmtNum } from '../lib'
 import { useRemembered } from '../uiMemory'
-import { matches } from './SearchBox'
 
 const TONERS: Record<string, { label: string; color: string }> = {
   K: { label: 'Black', color: 'var(--k)' }, C: { label: 'Cyan', color: 'var(--c)' },
@@ -13,6 +12,8 @@ const TONERS: Record<string, { label: string; color: string }> = {
 const dayLabel = (d: string) => `${d.slice(8)}.${d.slice(5, 7)}.`
 const sum = (list: number[]) => list.reduce((n, v) => n + v, 0)
 const PERIODS = [7, 30, 90]
+const COMPANY_ORDER = ['Tenax Panel', 'Tenapors', 'Tenax'] // the rows of the printer picker
+const RISE_START = 0.12, RISE_STEP = 0.035 // seconds: the picker's cards start rising while the sheet is still coming up, one after another
 
 /**
  * Per toner colour: how many percentage points of the cartridge went each day — the drop between one day's
@@ -180,9 +181,13 @@ function Donut({ parts, compact }: { parts: { key: string; label: string; color:
                 <text x="70" y="85" textAnchor="middle" className="an-donut__l">izlietots kopā</text>
               </>}
           </svg>
+          {/* Relatīvais % = this colour's share of everything used; Fakts % = how much of its own cartridge went. */}
           <ul className="an-legend">
+            <li className="an-legend__head" aria-hidden="true"><span>Krāsa</span><b>Relatīvais %</b><small>Fakts %</small></li>
             {parts.map((p) => (
-              <li key={p.key}><i style={{ background: p.color }} /><span>{p.label}</span><b>{Math.round((p.value / total) * 100)}%</b><small>−{p.value}%</small></li>
+              <li key={p.key}><i style={{ background: p.color }} /><span>{p.label}</span>
+                <b aria-label={`relatīvais ${Math.round((p.value / total) * 100)}%`}>{Math.round((p.value / total) * 100)}%</b>
+                <small aria-label={`fakts ${p.value}%`}>{p.value ? `−${p.value}%` : '0%'}</small></li>
             ))}
           </ul>
         </>}
@@ -241,12 +246,15 @@ function Charts({ data: all, mono }: { data: Analytics; mono: boolean }) {
  */
 export function AnalyticsSheet({ printers, onClose }: { printers: Printer[]; onClose: () => void }) {
   const [id, setId] = useState<number | null>(null)
-  const [query, setQuery] = useState('')
   const [days, setDays] = useRemembered('analytics.days', 30)
   const [loaded, setLoaded] = useState<{ id: number; days: number; data: Analytics } | null>(null)
   const [error, setError] = useState('')
   const list = printers.filter((p) => p.active && p.ip)
   const printer = list.find((p) => p.id === id) ?? null
+  // The picker, by company: the three companies in this order, then anything else.
+  const companies = [...COMPANY_ORDER, ...[...new Set(list.map((p) => p.company))].filter((c) => !COMPANY_ORDER.includes(c)).sort()]
+  const groups = companies.map((company) => ({ company, printers: list.filter((p) => p.company === company) })).filter((g) => g.printers.length > 0)
+    .map((g, i, all) => ({ ...g, first: sum(all.slice(0, i).map((x) => x.printers.length)) }))
 
   useEffect(() => {
     if (id === null) return
@@ -274,7 +282,7 @@ export function AnalyticsSheet({ printers, onClose }: { printers: Printer[]; onC
       <div className="asheet__shade" onClick={onClose} />
       <section className="asheet" role="dialog" aria-modal="true" aria-label="Analītika">
         <header className="asheet__head">
-          <h2>{Icon.chart(20)}Analītika</h2>
+          <h2>{Icon.chart(28)}Analītika</h2>
           {/* The period: a stopwatch icon with the number of days beside it, the browser's own list behind it. */}
           {printer && (
             <label className="icon-btn asheet__sel asheet__sel--days" title="Periods">
@@ -298,12 +306,18 @@ export function AnalyticsSheet({ printers, onClose }: { printers: Printer[]; onC
 
         {!printer && <>
           <p className="asheet__ask">Kuru printeri analizēt?</p>
-          {list.length > 8 && <input type="search" className="asheet__find" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Meklēt printeri…" aria-label="Meklēt printeri" />}
-          <div className="asheet__pick">
-            {list.filter((p) => matches(query, p.location, p.model)).map((p) => (
-              <button key={p.id} onClick={() => pick(p.id)}><b>{p.location}</b><span>{p.model}</span></button>
-            ))}
-          </div>
+          {/* One row of cards per company, in a fixed order. Once the sheet is up, the labels and cards rise into
+              place one after another (the delay grows with each card's place in the whole list). */}
+          {groups.map((g) => (
+            <div key={g.company} className="asheet__co">
+              <div className="asheet__co-name" style={{ animationDelay: `${RISE_START + g.first * RISE_STEP}s` }}>{g.company || 'Bez uzņēmuma'}</div>
+              <div className="asheet__pick">
+                {g.printers.map((p, i) => (
+                  <button key={p.id} onClick={() => pick(p.id)} style={{ animationDelay: `${RISE_START + (g.first + i) * RISE_STEP}s` }}><b>{p.location}</b><span>{p.model}</span></button>
+                ))}
+              </div>
+            </div>
+          ))}
           {list.length === 0 && <p className="muted">Nav neviena printera ar SNMP datiem.</p>}
         </>}
         {/* Which printer the numbers below are for. */}

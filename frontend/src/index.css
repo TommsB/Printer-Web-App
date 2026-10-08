@@ -1155,7 +1155,7 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
 .asheet > * { flex: none; }
 @keyframes sheet-up { from { transform: translateY(100%); } }
 .asheet__head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 12px; padding: 18px 0 12px; background: var(--bg); }
-.asheet__head h2 { flex: 1; min-width: 0; margin: 0; display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 600; letter-spacing: -.03em; }
+.asheet__head h2 { flex: 1; min-width: 0; margin: 0; display: flex; align-items: center; gap: 12px; font-size: 30px; font-weight: 600; letter-spacing: -.03em; }
 .asheet__sel { position: relative; }
 .asheet__sel select { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; }
 .asheet__sel:focus-within { box-shadow: 0 0 0 2px var(--ink); }
@@ -1166,10 +1166,13 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
 .asheet__who span { font-size: 13.5px; color: var(--muted); }
 .asheet__head .icon-btn { background: var(--card); }
 .asheet__ask { margin: 8px 0 14px; font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
-.asheet__find { max-width: 320px; margin-bottom: 12px; background: var(--card); }
 .asheet__pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
 .asheet__pick button { display: flex; flex-direction: column; gap: 2px; min-height: 64px; padding: 12px 18px; border: 1px solid transparent; border-radius: 22px; background: var(--card); color: var(--ink);
-  font: inherit; text-align: left; cursor: pointer; box-shadow: 0 1px 2px rgba(40, 40, 36, .08); animation: an-in .4s var(--ease) both; }
+  font: inherit; text-align: left; cursor: pointer; box-shadow: 0 1px 2px rgba(40, 40, 36, .08); animation: pick-rise .5s var(--ease) both; }
+/* The picker: a label and a row of cards per company; each rises from below once the sheet is up (delays are set inline). */
+.asheet__co + .asheet__co { margin-top: 18px; }
+.asheet__co-name { margin: 0 2px 8px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); animation: pick-rise .5s var(--ease) both; }
+@keyframes pick-rise { from { opacity: 0; transform: translateY(36px); } }
 .asheet__pick button b { font-size: 16px; font-weight: 600; letter-spacing: -.02em; }
 .asheet__pick button span { font-size: 13.5px; color: var(--faint); }
 @media (hover: hover) { .asheet__pick button:hover { border-color: var(--outline); } }
@@ -1215,8 +1218,11 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
 .an-legend li { display: flex; align-items: center; gap: 10px; min-height: 36px; border-top: 1px solid var(--line2); font-size: 14.5px; }
 .an-legend i { flex: none; width: 11px; height: 11px; border-radius: 50%; }
 .an-legend span { flex: 1; min-width: 0; }
-.an-legend b { font-weight: 600; font-variant-numeric: tabular-nums; }
-.an-legend small { width: 52px; text-align: right; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.an-legend b { width: 84px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.an-legend small { width: 60px; text-align: right; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+/* Column labels above the rows: Krāsa · Relatīvais % · Fakts % */
+.an-legend .an-legend__head { min-height: 26px; border-top: 0; font-size: 12px; color: var(--muted); }
+.an-legend .an-legend__head b, .an-legend .an-legend__head small { font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; }
 .an-note { margin: 0; }
 @media (max-width: 800px) {
   .ref-btn--top { display: none; }
@@ -1225,7 +1231,8 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
      charts, the donut beside its legend. */
   .asheet { height: 94vh; height: 94dvh; padding: 0 12px calc(10px + env(safe-area-inset-bottom, 0px)); }
   .asheet__head { padding: 10px 0 8px; }
-  .asheet__head h2 { font-size: 19px; }
+  .asheet__head h2 { gap: 10px; font-size: 25px; }
+  .asheet__head h2 svg { width: 24px; height: 24px; }
   .asheet__head { padding: 8px 0 4px; }
   .asheet__who { flex-wrap: nowrap; gap: 8px; margin: 0 2px 8px; white-space: nowrap; }
   .asheet__who b { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; font-size: 15.5px; }
@@ -1245,10 +1252,13 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
   .an-share .an-card__head, .an-share .an-none { grid-column: 1 / -1; }
   .an-donut { flex: none; width: 96px; min-height: 0; margin: 0; }
   .an-donut__n { font-size: 26px; }
-  .an-legend li { min-height: 23px; border-top: 0; font-size: 13.5px; }
-  .an-legend small { width: 44px; font-size: 12.5px; }
+  .an-legend li { min-height: 21px; border-top: 0; font-size: 13.5px; line-height: 1.2; }
+  .an-legend b { width: 72px; }
+  .an-legend small { width: 50px; font-size: 12.5px; }
+  .an-legend .an-legend__head { min-height: 16px; font-size: 11px; }
+  .an-legend .an-legend__head b, .an-legend .an-legend__head small { font-size: 11px; }
   .an-note { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .asheet, .asheet__shade, .asheet__pick button, .an-tile, .an-card, .an-line, .an-area, .an-donut__seg { animation: none !important; }
+  .asheet, .asheet__shade, .asheet__pick button, .asheet__co-name, .an-tile, .an-card, .an-line, .an-area, .an-donut__seg { animation: none !important; }
 }
