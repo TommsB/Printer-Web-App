@@ -10,13 +10,15 @@ import { LocationEditor } from './manage/LocationEditor'
 import { UsersPanel } from './manage/UsersPanel'
 import { PrinterEditor } from './manage/PrinterEditor'
 import { TonerEditor } from './manage/TonerEditor'
+import { CDot } from '../components/ColorDot'
 
 type Tab = 'printers' | 'toners' | 'locations' | 'users'
 const TABS: { key: Tab; label: string }[] = [
-  { key: 'printers', label: 'Printeri' }, { key: 'toners', label: 'Toneri' }, { key: 'locations', label: 'Glabāšanas vietas' },
+  // "Komponenti": toners, drums and other consumables (the tab keeps its old key 'toners' in the address).
+  { key: 'printers', label: 'Printeri' }, { key: 'toners', label: 'Komponenti' }, { key: 'locations', label: 'Glabāšanas vietas' },
 ]
 const USERS_TAB = { key: 'users' as Tab, label: 'Lietotāji' } // administrators only
-const ADD_LABEL: Record<Tab, string> = { printers: 'Printeris', toners: 'Toneris', locations: 'Vieta', users: 'Lietotājs' }
+const ADD_LABEL: Record<Tab, string> = { printers: 'Printeris', toners: 'Komponents', locations: 'Vieta', users: 'Lietotājs' }
 const KIND_LV: Record<string, string> = { toner: 'Toneris', drum: 'Drums', other: 'Cits' }
 
 /** Which editor is open (null item = adding a new one). Each editor owns its own form state. */
@@ -90,8 +92,8 @@ export function ManagePage() {
           </div>
         </div>
         <p className="mhint">
-          {tab === 'printers' && `${pr.data.length} printeri. Pieskarieties printerim, lai labotu tā datus, tonerus un normas.`}
-          {tab === 'toners' && `${tn.data.length} toneru kodi. Toneri piesaista printerim printera iestatījumos.`}
+          {tab === 'printers' && `${pr.data.length} printeri. Pieskarieties printerim, lai labotu tā datus, komponentus un normas.`}
+          {tab === 'toners' && `${tn.data.length} komponentu kodi: toneri, drumi (ar „D” krāsas aplītī) un citi. Komponentu piesaista printerim printera iestatījumos.`}
           {tab === 'locations' && 'Vietas, kur glabājas rezerves kasetnes (nav saistītas ar printera atrašanās vietu). Saīsinājumu rāda tonera rindā Krājumos.'}
           {tab === 'users' && 'Kas var ieiet lietotnē. Abas lomas var darīt vienu un to pašu; tikai administrators var pārvaldīt lietotājus.'}
         </p>
@@ -111,7 +113,7 @@ export function ManagePage() {
                   <span className="mrow__l2">{[p.model, p.ip, p.company].filter(Boolean).join(' · ')}</span>
                 </span>
                 <span className="mrow__meta">
-                  <span className="dots">{p.toners.map((t) => <i key={t.id} className={`cdot ${t.color ? t.color.toLowerCase() : 'g'}`} />)}</span>
+                  <span className="dots">{p.toners.map((t) => <CDot key={t.id} color={t.color} kind={t.kind} />)}</span>
                 </span>
                 <span className="mrow__chev">{Icon.chevron(18)}</span>
               </button>
@@ -123,9 +125,9 @@ export function ManagePage() {
             return (
               <li key={t.id}>
                 <button className="mrow" onClick={() => setEditor({ kind: 'toner', item: t })}>
-                  <span className="mrow__ic"><i className={`cdot big ${t.color ? t.color.toLowerCase() : 'g'}`} /></span>
+                  <span className="mrow__ic"><CDot big color={t.color} kind={t.kind} /></span>
                   <span className="mrow__body">
-                    <span className="mrow__l1"><b>{t.code}</b>{t.kind !== 'toner' && <span className="tag-s">{KIND_LV[t.kind] ?? t.kind}</span>}</span>
+                    <span className="mrow__l1"><b>{t.code}</b>{t.kind !== 'toner' && t.kind !== 'drum' && <span className="tag-s">{KIND_LV[t.kind] ?? t.kind}</span>}</span>
                     <span className="mrow__l2">{users.length ? users.map((p) => p.location).join(', ') : 'Netiek izmantots'}</span>
                   </span>
                   <span className="mrow__meta"><b>{reserveOf(t.id)}</b><small>rezervē</small></span>
@@ -156,7 +158,7 @@ export function ManagePage() {
         // key: "Dublēt" swaps the open editor for a new-printer one, which must start with a fresh form.
         <PrinterEditor key={editor.item ? editor.item.id : `new-${editor.template?.id ?? ''}`} printer={editor.item} template={editor.template}
           onDuplicate={(p) => setEditor({ kind: 'printer', item: null, template: p })}
-          toners={tn.data} locations={lc.data} onClose={close} onSaved={reloadAll} />
+          toners={tn.data} onCatalogueChange={() => { tn.reload().catch(() => {}) }} locations={lc.data} onClose={close} onSaved={reloadAll} />
       )}
       {editor?.kind === 'toner' && (
         <TonerEditor toner={editor.item} users={editor.item ? usage.get(editor.item.id) ?? [] : []} onClose={close} onSaved={reloadAll} />

@@ -37,6 +37,7 @@ export interface Printer {
   id: number; company: string; location: string; model: string; brand: string
   ip: string | null // null = not on the network: reserve only, never polled
   color_type: string; snmp_enabled: boolean; active: boolean; notes: string; default_location_id: number | null
+  empties_location_id: number | null // where this printer's empty cartridges go by default (Tukšie)
   snapshot: Snapshot | null; toners: PrinterToner[]
 }
 /** One month of a printer's use (newest first from the API). */
@@ -44,13 +45,14 @@ export interface UsageMonth {
   month: string // "2026-10"
   pages: number | null // null = no page counter readings that month (e.g. a printer that isn't on the network)
   since: string | null // set in the month the readings began: pages are counted from this day ("2026-10-01")
-  toners: { code: string; color: string; qty: number }[] // cartridges marked "Izlietots"
-  defects: { code: string; color: string; qty: number }[] // cartridges marked defective that month
+  toners: { code: string; color: string; kind: string; qty: number }[] // cartridges marked "Izlietots"
+  defects: { code: string; color: string; kind: string; qty: number }[] // cartridges marked defective that month
 }
 export interface PrinterInput {
   company: string; location: string; model: string; brand: string; ip: string
   color_type: string; snmp_enabled: boolean; active: boolean; notes: string; toner_ids: number[]
   default_location_id: number | null
+  empties_location_id: number | null
   norms: Record<number, number> // toner_id -> norm (optimal stock)
 }
 export interface Toner { id: number; code: string; color: string; kind: string }
@@ -59,6 +61,8 @@ export interface StockRow {
   toner_id: number; code: string; color: string; kind: string; qty: number; optimal_qty: number; low: boolean
   ordered: number // units on open orders
   ordered_extra: number // of those: extras from the basket, which don't count towards the norm
+  active: boolean // false = the printer is switched off in Pārvaldība (its reserve is still kept)
+  empties_location_id: number | null // the printer's default place for empty cartridges
   default_location_id: number | null
   locations: StockLoc[]
 }
@@ -89,6 +93,16 @@ export const deliveryDocUrl = (id: number) => `/api/delivery-docs/${id}`
 /** A photo or document attached to a defect; opened from /api/order-files/{id}. */
 export interface OrderFile { id: number; order_id: number; name: string; mime: string; size: number; uploaded_by: string; ts: string }
 export const orderFileUrl = (id: number) => `/api/order-files/${id}`
+/** Empty cartridges are counted per place and kind only (not per code). */
+export type EmptyKind = 'toner' | 'drum'
+export interface EmptyRow { location_id: number; location: string; kind: EmptyKind; qty: number }
+export interface EmptyLogItem {
+  id: number; ts: string; username: string; kind: EmptyKind; delta: number
+  reason: 'used' | 'returned' | 'moved' | 'correction'; note: string; location: string | null; to_location: string | null
+}
+export interface Empties { rows: EmptyRow[]; log: EmptyLogItem[] }
+/** A stock action that can be taken back for a few minutes: the id of the history entry it wrote. */
+export interface Undoable { movement_id: number }
 export interface OrderItem { printer_id: number; toner_id: number; qty: number }
 /** Result of "Pārbaudīt savienojumu" in the printer editor (one SNMP read, nothing saved). */
 export type SnmpTest =
@@ -102,10 +116,11 @@ export interface TonerEvent {
   id: number; printer_id: number; toner_id: number | null; supply: string; color: string; kind: 'toner' | 'drum'
   from_pct: number; to_pct: number; ts: string; status: 'open' | 'confirmed' | 'dismissed'
   printer_location: string; model: string; toner_code: string | null; qty: number; locations: StockLoc[]
+  empties_location_id: number | null // the printer's default place for empty cartridges
 }
 export interface Movement {
   id: number; ts: string; delta: number; reason: string; username: string; note: string
-  toner_code: string; toner_color: string; printer_location: string | null
+  toner_code: string; toner_color: string; toner_kind: string; printer_location: string | null
   location: string | null; to_location: string | null // storage location(s); to_location only for moves
 }
 
@@ -184,16 +199,17 @@ export const api = {
   updateToner: (id: number, b: Omit<Toner, 'id'>) => req<Toner>('PUT', `/api/toners/${id}`, b),
   deleteToner: (id: number) => req<unknown>('DELETE', `/api/toners/${id}`),
   stock: () => req<StockRow[]>('GET', '/api/stock'),
-  useStock: (printerId: number, tonerId: number, locationId: number, qty = 1) =>
-    req<StockRow>('POST', `/api/stock/${printerId}/${tonerId}/use`, { qty, location_id: locationId }),
+  /** emptyLocationId: where the empty cartridge is put (Tukšie); null = it isn't counted. */
+  useStock: (printerId: number, tonerId: number, locationId: number, qty = 1, emptyLocationId: number | null = null) =>
+    req<StockRow & Undoable>('POST', `/api/stock/${printerId}/${tonerId}/use`, { qty, location_id: locationId, empty_location_id: emptyLocationId }),
   moveStock: (printerId: number, tonerId: number, fromId: number, toId: number, qty: number) =>
     req<StockRow>('POST', `/api/stock/${printerId}/${tonerId}/move`, { from_location_id: fromId, to_location_id: toId, qty }),
   correctStock: (printerId: number, tonerId: number, counts: Record<number, number>, reason: string, note: string) =>
     req<StockRow>('POST', `/api/stock/${printerId}/${tonerId}/correct`, { counts, reason, note }),
   locations: () => req<StoreLocation[]>('GET', '/api/locations'),
   events: () => req<TonerEvent[]>('GET', '/api/events?status=open'),
-  confirmEvent: (id: number, locationId?: number) =>
-    req<TonerEvent>('POST', `/api/events/${id}/confirm`, { location_id: locationId ?? null }),
+  confirmEvent: (id: number, locationId?: number, emptyLocationId: number | null = null) =>
+    req<TonerEvent>('POST', `/api/events/${id}/confirm`, { location_id: locationId ?? null, empty_location_id: emptyLocationId }),
   dismissEvent: (id: number) => req<TonerEvent>('POST', `/api/events/${id}/dismiss`),
   createLocation: (name: string, short: string) => req<StoreLocation>('POST', '/api/locations', { name, short }),
   updateLocation: (id: number, name: string, short: string, active: boolean) =>
@@ -205,7 +221,9 @@ export const api = {
   /** Puts extra cartridges in the basket ("Grozs"), on top of what is missing to the norm. Nothing is ordered. */
   addToBasket: (items: OrderItem[], note = '') => req<Order[]>('POST', '/api/orders', { items, note, planned: true }),
   receiveOrder: (id: number, qty: number, locationId: number) =>
-    req<Order>('POST', `/api/orders/${id}/receive`, { qty, location_id: locationId }),
+    req<Order & Undoable>('POST', `/api/orders/${id}/receive`, { qty, location_id: locationId }),
+  /** How many of a toner are in the basket by hand (only basket entries can be changed). */
+  setBasketQty: (id: number, qty: number) => req<Order>('PUT', `/api/orders/${id}/qty`, { qty }),
   /** "Nodots garantijā": a cartridge from the Defekti list was handed over; it becomes an open (warranty) order. */
   sendWarranty: (id: number) => req<Order>('POST', `/api/orders/${id}/send`),
   /** Puts one defective cartridge on the "Defekti" list. The reserve doesn't change; nothing is expected yet. */
@@ -234,14 +252,21 @@ export const api = {
   printerDefects: (printerId: number) => req<Order[]>('GET', `/api/orders/defects?printer_id=${printerId}`),
   deleteOrderFile: (fileId: number) => req<unknown>('DELETE', `/api/order-files/${fileId}`),
   /** "Saņemt visus": several open orders at their full quantity, each to its location. All or nothing. */
-  receiveOrders: (items: { id: number; location_id: number }[]) => req<Order[]>('POST', '/api/orders/receive-all', { items }),
+  receiveOrders: (items: { id: number; location_id: number }[]) => req<(Order & Undoable)[]>('POST', '/api/orders/receive-all', { items }),
   cancelOrder: (id: number) => req<Order>('POST', `/api/orders/${id}/cancel`),
   /** Removes the order record only; stock is not changed. */
   deleteOrder: (id: number) => req<unknown>('DELETE', `/api/orders/${id}`),
   setOptimal: (printerId: number, tonerId: number, optimal_qty: number) =>
     req<StockRow>('PUT', `/api/stock/${printerId}/${tonerId}/optimal`, { optimal_qty }),
   movements: () => req<Movement[]>('GET', '/api/movements'),
+  // Tukšie: empty cartridges per storage place and kind, until they are handed back to the supplier.
+  empties: () => req<Empties>('GET', '/api/empties'),
+  returnEmpties: (b: { location_id: number; kind: EmptyKind; qty: number; note?: string }) => req<Empties>('POST', '/api/empties/return', b),
+  moveEmpties: (b: { from_location_id: number; to_location_id: number; kind: EmptyKind; qty: number }) => req<Empties>('POST', '/api/empties/move', b),
+  correctEmpties: (b: { location_id: number; kind: EmptyKind; qty: number; note?: string }) => req<Empties>('POST', '/api/empties/correct', b),
   deleteMovement: (id: number) => req<unknown>('DELETE', `/api/movements/${id}`),
+  /** "Atsaukt" right after Izlietots / Saņemt: restores the reserve, removes the history entries, reopens the order. */
+  undoMovements: (ids: number[]) => req<{ undone: number }>('POST', '/api/movements/undo', { ids }),
   // Push notifications (profile window). prefs apply to all of the user's devices; endpoints = their devices.
   push: () => req<PushStatus>('GET', '/api/push'),
   pushSubscribe: (body: { endpoint: string; keys: { p256dh: string; auth: string }; device: string }) => req<unknown>('POST', '/api/push/subscribe', body),

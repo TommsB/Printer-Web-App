@@ -107,9 +107,9 @@ def create_orders(body: OrderIn, conn: sqlite3.Connection = Depends(db_dep),
     return [dict(_get(conn, i)) for i in ids]
 
 
-def _receive(conn: sqlite3.Connection, order_id: int, qty: int | None, location_id: int | None, username: str) -> None:
+def _receive(conn: sqlite3.Connection, order_id: int, qty: int | None, location_id: int | None, username: str) -> int:
     """Mark one open order received: qty (default: as ordered) goes into the reserve at the location
-    (default: the printer's default one) and is logged."""
+    (default: the printer's default one) and is logged. Returns the history entry's id (for "Atsaukt")."""
     order = _get(conn, order_id)
     if order["status"] != "ordered":
         raise HTTPException(409, f"Pasūtījums {order['code']} jau ir apstrādāts")
@@ -124,9 +124,10 @@ def _receive(conn: sqlite3.Connection, order_id: int, qty: int | None, location_
         (qty, username, order_id))
     stockloc.add(conn, order["printer_id"], order["toner_id"], loc, qty)
     stockloc.sync_total(conn, order["printer_id"], order["toner_id"])
-    stockloc.log(conn, toner_id=order["toner_id"], printer_id=order["printer_id"], delta=qty, reason="received",
-                 username=username, location_id=loc,
-                 note=f"Garantijas aizvietotājs #{order_id}" if order["warranty"] else f"Pasūtījums #{order_id}")
+    # The "#id" in the note is how an undo finds the order again (toners.undo_movements).
+    return stockloc.log(conn, toner_id=order["toner_id"], printer_id=order["printer_id"], delta=qty, reason="received",
+                        username=username, location_id=loc,
+                        note=f"Garantijas aizvietotājs #{order_id}" if order["warranty"] else f"Pasūtījums #{order_id}")
 
 
 class WarrantyIn(BaseModel):
@@ -250,15 +251,28 @@ def receive_many(body: ReceiveManyIn, conn: sqlite3.Connection = Depends(db_dep)
     ids = [it.id for it in body.items]
     if len(set(ids)) != len(ids):
         raise HTTPException(400, "Pasūtījums norādīts divreiz")
-    for it in body.items:
-        _receive(conn, it.id, None, it.location_id, username)
-    return [dict(_get(conn, i)) for i in ids]
+    moved = {it.id: _receive(conn, it.id, None, it.location_id, username) for it in body.items}
+    return [{**dict(_get(conn, i)), "movement_id": moved[i]} for i in ids]
 
 
 @router.post("/{order_id}/receive")
 def receive_order(order_id: int, body: ReceiveIn, conn: sqlite3.Connection = Depends(db_dep),
                   username: str = Depends(current_username)) -> dict:
-    _receive(conn, order_id, body.qty, body.location_id, username)
+    movement = _receive(conn, order_id, body.qty, body.location_id, username)
+    return {**dict(_get(conn, order_id)), "movement_id": movement}
+
+
+class QtyIn(BaseModel):
+    qty: int = Field(ge=1, le=1000)
+
+
+@router.put("/{order_id}/qty")
+def set_basket_qty(order_id: int, body: QtyIn, conn: sqlite3.Connection = Depends(db_dep)) -> dict:
+    """Change how many of a toner were added to the basket by hand. Only for basket entries: a placed order's
+    quantity is what was ordered."""
+    if _get(conn, order_id)["status"] != "planned":
+        raise HTTPException(409, "Daudzumu var mainīt tikai grozā")
+    conn.execute("UPDATE orders SET qty = ? WHERE id = ?", (body.qty, order_id))
     return dict(_get(conn, order_id))
 
 

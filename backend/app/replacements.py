@@ -17,7 +17,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from . import stockloc
+from . import empties, stockloc
 from .auth import current_username
 from .db import db_dep
 
@@ -78,12 +78,17 @@ def pick(linked: list, kind: str, col: str, mono: bool):
     """Which of the printer's linked catalogue items (rows with id, kind, upper-case color) this supply is.
 
     Same kind and colour wins — the kind matters: a black drum must never be taken for the black toner.
+    Then, for drums, a "CMY" drum: one code used for the cyan, magenta and yellow drum (not the black one).
     Without a colour match: a mono printer's only item of that kind; and for drums, the printer's one drum
     that has no colour set (a drum code shared by several colours, or the only drum)."""
     same = [t for t in linked if t["kind"] == kind]
     by_color = [t for t in same if col and t["color"] == col]
     if by_color:
         return by_color[0]
+    if kind == "drum" and col in ("C", "M", "Y"):
+        shared = [t for t in same if t["color"] == "CMY"]
+        if shared:
+            return shared[0]
     if mono and len(same) == 1:
         return same[0]
     if kind == "drum":
@@ -133,7 +138,7 @@ router = APIRouter(prefix="/api/events", tags=["events"])
 
 _SQL = """
 SELECT e.id, e.printer_id, e.toner_id, e.supply, e.color, e.kind, e.from_pct, e.to_pct, e.ts, e.status,
-       e.resolved_by, e.resolved_ts, p.location AS printer_location, p.model, t.code AS toner_code,
+       e.resolved_by, e.resolved_ts, p.location AS printer_location, p.model, p.empties_location_id, t.code AS toner_code,
        COALESCE(pt.qty, 0) AS qty
 FROM toner_events e
 JOIN printers p ON p.id = e.printer_id
@@ -164,6 +169,7 @@ def list_events(status: str = "open", conn: sqlite3.Connection = Depends(db_dep)
 
 class ConfirmIn(BaseModel):
     location_id: int | None = None  # required when the reserve is in more than one location
+    empty_location_id: int | None = None  # where the old, empty cartridge is put ("Tukšie"); None = not counted
 
 
 def _close(conn: sqlite3.Connection, event_id: int, status: str, username: str) -> None:
@@ -192,9 +198,11 @@ def confirm(event_id: int, body: ConfirmIn, conn: sqlite3.Connection = Depends(d
         raise HTTPException(400, "Šajā vietā nav neviena")
     stockloc.add(conn, e["printer_id"], e["toner_id"], loc, -1)
     stockloc.sync_total(conn, e["printer_id"], e["toner_id"])
-    stockloc.log(conn, toner_id=e["toner_id"], printer_id=e["printer_id"], delta=-1, reason="taken", username=username,
-                 note=f"Nomainīts (SNMP {e['from_pct']}% → {e['to_pct']}%, {e['ts'][:16].replace('T', ' ')})",
-                 location_id=loc)
+    movement = stockloc.log(
+        conn, toner_id=e["toner_id"], printer_id=e["printer_id"], delta=-1, reason="taken", username=username,
+        note=f"Nomainīts (SNMP {e['from_pct']}% → {e['to_pct']}%, {e['ts'][:16].replace('T', ' ')})", location_id=loc)
+    empties.from_used(conn, toner_id=e["toner_id"], location_id=body.empty_location_id, qty=1, username=username,
+                      movement_id=movement, printer=e["printer_location"])
     _close(conn, event_id, "confirmed", username)
     return _event(conn, event_id)
 

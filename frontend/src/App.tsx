@@ -7,6 +7,7 @@ import { useNavCounts } from './navCounts'
 import { clearRemembered, rememberSearch } from './uiMemory'
 import { useTabClick } from './viewTransition'
 import { NAV } from './components/TopBar'
+import { UndoToast } from './components/UndoToast'
 import { LoginPage } from './pages/LoginPage'
 import { PrintersPage } from './pages/PrintersPage'
 import { StockPage } from './pages/StockPage'
@@ -105,6 +106,7 @@ export default function App() {
         </Routes>
       </main>
       <BottomNav pathname={pathname} />
+      <UndoToast />
     </AppContext>
   )
 }

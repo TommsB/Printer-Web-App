@@ -271,6 +271,63 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .bpart__n { font-size: 26px; line-height: 1; font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
 .bpart__n.hot { color: var(--hot); }
 .bpart__head + .ord { border-top: 0; }
+/* A basket row: the printer's name on a line of its own; under it the toners on the left and "Pasūtīt" on the
+   right, level with the (first) toner line and its − n + controls. */
+.bpart .ord { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 4px; align-items: start; }
+.bpart .ord .a { display: contents; }
+.bpart .ord .a > b { grid-column: 1 / -1; }
+.bpart .ord small.needs { grid-column: 1; grid-row: 2; margin-top: 0; min-height: 36px; align-items: center; }
+.bpart .ord small.needs--lines { align-items: stretch; }
+.bpart .ord .needs--lines > span { min-height: 36px; }
+.bpart .ord > .btn { grid-column: 2; grid-row: 2; }
+/* Vēsture: the view switch and, beside it, the "Tukšie" button (not one of the history views) */
+.viewsw__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.emp-btn { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 16px; border: 1px solid var(--line); border-radius: 21px;
+  background: none; color: var(--muted); font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; }
+.emp-btn:hover { color: var(--ink); border-color: var(--ink); }
+.emp-btn.on { background: #fff; border-color: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(40, 40, 36, .08); }
+.emp-btn__n { min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 10px; background: var(--pillbg); color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cbar .emp-btn { height: 36px; padding: 0 12px; font-size: 13px; }
+/* Tukšie: one block per storage place, a line per kind (toners / drums) */
+.emp-loc { margin-top: 14px; }
+.emp-loc__name { padding: 8px 14px; border-radius: 16px; background: var(--tile); font-size: 14.5px; font-weight: 600; }
+.emp-row { display: flex; align-items: center; gap: 12px; min-height: 56px; border-top: 1px solid var(--line2); }
+.emp-loc__name + .emp-row { border-top: 0; }
+.emp-row .dot { width: 34px; height: 34px; }
+.emp-row__kind { flex: 1; min-width: 0; font-size: 15px; font-weight: 500; }
+.emp-row .pv { font-weight: 600; }
+.emp-log__head { margin: 26px 0 4px; }
+.emp-log { list-style: none; margin: 0; padding: 0; }
+.emp-log li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 8px 0; border-top: 1px solid var(--line2); font-size: 14px; }
+.emp-log li:first-child { border-top: 0; }
+.emp-log small { color: var(--muted); font-size: 12.5px; }
+/* Hand-added basket lines: one per row — code on the left, a small stepper and × on the right */
+.ord small.needs--lines { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 6px; margin-top: 6px; }
+.needs--lines > span { display: flex; align-items: center; gap: 8px; }
+.needs__code { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; color: var(--ink); font-size: 14px; }
+.qstep { flex: none; display: inline-flex; align-items: center; gap: 4px; }
+.qstep button { width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: #fff; color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.qstep button:hover:not(:disabled) { border-color: var(--ink); }
+.qstep button:disabled { opacity: .35; cursor: default; }
+.qstep svg { stroke-width: 2; }
+.ord .qstep b { letter-spacing: 0; min-width: 30px; height: 28px; padding: 0 6px; box-sizing: border-box; border-radius: 14px; background: var(--tile); color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.needs--lines .needs__x { width: 28px; height: 28px; margin-left: 2px; background: none; }
+.needs--lines .needs__x:hover { background: var(--bad); color: #fff; }
+@media (pointer: coarse) { .qstep button, .qstep b, .needs--lines .needs__x { height: 34px; } .qstep button, .needs--lines .needs__x { width: 34px; } .qstep b { min-width: 34px; border-radius: 17px; } }
+.gh-off { margin-left: 8px; vertical-align: middle; font-weight: 500; letter-spacing: 0; }
+/* "Atsaukt" bar after Izlietots / Saņemt (components/UndoToast.tsx): bottom centre, above the phone tab bar */
+.undo { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 70; display: flex; align-items: center; gap: 14px;
+  max-width: calc(100vw - 32px); padding: 10px 10px 10px 18px; border-radius: 26px; background: var(--ink); color: #fff; font-size: 14px;
+  box-shadow: 0 10px 30px rgba(30, 30, 28, .28); animation: undo-in .22s var(--ease) both; }
+.undo__txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.undo__btn { flex: none; height: 34px; padding: 0 16px; border: 0; border-radius: 17px; background: #fff; color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
+.undo__btn:disabled { opacity: .6; }
+@keyframes undo-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+@media (max-width: 800px) { .undo { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); } }
+@media (prefers-reduced-motion: reduce) { .undo { animation: none; } }
 /* × after a toner in the basket: takes the hand-added part out again */
 .needs__x { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-left: -1px; padding: 0; border: 0; border-radius: 50%; background: var(--tile); color: var(--muted); cursor: pointer; }
 .needs__x:hover { background: var(--bad); color: #fff; }
@@ -406,8 +463,11 @@ button.flist__name { border: 0; background: none; padding: 0; font: inherit; tex
 .tag.ok { background: var(--pillbg); color: var(--muted); }
 .tag.bad { background: var(--bad); color: #fff; margin-top: 0; height: 26px; padding: 0 12px; font-size: 12.5px; }
 .alert.info { background: var(--tile); color: var(--muted); }
-.dgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto 1fr; column-gap: 36px;
-  grid-template-areas: "stats stats" "toners reserve" "others reserve"; }
+/* Printer details. Desktop: what is in the printer (left) beside the reserve (right), in shared rows — headings,
+   toners, drum headings, drums, the rest — so each part of the reserve starts level with the same part on the
+   left, however many rows either side has. (Phone: one column of cards, see the 800px block.) */
+.dgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 36px; align-items: start;
+  grid-template-areas: "stats stats" "th rh" "tl rt" "dh rdh" "dl rd" "others ro"; }
 .d-stats { grid-area: stats; padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--line2); }
 /* One line of "value label" pairs separated by thin dividers; wraps on very narrow screens. */
 .stats-row { display: flex; flex-wrap: wrap; align-items: baseline; row-gap: 6px; }
@@ -422,9 +482,12 @@ button.flist__name { border: 0; background: none; padding: 0; font: inherit; tex
 .stat small { font-size: 12.5px; color: var(--muted); }
 .stat .tag.bad, .stat .tag.stop, .stat .tag.ok { height: 22px; font-size: 12px; padding: 0 10px; margin-top: 0; }
 .tag.stop { background: var(--hot); color: #fff; }
-.d-toners { grid-area: toners; }
-.d-reserve { grid-area: reserve; }
 .d-others { grid-area: others; align-self: start; }
+/* Sub-headings inside the two columns ("Drumi printerī", "Drumi rezervē", "Citi rezervē") */
+.d-dh, .d-rdh, .d-roh { margin-top: 18px; }
+.d-tl > .sp:first-child, .d-dl > .sp:first-child { border-top: 0; }
+/* Empty slot in the reserve column: keeps a reserve row beside its own level. Desktop only (see below). */
+.t-gap { display: none; }
 /* Reserve rows: the code never shrinks; if count + buttons don't fit, they wrap to the next line instead of overlapping. */
 .sp.res { gap: 8px 10px; }
 .sp.res .dot { width: 28px; height: 28px; }
@@ -449,11 +512,19 @@ button.flist__name { border: 0; background: none; padding: 0; font: inherit; tex
 /* Desktop: toner levels (left) and reserve (right) sit side by side, so their headings and rows share one
    height and each toner lines up with the reserve row beside it. */
 @media (min-width: 801px) {
-  .dgrid .d-toners > .lab, .dgrid .d-reserve .fold-btn { display: flex; align-items: center; height: 40px; min-height: 0; margin: 0; }
-  .dgrid .d-toners .sp, .dgrid .d-reserve .t { box-sizing: border-box; min-height: 58px; padding-top: 6px; padding-bottom: 6px; }
+  /* The two wrappers (and the reserve's fold) dissolve, so their parts become cells of the shared grid. */
+  .dgrid .d-levels, .dgrid .d-reserve, .dgrid .d-reserve > .fold { display: contents; }
+  .d-th { grid-area: th; } .d-tl { grid-area: tl; } .d-dh { grid-area: dh; } .d-dl { grid-area: dl; }
+  .dgrid .d-reserve .fold-btn { grid-area: rh; } .d-rt { grid-area: rt; } .d-rdh { grid-area: rdh; } .d-rd { grid-area: rd; } .d-ro { grid-area: ro; }
+  .dgrid .d-th, .dgrid .d-dh, .dgrid .d-rdh, .dgrid .d-roh, .dgrid .d-reserve .fold-btn { display: flex; align-items: center; height: 40px; min-height: 0; margin: 0; }
+  .dgrid .d-dh, .dgrid .d-rdh, .dgrid .d-roh { margin-top: 10px; }
+  .dgrid .d-others { margin-top: 10px; }
+  .dgrid .d-levels .sp, .dgrid .d-reserve .t { box-sizing: border-box; min-height: 58px; padding-top: 6px; padding-bottom: 6px; }
   .dgrid .d-reserve .t .dot { width: 40px; height: 40px; }
   .dgrid .d-reserve .t .dot i { width: 13px; height: 13px; }
-  .dgrid .d-reserve .fold-btn + .trow .t { border-top: 0; }
+  .d-rt > .trow:first-child .t, .d-rd > .trow:first-child .t, .d-roh + .trow .t { border-top: 0; }
+  .dgrid .t-gap { display: block; box-sizing: border-box; height: 58px; border-top: 1px solid var(--line2); }
+  .dgrid .t-gap:first-child { border-top: 0; }
 }
 .fold-ic { display: flex; transition: transform .25s var(--ease); }
 .fold-ic.open { transform: rotate(90deg); }
@@ -682,6 +753,37 @@ button.day__head { width: 100%; height: 34px; padding-top: 0; padding-bottom: 0;
 .ev__pr { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 13.5px; }
 .ev__l2 { font-size: 12.5px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cdot { flex: none; width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+/* Printer editor: components the printer reports that aren't linked yet */
+.sugg { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding: 12px 14px; border-radius: 16px; background: var(--alert-bg); }
+.sugg__head { font-size: 13px; font-weight: 600; color: var(--alert-ink); }
+.sugg__row { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.sugg__row small { flex: 1; min-width: 0; color: var(--muted); font-size: 12.5px; }
+.sugg__row .btn, .sugg__all { background: #fff; }
+.sugg__all { align-self: flex-start; }
+/* Printer editor: search box + list of codes to add (tap a code to add it) */
+.pick__q { width: 100%; }
+.pick { list-style: none; margin: 0; padding: 4px; max-height: 216px; overflow-y: auto; border: 1px solid var(--line); border-radius: 16px; }
+.pick li button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 0 10px; border: 0; border-radius: 12px;
+  background: none; font: inherit; font-size: 14.5px; color: var(--ink); text-align: left; cursor: pointer; }
+.pick li button:hover { background: var(--tile); }
+.pick li button small { color: var(--muted); font-size: 12.5px; }
+.pick__h { padding: 8px 10px 2px; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.pick__none { padding: 10px; color: var(--muted); font-size: 14px; }
+/* Printer editor: kind switch on the left, "Atrast automātiski (SNMP)" on the right (wraps under it on a phone) */
+.addc__top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+/* Printer editor: the "add a component" block (kind first, then the code) */
+.addc { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--line2); }
+/* One drum code for the three colours (C, M, Y): a three-part dot */
+.cmy { background: conic-gradient(var(--c) 0 33.4%, var(--m) 0 66.7%, var(--y) 0); }
+/* A drum's colour mark: bigger, with a "D" in it (components/ColorDot.tsx), so it is never taken for the toner
+   of the same colour. !important: the mark's size is otherwise set per list by more specific rules. */
+.cdot.drum, .dot i.drum { display: inline-flex; align-items: center; justify-content: center; font-style: normal; font-weight: 700; line-height: 1;
+  letter-spacing: 0; color: #fff; text-transform: none; }
+.cdot.drum { width: 16px !important; height: 16px !important; font-size: 9.5px; vertical-align: -3px; }
+.cdot.big.drum { width: 20px !important; height: 20px !important; font-size: 11.5px; }
+.dot i.drum { width: 22px !important; height: 22px !important; font-size: 12px; }
+.drum.y { color: var(--ink); }
+.drum.cmy { text-shadow: 0 0 2px rgba(0, 0, 0, .55); }
 .ev__d { flex: none; min-width: 44px; text-align: right; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; padding-right: 4px; }
 .d-out { color: var(--hot); }
 .d-in { color: #2E7D4F; }
@@ -812,12 +914,13 @@ body:has(.cbar--detail.on) .cbar:not(.cbar--detail) { opacity: 0; pointer-events
   .icard { background: #fff; border: 0; border-radius: 24px; }
   /* Phone: each section is its own white card, so it's obvious where one ends and the next starts. */
   .dgrid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "stats" "toners" "reserve" "others"; row-gap: 12px; margin-top: 4px; }
-  .d-stats, .d-toners, .d-reserve, .d-others { background: #fff; border-radius: 24px; padding: 16px 18px; }
+  .d-levels { grid-area: toners; } .d-reserve { grid-area: reserve; }
+  .d-stats, .d-levels, .d-reserve, .d-others { background: #fff; border-radius: 24px; padding: 16px 18px; }
   .d-stats { margin: 0; border: 0; padding: 12px 16px; border-radius: 20px; }
   .stat { padding: 0 10px; }
   .stat b { font-size: 14.5px; }
   .stat small { font-size: 12px; }
-  .d-toners { padding-top: 12px; padding-bottom: 6px; }
+  .d-levels { padding-top: 12px; padding-bottom: 6px; }
   .d-others, .d-reserve { padding-top: 0; padding-bottom: 0; }
   .d-reserve .fold.open { padding-bottom: 6px; }
   .d-others .fold { margin-top: 0; border-top: 0; }

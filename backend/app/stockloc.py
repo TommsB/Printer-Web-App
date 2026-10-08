@@ -48,11 +48,12 @@ def sync_total(conn: sqlite3.Connection, printer_id: int, toner_id: int) -> None
 
 
 def log(conn: sqlite3.Connection, *, toner_id: int, printer_id: int, delta: int, reason: str, username: str,
-        note: str = "", location_id: int | None = None, to_location_id: int | None = None) -> None:
-    conn.execute(
+        note: str = "", location_id: int | None = None, to_location_id: int | None = None) -> int:
+    """Write the history entry; returns its id (what "Atsaukt" refers to right after the action)."""
+    return conn.execute(
         "INSERT INTO stock_movements (toner_id, delta, reason, printer_id, username, note, location_id, to_location_id)"
         " VALUES (?,?,?,?,?,?,?,?)",
-        (toner_id, delta, reason, printer_id, username, note.strip(), location_id, to_location_id))
+        (toner_id, delta, reason, printer_id, username, note.strip(), location_id, to_location_id)).lastrowid
 
 
 def breakdown(conn: sqlite3.Connection) -> dict[tuple[int, int], list[dict]]:

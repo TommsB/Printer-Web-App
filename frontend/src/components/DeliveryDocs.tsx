@@ -5,6 +5,7 @@ import { Icon } from '../icons'
 import { FilePicker } from './DefectFiles'
 import { DestructiveDialog, Dialog } from './Dialog'
 import { FileViewer } from './FileViewer'
+import { CDot } from './ColorDot'
 
 /**
  * Delivery notes ("pavadzīmes") of one company's orders from one day: open, add, delete. A document added
@@ -38,7 +39,7 @@ export function DeliveryDocsDialog({ title, orders, onClose, onChange }: {
       <p className="dlg-text"><b>{title}</b></p>
       <ul className="dlg-list toners recv-all">
         {orders.map((o) => (
-          <li key={o.id}><i className={`cdot ${o.color ? o.color.toLowerCase() : 'g'}`} /><b>{o.code}</b> ×{o.qty}<span className="recv-all__to">{o.location}</span></li>
+          <li key={o.id}><CDot color={o.color} kind={o.kind} /><b>{o.code}</b> ×{o.qty}<span className="recv-all__to">{o.location}</span></li>
         ))}
       </ul>
       <div className="field"><span>Dokumenti{docs.length > 0 ? ` (${docs.length})` : ''}</span>

@@ -19,6 +19,18 @@ export function useCached<T>(key: string, fallback: T): T {
   return useSyncExternalStore(watch, () => (cache.has(key) ? (cache.get(key) as T) : fallback))
 }
 
+// key -> how to reload it, for the data that is on screen right now (registered by useApiData).
+const onScreen = new Map<string, Set<() => void>>()
+
+/** Reload everything that is on screen (after a change made outside the page that shows it, e.g. "Atsaukt").
+ *  One request per key; every component showing that key follows through the cache. */
+export function refreshAll(): void {
+  for (const reloads of onScreen.values()) {
+    const [first] = reloads
+    first?.()
+  }
+}
+
 /** Reload `key` in the background (joins a request already running). */
 export function refresh<T>(key: string, fetcher: () => Promise<T>): void {
   load(key, fetcher, true).catch(() => {})
@@ -70,6 +82,16 @@ export function useApiData<T>(key: string, fetcher: () => Promise<T>, fallback: 
 
   // On open: reuse a request already in flight for this key (prefetch or another page) instead of a duplicate.
   useEffect(() => { run(true).catch(() => {}) }, [run])
+
+  // Follow the cache: when someone else reloads this key (another component, refreshAll), show it here too.
+  useEffect(() => watch(() => { if (cache.has(key)) setState(cache.get(key) as T) }), [key])
+  // While on screen, this data can be reloaded from outside (refreshAll).
+  useEffect(() => {
+    const again = () => { load(key, () => fetchRef.current(), false).catch(() => {}) }
+    const set = onScreen.get(key) ?? new Set()
+    onScreen.set(key, set.add(again))
+    return () => { set.delete(again) }
+  }, [key])
 
   return { data, loading, reload, setData }
 }

@@ -9,6 +9,7 @@ import { docsOf } from '../../files'
 import { Icon } from '../../icons'
 import { fmtDate, fmtNum } from '../../lib'
 import { DayGroup, useFoldedDays } from './DayGroup'
+import { CDot } from '../../components/ColorDot'
 
 /** 'all' (the default) = orders that count: on the way + received. Cancelled ones only show under their own tab. */
 export const ORDER_FILTERS = [
@@ -133,7 +134,7 @@ export function OrderHistory({ filter, filters }: { filter: string; filters: Rea
                     <span className={`ev__ic ${s.cls}`}>{s.icon()}</span>
                     <span className="ev__body">
                       <span className="ev__l1">
-                        <i className={`cdot ${o.color ? o.color.toLowerCase() : 'g'}`} />
+                        <CDot color={o.color} kind={o.kind} />
                         <b>{o.code}</b>
                         {!!o.warranty && <span className="tag-w">Garantija</span>}
                         <span className="ev__pr">{o.location}</span>

@@ -140,6 +140,27 @@ CREATE TABLE IF NOT EXISTS orders (
     defect TEXT NOT NULL DEFAULT ''     -- what was wrong, e.g. "Smērē"
 );
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+-- Empty cartridges waiting to be handed back to the supplier (empties.py): a count per storage place and
+-- kind (toner | drum), not per code. empties_log keeps every change; movement_id ties an empty to the
+-- "Izlietots" that produced it, so undoing that takes the empty away again.
+CREATE TABLE IF NOT EXISTS empties (
+    location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    qty INTEGER NOT NULL CHECK (qty >= 0),
+    PRIMARY KEY (location_id, kind)
+);
+CREATE TABLE IF NOT EXISTS empties_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+    username TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    location_id INTEGER,
+    to_location_id INTEGER,            -- only for 'moved'
+    delta INTEGER NOT NULL,
+    reason TEXT NOT NULL,              -- used | returned | moved | correction
+    note TEXT NOT NULL DEFAULT '',
+    movement_id INTEGER
+);
 -- Photos / documents attached to a defect (attachments.py). The files themselves are on disk next to the
 -- database (data/attachments/<stored>); `name` is what the user called the file.
 CREATE TABLE IF NOT EXISTS order_files (
@@ -328,6 +349,9 @@ def init_db() -> None:
         # Columns added after the first release (CREATE TABLE IF NOT EXISTS doesn't add them).
         if "default_location_id" not in _columns(conn, "printers"):
             conn.execute("ALTER TABLE printers ADD COLUMN default_location_id INTEGER"
+                         " REFERENCES locations(id) ON DELETE SET NULL")
+        if "empties_location_id" not in _columns(conn, "printers"):  # where this printer's empty cartridges go by default
+            conn.execute("ALTER TABLE printers ADD COLUMN empties_location_id INTEGER"
                          " REFERENCES locations(id) ON DELETE SET NULL")
         if "short" not in _columns(conn, "locations"):  # short display name for tight spaces (toner rows)
             conn.execute("ALTER TABLE locations ADD COLUMN short TEXT NOT NULL DEFAULT ''")

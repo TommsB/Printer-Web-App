@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { api, fmtClock, fmtTime, type Movement, type TonerEvent } from '../api'
+import { api, fmtClock, fmtTime, type Empties, type Movement, type StoreLocation, type TonerEvent } from '../api'
 import { invalidate, useApiData } from '../cache'
 import { DestructiveDialog } from '../components/Dialog'
+import { EmptyPlace } from '../components/EmptyPlace'
 import { WarrantyForm } from '../components/TonerDialogs'
 import { matches, SearchBox } from '../components/SearchBox'
 import { TopBar } from '../components/TopBar'
@@ -12,7 +13,9 @@ import { Icon } from '../icons'
 import { vtName, withViewTransition } from '../viewTransition'
 import { DayGroup, useFoldedDays } from './log/DayGroup'
 import { DefectList } from './log/DefectList'
+import { EmptiesPanel } from './log/EmptiesPanel'
 import { ORDER_FILTERS, OrderHistory } from './log/OrderHistory'
+import { CDot, DotTile } from '../components/ColorDot'
 
 /** How each kind of log entry looks. 'added' (old manual additions) is shown with the receipts. */
 const KIND: Record<string, { label: string; icon: () => ReactNode; cls: string }> = {
@@ -32,6 +35,7 @@ const FILTERS = [
 const filterKey = (reason: string) => (reason === 'added' ? 'received' : reason)
 const COLOR_LV: Record<string, string> = { K: 'melnais', C: 'ciāna', M: 'purpura', Y: 'dzeltenais' }
 const PAGE = 60
+const NO_EMPTIES: Empties = { rows: [], log: [] }
 const VIEWS = [{ key: 'moves', label: 'Krājumu kustība' }, { key: 'orders', label: 'Pasūtījumi' }, { key: 'defects', label: 'Defekti' }]
 
 /** The number on the right: −1 / +2, or ⇄ 1 for moves (total unchanged). */
@@ -58,6 +62,11 @@ export function LogPage() {
   const [confirming, setConfirming] = useState<TonerEvent | null>(null)
   const [claiming, setClaiming] = useState<TonerEvent | null>(null) // replacement that was a defect → warranty claim
   const [locId, setLocId] = useState(0)
+  // Where the old, empty cartridge goes when a replacement is confirmed (0 = not counted); see Tukšie.
+  const [emptyTo, setEmptyTo] = useState(0)
+  const locations = useApiData<StoreLocation[]>('locations', api.locations, [])
+  const empties = useApiData<Empties>('empties', api.empties, NO_EMPTIES)
+  const emptyTotal = empties.data.rows.reduce((n, r) => n + r.qty, 0)
   const [reviewError, setReviewError] = useState('')
 
   const shown = rows.filter((m) => (filter === 'all' || filterKey(m.reason) === filter)
@@ -112,18 +121,28 @@ export function LogPage() {
     </div>
   )
   // Shown in the page and again in the compact top bar once you scroll down.
-  const viewSwitch = seg('Skats', VIEWS, view, setView)
+  // "Tukšie" is not a history view like the three in the switch (it is a count of what is lying around now),
+  // so it is a button of its own beside it.
+  const viewSwitch = (
+    <div className="viewsw__row">
+      {seg('Skats', VIEWS, view, setView)}
+      <button className={view === 'empties' ? 'emp-btn on' : 'emp-btn'} aria-pressed={view === 'empties'} onClick={() => setView('empties')}>
+        Tukšie{emptyTotal > 0 && <span className="emp-btn__n">{emptyTotal}</span>}
+      </button>
+    </div>
+  )
   const filters = seg('Ierakstu veids', FILTERS, filter, (k) => { setFilter(k); setLimit(PAGE) })
   const orderFilters = seg('Pasūtījuma statuss', ORDER_FILTERS, orderFilter, setOrderFilter)
 
   return (
     <>
       <TopBar title={['Kustība', 'un vēsture']}
-        sticky={<div className="cbar__stack">{viewSwitch}{view === 'orders' ? orderFilters : view === 'defects' ? null : filters}</div>} />
+        sticky={<div className="cbar__stack">{viewSwitch}{view === 'orders' ? orderFilters : view === 'moves' ? filters : null}</div>} />
       <div className="viewsw">{viewSwitch}</div>
 
       {view === 'orders' && <OrderHistory filter={orderFilter} filters={orderFilters} />}
       {view === 'defects' && <DefectList />}
+      {view === 'empties' && <EmptiesPanel />}
 
       {/* Detected replacements waiting for review */}
       {view === 'moves' && events.length > 0 && (
@@ -139,10 +158,9 @@ export function LogPage() {
               return (
                 <li key={e.id} id={`review-${e.id}`} className={flash === e.id ? 'rv flash' : 'rv'} style={vtName(`review-${e.id}`, 'rv')}>
                   <span className="rv__head">
-                    <span className="dot"><i className={e.color ? e.color.toLowerCase() : 'g'} /></span>
+                    <DotTile color={e.color} kind={e.kind} />
                     <span className="rv__txt">
-                      <b>{e.toner_code ?? `${COLOR_LV[e.color] ?? ''} ${e.kind === 'drum' ? 'drums' : 'toneris'}`.trim()}</b>
-                      {e.kind === 'drum' && <span className="tag-s">Drums</span>} · {e.printer_location}
+                      <b>{e.toner_code ?? `${COLOR_LV[e.color] ?? ''} ${e.kind === 'drum' ? 'drums' : 'toneris'}`.trim()}</b> · {e.printer_location}
                       <small>
                         {e.from_pct}% → {e.to_pct}% · {fmtTime(e.ts)}
                         {!e.toner_id && (e.kind === 'drum' ? ' · nav piesaistīta druma' : ' · nav piesaistīta tonera')}
@@ -152,7 +170,12 @@ export function LogPage() {
                   </span>
                   <span className="rv__btns">
                     <button className="btn small primary" disabled={!canConfirm}
-                      onClick={() => { setLocId(e.locations[0]?.location_id ?? 0); setConfirming(e) }}>Atzīmēt kā izlietotu</button>
+                      onClick={() => {
+                        setLocId(e.locations[0]?.location_id ?? 0)
+                        // The printer's default place for empties, if it is still in use.
+                        setEmptyTo(locations.data.some((l) => l.id === e.empties_location_id && l.active) ? e.empties_location_id! : 0)
+                        setConfirming(e)
+                      }}>Atzīmēt kā izlietotu</button>
                     {/* The old cartridge was defective (e.g. smearing at 60%): same as above + it goes on the Defekti list. */}
                     <button className="btn small" disabled={e.toner_id === null} title="Vecais toneris bija bojāts — pievienot sarakstam „Defekti”"
                       onClick={() => { setLocId(e.locations[0]?.location_id ?? 0); setClaiming(e) }}>Defekts</button>
@@ -193,7 +216,7 @@ export function LogPage() {
                         <span className={`ev__ic ${k.cls}`}>{k.icon()}</span>
                         <span className="ev__body">
                           <span className="ev__l1">
-                            <i className={`cdot ${m.toner_color ? m.toner_color.toLowerCase() : 'g'}`} />
+                            <CDot color={m.toner_color} kind={m.toner_kind} />
                             <b>{m.toner_code}</b>
                             {m.printer_location && <span className="ev__pr">{m.printer_location}</span>}
                           </span>
@@ -225,7 +248,7 @@ export function LogPage() {
       </section>}
 
       {claiming && claiming.toner_id !== null && (
-        <WarrantyForm code={claiming.toner_code ?? ''} color={claiming.color} printerName={claiming.printer_location}
+        <WarrantyForm code={claiming.toner_code ?? ''} color={claiming.color} kind={claiming.kind} printerName={claiming.printer_location}
           initialPct={claiming.from_pct} onClose={() => setClaiming(null)}
           onCreate={async (v) => {
             // The spare that went into the printer comes off the reserve (as "Atzīmēt kā izlietotu" does) —
@@ -266,11 +289,11 @@ export function LogPage() {
       {confirming && (
         <DestructiveDialog title="Atzīmēt kā izlietotu" confirmLabel="Jā, izlietots" disabled={!locId} onClose={() => setConfirming(null)}
           onConfirm={async () => {
-            await api.confirmEvent(confirming.id, locId)
+            await api.confirmEvent(confirming.id, locId, emptyTo || null)
             // Close the dialog and remove the item in one animated step, then refresh.
             const id = confirming.id
             await withViewTransition(() => { dropEvent(id); setConfirming(null) })
-            await Promise.all([reloadEvents(), reload()])
+            await Promise.all([reloadEvents(), reload(), empties.reload()])
           }}>
           <p className="dlg-text">
             Noņemt <b>1 gab. {confirming.toner_code}</b> no rezerves?<br />
@@ -283,6 +306,7 @@ export function LogPage() {
                 </select>
               </label>
             : confirming.locations[0] && <p className="dlg-text muted">No: {confirming.locations[0].name}</p>}
+          <EmptyPlace value={emptyTo} onChange={setEmptyTo} locations={locations.data} drum={confirming.kind === 'drum'} />
         </DestructiveDialog>
       )}
     </>

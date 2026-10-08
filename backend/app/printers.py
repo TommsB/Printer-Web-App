@@ -23,6 +23,7 @@ class PrinterIn(BaseModel):
     active: bool = True
     notes: str = ""
     default_location_id: int | None = None  # where received cartridges go by default
+    empties_location_id: int | None = None  # where this printer's empty cartridges go by default (Tukšie)
     toner_ids: list[int] = []
     norms: dict[int, int] = {}  # toner_id -> optimal stock ("norma"); only set via the Pārvaldība form
 
@@ -183,15 +184,15 @@ def usage(printer_id: int, conn: sqlite3.Connection = Depends(db_dep)) -> list[d
             m["pages"] += r["page_count"] - prev
         prev = r["page_count"]
     for r in conn.execute(
-            "SELECT substr(m.ts, 1, 7) AS month, t.code, t.color, -SUM(m.delta) AS qty FROM stock_movements m"
+            "SELECT substr(m.ts, 1, 7) AS month, t.code, t.color, t.kind, -SUM(m.delta) AS qty FROM stock_movements m"
             " JOIN toner_models t ON t.id = m.toner_id WHERE m.printer_id = ? AND m.reason = 'taken'"
             " GROUP BY month, t.id HAVING qty > 0 ORDER BY t.code", (printer_id,)):
-        month(r["month"])["toners"].append({"code": r["code"], "color": r["color"], "qty": r["qty"]})
+        month(r["month"])["toners"].append({"code": r["code"], "color": r["color"], "kind": r["kind"], "qty": r["qty"]})
     for r in conn.execute(  # defective cartridges, in the month they were noted
-            "SELECT substr(o.created_ts, 1, 7) AS month, t.code, t.color, COUNT(*) AS qty FROM orders o"
+            "SELECT substr(o.created_ts, 1, 7) AS month, t.code, t.color, t.kind, COUNT(*) AS qty FROM orders o"
             " JOIN toner_models t ON t.id = o.toner_id WHERE o.printer_id = ? AND o.warranty = 1"
             " GROUP BY month, t.id ORDER BY t.code", (printer_id,)):
-        month(r["month"])["defects"].append({"code": r["code"], "color": r["color"], "qty": r["qty"]})
+        month(r["month"])["defects"].append({"code": r["code"], "color": r["color"], "kind": r["kind"], "qty": r["qty"]})
     return sorted(months.values(), key=lambda m: m["month"], reverse=True)[:USAGE_MONTHS]
 
 
@@ -217,9 +218,9 @@ def create_printer(body: PrinterIn, conn: sqlite3.Connection = Depends(db_dep)) 
     try:
         cur = conn.execute(
             "INSERT INTO printers (company, location, model, brand, ip, color_type, snmp_enabled, active, notes,"
-            " default_location_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            " default_location_id, empties_location_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (body.company, body.location, body.model, body.brand, ip, body.color_type,
-             int(body.snmp_enabled), int(body.active), body.notes, body.default_location_id))
+             int(body.snmp_enabled), int(body.active), body.notes, body.default_location_id, body.empties_location_id))
     except sqlite3.IntegrityError:
         raise HTTPException(409, "Printeris ar šādu IP jau eksistē")
     _set_toners(conn, cur.lastrowid, body.toner_ids, body.norms)
@@ -232,9 +233,9 @@ def update_printer(printer_id: int, body: PrinterIn, conn: sqlite3.Connection = 
     try:
         cur = conn.execute(
             "UPDATE printers SET company=?, location=?, model=?, brand=?, ip=?, color_type=?,"
-            " snmp_enabled=?, active=?, notes=?, default_location_id=? WHERE id=?",
+            " snmp_enabled=?, active=?, notes=?, default_location_id=?, empties_location_id=? WHERE id=?",
             (body.company, body.location, body.model, body.brand, ip, body.color_type,
-             int(body.snmp_enabled), int(body.active), body.notes, body.default_location_id, printer_id))
+             int(body.snmp_enabled), int(body.active), body.notes, body.default_location_id, body.empties_location_id, printer_id))
     except sqlite3.IntegrityError:
         raise HTTPException(409, "Printeris ar šādu IP jau eksistē")
     if cur.rowcount == 0:

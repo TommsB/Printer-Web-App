@@ -5,6 +5,7 @@ import { DefectDialog } from '../../components/DefectFiles'
 import { matches, SearchBox } from '../../components/SearchBox'
 import { Icon } from '../../icons'
 import { DEFECT_STATUS, fmtDate, fmtNum } from '../../lib'
+import { CDot } from '../../components/ColorDot'
 
 /** Recorded = warning sign; handed over = waiting (the same clock as an order on its way); replacement
  *  arrived = the "received" icon; rejected = ×. */
@@ -47,7 +48,7 @@ export function DefectList() {
                 <span className={`ev__ic ${st.cls}`}>{STATUS_ICON[o.status]()}</span>
                 <span className="ev__body">
                   <span className="ev__l1">
-                    <i className={`cdot ${o.color ? o.color.toLowerCase() : 'g'}`} />
+                    <CDot color={o.color} kind={o.kind} />
                     <b>{o.code}</b>
                     <span className="ev__pr">{o.location}</span>
                   </span>

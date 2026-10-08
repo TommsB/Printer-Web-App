@@ -52,7 +52,7 @@ export const WARRANTY_EMAIL: EmailFlavor = {
   scope: 'Atsevišķa veidne garantijas pieteikumiem (pasūtījumu veidni tā nemaina).',
   linePlaceholders: ['{kods}', '{krāsa}', '{defekts}', '{procenti}', '{lapas}', '{printeris}'],
 }
-const COLOR_EN: Record<string, string> = { K: 'Black', C: 'Cyan', M: 'Magenta', Y: 'Yellow' }
+const COLOR_EN: Record<string, string> = { K: 'Black', C: 'Cyan', M: 'Magenta', Y: 'Yellow', CMY: 'Color' } // CMY: one drum code for C, M and Y
 const KIND_NOTE: Record<string, string> = { drum: ' (drams)' }
 
 const fill = (tpl: string, values: Record<string, string>) =>

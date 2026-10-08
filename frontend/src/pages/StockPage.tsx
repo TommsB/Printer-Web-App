@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, fmtTime, type Order, type Printer, type StockRow, type StoreLocation } from '../api'
 import { useApiData } from '../cache'
+import { CDot } from '../components/ColorDot'
 import { DefectDialog, PendingFiles } from '../components/DefectFiles'
 import { ConfirmDialog, DestructiveDialog } from '../components/Dialog'
 import { prepareFiles } from '../files'
@@ -11,6 +12,7 @@ import { matches, SearchBox } from '../components/SearchBox'
 import { Stepper } from '../components/Stepper'
 import { ActionMenu, TonerRow } from '../components/TonerRow'
 import { TopBar } from '../components/TopBar'
+import { offerUndo } from '../undo'
 import { useRemembered } from '../uiMemory'
 import { useApp } from '../ctx'
 import { Icon } from '../icons'
@@ -23,13 +25,8 @@ interface Need {
   qty: number; added: number; plannedIds: number[]
 }
 
-const COLOR_LV: Record<string, string> = { K: 'melns', C: 'ciāns', M: 'purpurs', Y: 'dzeltens' }
-
-/** Toner colour dot (grey when the toner has no colour set); the colour name is read out / shown on hover. */
-function Dot({ color }: { color: string }) {
-  const name = COLOR_LV[color.toUpperCase()]
-  return <i className={`cdot ${color ? color.toLowerCase() : 'g'}`} {...(name && { role: 'img', 'aria-label': name, title: name })} />
-}
+/** The colour mark used all over this page (a drum's carries a "D"). */
+const Dot = CDot
 
 /** After orders were received: attach the chosen delivery notes, each to its group of orders. The orders stay
  *  received if this fails; the message says so and where the note can be added later. */
@@ -57,11 +54,15 @@ function ReceiveDialog({ order: o, places, onClose, onDone }: {
       confirmLabel={valid ? `Saņemts (+${qty} krājumā)` : 'Saņemts'} disabled={!valid || !place}
       onClose={() => { if (received.current) void onDone(); onClose() }}
       onConfirm={async () => {
-        if (!received.current) { await api.receiveOrder(o.id, qty, place); received.current = true }
+        if (!received.current) {
+          const done = await api.receiveOrder(o.id, qty, place)
+          received.current = true
+          offerUndo(`Saņemts: ${o.code} +${qty} (${o.location})`, [done.movement_id])
+        }
         await attachNotes([{ ids: [o.id], files: note }])
         await onDone()
       }}>
-      <p className="dlg-text"><Dot color={o.color} /> <b>{o.code}</b> · {o.location}<br />
+      <p className="dlg-text"><Dot color={o.color} kind={o.kind} /> <b>{o.code}</b> · {o.location}<br />
         <span className="muted">{o.warranty
           ? 'Garantijas aizvietotājs. Tas tiks pievienots rezervei.'
           : `Pasūtīts ×${o.qty}. Ja saņemts mazāk vai vairāk, izmainiet skaitu.`}</span></p>
@@ -102,7 +103,8 @@ function ReceiveAllDialog({ orders, places, onClose, onDone }: {
       onClose={() => { if (received.current) void onDone(); onClose() }}
       onConfirm={async () => {
         if (!received.current) {
-          await api.receiveOrders(orders.map((o) => ({ id: o.id, location_id: place })))
+          const done = await api.receiveOrders(orders.map((o) => ({ id: o.id, location_id: place })))
+          offerUndo(`Saņemti visi pasūtījumi: +${total} gab.`, done.map((o) => o.movement_id))
           received.current = true
           setLast(place)
         }
@@ -114,7 +116,7 @@ function ReceiveAllDialog({ orders, places, onClose, onDone }: {
           <div className="recv-co__head"><b>{c || 'Bez uzņēmuma'}</b></div>
           <ul className="dlg-list toners recv-all">
             {of(c).map((o) => (
-              <li key={o.id}><Dot color={o.color} /><b>{o.code}</b> ×{o.qty}{!!o.warranty && <span className="tag-w">Garantija</span>}<span className="recv-all__to">{o.location}</span></li>
+              <li key={o.id}><Dot color={o.color} kind={o.kind} /><b>{o.code}</b> ×{o.qty}{!!o.warranty && <span className="tag-w">Garantija</span>}<span className="recv-all__to">{o.location}</span></li>
             ))}
           </ul>
           <PendingFiles files={notes[c] ?? []} onChange={(f) => setNotes((n) => ({ ...n, [c]: f }))} label="Dokumenti (nav obligāti)" button="Pievienot dokumentu" />
@@ -233,6 +235,14 @@ export function StockPage() {
     .filter((p) => p.items.length > 0)
   const normPart = part((i) => i.qty - i.added)
   const extraPart = part((i) => i.added)
+  // − / + on a hand-added line (`item.qty` is the hand-added quantity here). Going below 1 = take it out (asks).
+  const stepExtra = async (loc: string, item: Need, step: number) => {
+    if (item.qty + step < 1) return setDlg({ kind: 'unbasket', loc, item })
+    const entry = bsk.data.find((o) => o.id === item.plannedIds[0]) // one entry per toner; older data may have more
+    if (!entry || entry.qty + step < 1) return
+    bsk.setData((list) => list.map((o) => (o.id === entry.id ? { ...o, qty: o.qty + step } : o))) // shows at once
+    try { await api.setBasketQty(entry.id, entry.qty + step) } finally { await bsk.reload() }
+  }
   const orderedTotal = openOrders.reduce((n, o) => n + o.qty, 0)
 
   // ✉ on either list: the same e-mail text (one shared template), built from that list's items.
@@ -301,7 +311,7 @@ export function StockPage() {
                 {normPart.map((p) => (
                   <div key={p.id} className="ord">
                     <span className="a"><b>{p.loc}</b>
-                      <small className="needs">{p.items.map((i) => <span key={i.toner_id}><Dot color={i.color} />{i.code} ×{i.qty}</span>)}</small></span>
+                      <small className="needs">{p.items.map((i) => <span key={i.toner_id}><Dot color={i.color} kind={i.kind} />{i.code} ×{i.qty}</span>)}</small></span>
                     <button className="btn small" onClick={() => setDlg({ kind: 'suggest', loc: p.loc, items: p.items, extra: false })}>Pasūtīt</button>
                   </div>
                 ))}
@@ -316,11 +326,18 @@ export function StockPage() {
                 {extraPart.map((p) => (
                   <div key={p.id} className="ord">
                     <span className="a"><b>{p.loc}</b>
-                      <small className="needs">{p.items.map((i) => (
+                      {/* One line per toner: code on the left; on the right a small stepper (the app's usual round
+                          buttons) for how many were added by hand, then × to take it out. − at 1 asks, like ×. */}
+                      <small className="needs needs--lines">{p.items.map((i) => (
                         <span key={i.toner_id}>
-                          <Dot color={i.color} />{i.code} ×{i.qty}
+                          <span className="needs__code"><Dot color={i.color} kind={i.kind} />{i.code}</span>
+                          <span className="qstep">
+                            <button onClick={() => stepExtra(p.loc, i, -1)} aria-label={`Mazāk: ${i.code}`} title="Mazāk">{Icon.minus(13)}</button>
+                            <b aria-label={`Daudzums: ${i.qty}`}>{i.qty}</b>
+                            <button onClick={() => stepExtra(p.loc, i, 1)} disabled={i.qty >= 1000} aria-label={`Vairāk: ${i.code}`} title="Vairāk">{Icon.plus(13)}</button>
+                          </span>
                           <button className="needs__x" onClick={() => setDlg({ kind: 'unbasket', loc: p.loc, item: i })}
-                            title="Izņemt no groza" aria-label={`Izņemt no groza ${i.code} ×${i.qty}`}>{Icon.close(12)}</button>
+                            title="Izņemt no groza" aria-label={`Izņemt no groza ${i.code} ×${i.qty}`}>{Icon.close(13)}</button>
                         </span>
                       ))}</small></span>
                     <button className="btn small" onClick={() => setDlg({ kind: 'suggest', loc: p.loc, items: p.items, extra: true })}>Pasūtīt</button>
@@ -348,7 +365,7 @@ export function StockPage() {
               {defects.map((o) => (
                 <div key={o.id} className="ord">
                   <span className="a">
-                    <b><Dot color={o.color} /> {o.code}{filesMark(o)}</b>
+                    <b><Dot color={o.color} kind={o.kind} /> {o.code}{filesMark(o)}</b>
                     <small>{o.location} · {fmtTime(o.created_ts)} · {claimNote(o)}{o.held_at && ` · atrodas: ${o.held_at}`}{o.note && ` · ${o.note}`}</small>
                   </span>
                   <ActionMenu code={`${o.code}, ${o.location}`} items={[
@@ -376,7 +393,7 @@ export function StockPage() {
             {openOrders.map((o) => (
               <div key={o.id} className="ord">
                 <span className="a">
-                  <b><Dot color={o.color} /> {o.code} <span className="pv solid sm">×{o.qty}</span>{!!o.warranty && <span className="tag-w">Garantija</span>}{filesMark(o)}</b>
+                  <b><Dot color={o.color} kind={o.kind} /> {o.code} <span className="pv solid sm">×{o.qty}</span>{!!o.warranty && <span className="tag-w">Garantija</span>}{filesMark(o)}</b>
                   <small>
                     {o.location} · {fmtTime(o.created_ts)} · {o.created_by}
                     {!!o.warranty && ` · ${claimNote(o)}`}
@@ -420,12 +437,16 @@ export function StockPage() {
               return (
               <article key={pid} id={`stock-${pid}`} className={`grp${isOpen ? ' open' : ''}${flash === pid ? ' flash' : ''}`} style={vtName(`stock-${pid}`, 'card')}>
                 <button className="gh-btn" aria-expanded={isOpen} onClick={() => toggle(pid)}>
-                  <span className="gh-t"><b>{list[0].location}</b><span>{list[0].model}</span></span>
+                  <span className="gh-t">
+                    {/* A printer switched off in Pārvaldība keeps its reserve here; the tag tells it apart. */}
+                    <b>{list[0].location}{!list[0].active && <span className="tag-s gh-off">Neaktīvs</span>}</b>
+                    <span>{list[0].model}</span>
+                  </span>
                   <span className={anyLow ? 'tot hot' : 'tot'} title={anyLow ? 'Kāds toneris ir zem normas' : 'Krājumā / norma'}>{qty}<small>/{norm}</small></span>
                   <span className={isOpen ? 'fold-ic open' : 'fold-ic'}>{Icon.chevron(18)}</span>
                 </button>
                 {isOpen && list.map((r) => (
-                  <TonerRow key={r.toner_id} printerId={r.printer_id} printerName={r.location} allLocations={locations.data}
+                  <TonerRow key={r.toner_id} printerId={r.printer_id} printerName={r.location} allLocations={locations.data} emptiesDefault={r.empties_location_id}
                     toner={{ id: r.toner_id, code: r.code, color: r.color, kind: r.kind, qty: r.qty, optimal_qty: r.optimal_qty, ordered: r.ordered, ordered_extra: r.ordered_extra, locations: r.locations }}
                     onChange={load} />
                 ))}
@@ -441,7 +462,7 @@ export function StockPage() {
         <ConfirmDialog title="Nodot garantijā" confirmLabel={dlg.orders.length > 1 ? `Nodot (${dlg.orders.length})` : 'Nodot'} onClose={() => setDlg(null)}
           onConfirm={async () => { for (const o of dlg.orders) await api.sendWarranty(o.id); await load() }}>
           <ul className="dlg-list toners recv-all">
-            {dlg.orders.map((o) => <li key={o.id}><Dot color={o.color} /><b>{o.code}</b><span className="recv-all__to">{o.location}</span></li>)}
+            {dlg.orders.map((o) => <li key={o.id}><Dot color={o.color} kind={o.kind} /><b>{o.code}</b><span className="recv-all__to">{o.location}</span></li>)}
           </ul>
           <p className="dlg-text muted">Ieraksts pāries uz „Pasūtīts” ar atzīmi „Garantija”: tiek gaidīts aizvietotājs, un toneris vairs netiks piedāvāts grozā.</p>
         </ConfirmDialog>
@@ -449,7 +470,7 @@ export function StockPage() {
       {dlg?.kind === 'discard' && (
         <DestructiveDialog title="Dzēst no defektiem" confirmLabel="Dzēst" onClose={() => setDlg(null)}
           onConfirm={async () => { await api.deleteOrder(dlg.order.id); await load() }}>
-          <p className="dlg-text">Dzēst <Dot color={dlg.order.color} /> <b>{dlg.order.code}</b> ({dlg.order.location}) no saraksta „Defekti”?<br />
+          <p className="dlg-text">Dzēst <Dot color={dlg.order.color} kind={dlg.order.kind} /> <b>{dlg.order.code}</b> ({dlg.order.location}) no saraksta „Defekti”?<br />
             <span className="muted">Tas netiks nodots garantijā. Krājums nemainās.</span></p>
         </DestructiveDialog>
       )}
@@ -460,7 +481,7 @@ export function StockPage() {
         <ConfirmDialog title={`Pasūtīt: ${dlg.loc}`} confirmLabel="Atzīmēt kā pasūtītu" onClose={() => setDlg(null)}
           onConfirm={async () => { await api.createOrders(dlg.items.map(({ printer_id, toner_id, qty }) => ({ printer_id, toner_id, qty })), '', dlg.extra); await load() }}>
           <p className="dlg-text muted">{dlg.extra ? 'Pielikts papildus' : 'Trūkst līdz normai'}</p>
-          <ul className="dlg-list toners">{dlg.items.map((i) => <li key={i.toner_id}><Dot color={i.color} /><b>{i.code}</b> ×{i.qty}</li>)}</ul>
+          <ul className="dlg-list toners">{dlg.items.map((i) => <li key={i.toner_id}><Dot color={i.color} kind={i.kind} /><b>{i.code}</b> ×{i.qty}</li>)}</ul>
           <p className="dlg-text muted">Toneri pāries no groza uz sarakstu „Pasūtīts”. Krājums pieaugs tikai tad, kad pasūtījums tiks atzīmēts kā saņemts.</p>
         </ConfirmDialog>
       )}
@@ -481,7 +502,7 @@ export function StockPage() {
                 <div className="recv-co__head"><b>{s.title}</b> · {s.total} gab.</div>
                 <ul className="dlg-list toners recv-all">
                   {s.list.flatMap((p) => p.items.map((i) => (
-                    <li key={`${p.id}-${i.toner_id}`}><Dot color={i.color} /><b>{i.code}</b> ×{i.qty}<span className="recv-all__to">{p.loc}</span></li>
+                    <li key={`${p.id}-${i.toner_id}`}><Dot color={i.color} kind={i.kind} /><b>{i.code}</b> ×{i.qty}<span className="recv-all__to">{p.loc}</span></li>
                   )))}
                 </ul>
               </div>
@@ -492,7 +513,7 @@ export function StockPage() {
       {dlg?.kind === 'unbasket' && (
         <DestructiveDialog title="Izņemt no groza" confirmLabel="Izņemt" onClose={() => setDlg(null)}
           onConfirm={async () => { for (const id of dlg.item.plannedIds) await api.deleteOrder(id); await load() }}>
-          <p className="dlg-text">Izņemt no groza papildus pielikto <Dot color={dlg.item.color} /> <b>{dlg.item.code} ×{dlg.item.qty}</b> ({dlg.loc})?<br />
+          <p className="dlg-text">Izņemt no groza papildus pielikto <Dot color={dlg.item.color} kind={dlg.item.kind} /> <b>{dlg.item.code} ×{dlg.item.qty}</b> ({dlg.loc})?<br />
             <span className="muted">Tas, kas trūkst līdz normai, grozā paliek. Krājums un norma nemainās.</span></p>
         </DestructiveDialog>
       )}
@@ -502,9 +523,9 @@ export function StockPage() {
           confirmLabel={dlg.order.warranty ? 'Jā, noraidīts' : 'Jā, atcelt'} onClose={() => setDlg(null)}
           onConfirm={async () => { await api.cancelOrder(dlg.order.id); await load() }}>
           {dlg.order.warranty
-            ? <p className="dlg-text">Atzīmēt <Dot color={dlg.order.color} /> <b>{dlg.order.code}</b> ({dlg.order.location}) garantijas pieteikumu kā noraidītu?<br />
+            ? <p className="dlg-text">Atzīmēt <Dot color={dlg.order.color} kind={dlg.order.kind} /> <b>{dlg.order.code}</b> ({dlg.order.location}) garantijas pieteikumu kā noraidītu?<br />
                 <span className="muted">Aizvietotājs netiks gaidīts; krājums nemainās, un toneris atkal var parādīties grozā.</span></p>
-            : <p className="dlg-text">Atcelt <Dot color={dlg.order.color} /> <b>{dlg.order.code} ×{dlg.order.qty}</b> ({dlg.order.location})? Krājums netiks mainīts.</p>}
+            : <p className="dlg-text">Atcelt <Dot color={dlg.order.color} kind={dlg.order.kind} /> <b>{dlg.order.code} ×{dlg.order.qty}</b> ({dlg.order.location})? Krājums netiks mainīts.</p>}
         </DestructiveDialog>
       )}
     </>

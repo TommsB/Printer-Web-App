@@ -30,6 +30,7 @@ export const Icon = {
   hazard: (s = 18) => svg(s, <><path d="M12 4.5l8.5 14.5h-17z" /><path d="M12 10v4.5" /><path d="M12 17.2v.01" /></>),
   tune: (s = 18) => svg(s, <><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" /></>),
   plus: (s = 18) => svg(s, <><path d="M12 5v14M5 12h14" /></>),
+  minus: (s = 18) => svg(s, <path d="M5 12h14" />),
   info: (s = 20) => svg(s, <><circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 7.5v.01" /></>),
   search: (s = 20) => svg(s, <><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></>),
   pencil: (s = 14) => svg(s, <><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" /><path d="M13.5 6.5l4 4" /></>),

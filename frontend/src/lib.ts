@@ -40,6 +40,33 @@ const NOT_DRUM = /developer|transfer|waste|fus|belt|roller/i
 /** A drum's level. col '' = the printer reports it without a colour (e.g. "Drum Unit" on a colour printer). */
 export interface DrumLevel { idx: string; col: Col | ''; name: string; pct: number | null; days: number | null }
 
+/** What a reported supply is for the reserve — a toner or a drum, and its colour (K/C/M/Y, '' = a drum named
+ *  without one) — or null for everything else. Same rules as backend/app/replacements.py `classify`. */
+export function classifySupply(description: string, mono: boolean): { kind: 'toner' | 'drum'; color: string } | null {
+  const c = colorOf(description)
+  if (!NOT_TONER.test(description)) {
+    if (c) return { kind: 'toner', color: c[0].toUpperCase() }
+    if (mono && /toner|cartridge/i.test(description)) return { kind: 'toner', color: 'K' }
+  }
+  if (DRUM.test(description) && !NOT_DRUM.test(description)) return { kind: 'drum', color: c ? c[0].toUpperCase() : mono ? 'K' : '' }
+  return null
+}
+
+const SUPPLY_CODE = /^[A-Z]{1,4}-?\d{2,5}[A-Z]{0,2}$/i
+/**
+ * The order code a printer puts in a supply's name, when it does: "Black Cartridge HP CF300A" → CF300A,
+ * "Black Cartridge HP CF300A/AC." → CF300A (the part after "/" is a packaging variant), "Magenta Drum HP 828A
+ * (CF365A)." → CF365A, "CK-8511C" → CK-8511C. Printers that only say "Toner (Cyan)" give none.
+ */
+export function supplyCode(description: string): string | null {
+  const d = description.trim().replace(/[.\s]+$/, '')
+  const code = (s: string | undefined) => {
+    const c = (s ?? '').trim().split('/')[0]
+    return SUPPLY_CODE.test(c) ? c.toUpperCase() : null
+  }
+  return code(/\(([^()]+)\)$/.exec(d)?.[1]) ?? code(d.split(/\s+/).pop())
+}
+
 /** Splits SNMP supplies into per-colour toner levels (K,C,M,Y order), drum levels, and everything else. */
 export function splitSupplies(p: Printer): { toners: TonerLevel[]; drums: DrumLevel[]; others: Supply[] } {
   const supplies = p.snapshot?.reachable ? p.snapshot.supplies ?? [] : []
@@ -78,6 +105,9 @@ export function linkedItem(p: Printer, kind: 'toner' | 'drum', col: Col | ''): P
   const same = p.toners.filter((t) => t.kind === kind)
   const byColor = col ? same.find((t) => t.color.toLowerCase() === col) : undefined
   if (byColor) return byColor
+  // A "CMY" drum: one code used for the cyan, magenta and yellow drum (not the black one).
+  const shared = kind === 'drum' && col && col !== 'k' ? same.find((t) => t.color.toUpperCase() === 'CMY') : undefined
+  if (shared) return shared
   if (p.color_type === 'Melnbalts' && same.length === 1) return same[0]
   if (kind === 'drum') {
     const uncoloured = same.filter((t) => !t.color)

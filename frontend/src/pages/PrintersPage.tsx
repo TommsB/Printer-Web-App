@@ -12,6 +12,7 @@ import { useApp } from '../ctx'
 import { Icon } from '../icons'
 import { attentionReasons, DEFECT_STATUS, fmtDate, fmtDaysLeft, fmtHours, fmtNum, isImportantAlert, linkedItem, LOW_PCT, printerState, SOON_DAYS, splitSupplies, type Col } from '../lib'
 import { vtName, withViewTransition } from '../viewTransition'
+import { CDot, DotTile } from '../components/ColorDot'
 
 /** Snapshot times are local (no timezone), so compare with the local date. */
 function isToday(ts: string): boolean {
@@ -204,7 +205,7 @@ function Fold({ label, count, hot, startOpen = false, children }: { label: strin
 function Others({ others }: { others: Supply[] }) {
   if (others.length === 0) return null
   return (
-    <Fold label="Citi komponenti" count={others.length}>
+    <Fold label="Citi komponenti printerī" count={others.length}>
       {others.map((s) => (
         <div key={s.idx} className="sp">
           <span className="dot"><i className="g" /></span>
@@ -250,11 +251,11 @@ function Usage({ printerId }: { printerId: number }) {
                   </td>
                   <td>
                     {m.toners.length === 0 && m.defects.length === 0 ? '–' : m.toners.map((t) => (
-                      <span key={t.code} className="ut"><i className={`cdot ${t.color ? t.color.toLowerCase() : 'g'}`} />{t.code} ×{t.qty}</span>
+                      <span key={t.code} className="ut"><CDot color={t.color} kind={t.kind} />{t.code} ×{t.qty}</span>
                     ))}
                     {/* Cartridges marked defective that month: listed like the used ones, tagged "(Defekts)". */}
                     {m.defects.map((t) => (
-                      <span key={`d-${t.code}`} className="ut"><i className={`cdot ${t.color ? t.color.toLowerCase() : 'g'}`} />{t.code} ×{t.qty} <span className="udef">(Defekts)</span></span>
+                      <span key={`d-${t.code}`} className="ut"><CDot color={t.color} kind={t.kind} />{t.code} ×{t.qty} <span className="udef">(Defekts)</span></span>
                     ))}
                   </td>
                 </tr>
@@ -290,7 +291,7 @@ function Defects({ printerId }: { printerId: number }) {
                 <li key={o.id} className="ev">
                   <button className="ev__main" onClick={() => setDetails(o)} aria-haspopup="dialog">
                     <span className="ev__body">
-                      <span className="ev__l1"><i className={`cdot ${o.color ? o.color.toLowerCase() : 'g'}`} /><b>{o.code}</b></span>
+                      <span className="ev__l1"><CDot color={o.color} kind={o.kind} /><b>{o.code}</b></span>
                       <span className="ev__l2">
                         {o.defect || 'Defekts'}
                         {o.removed_pct != null && ` · izņemts pie ${o.removed_pct}%`}
@@ -398,6 +399,27 @@ function DetailMain({ p, busy, spinning, onRefresh, onClose, onChange, allLocati
   const rank = (color: string) => { const i = 'kcmy'.indexOf(color.toLowerCase()); return color && i >= 0 ? i : 9 }
   const kindRank = (kind: string) => (kind === 'toner' ? 0 : kind === 'drum' ? 1 : 2) // toners, then drums, then the rest
   const reserve = [...p.toners].sort((a, b) => kindRank(a.kind) - kindRank(b.kind) || rank(a.color) - rank(b.color) || a.code.localeCompare(b.code))
+  const resOther = reserve.filter((t) => t.kind !== 'toner' && t.kind !== 'drum')
+  type Item = Printer['toners'][number]
+  /** The reserve rows of one kind in the order of the levels on the left: each item at the position of its own
+   *  level, `null` (an empty slot, desktop only) where a level has nothing in the reserve — e.g. a drum the
+   *  printer reports that isn't linked. Items with no level of their own follow at the end. */
+  const beside = (levels: { col: Col | '' }[], kind: 'toner' | 'drum'): (Item | null)[] => {
+    const left = new Set(reserve.filter((t) => t.kind === kind))
+    const out: (Item | null)[] = levels.map((l) => {
+      const it = linkedItem(p, kind, l.col)
+      if (!it || !left.has(it)) return null // not linked, or already placed (one drum code for several colours)
+      left.delete(it)
+      return it
+    })
+    while (out.length && out[out.length - 1] === null) out.pop()
+    return [...out, ...reserve.filter((t) => left.has(t))]
+  }
+  const resToners = beside(toners, 'toner')
+  const resDrums = beside(drums, 'drum')
+  const row = (t: Item | null, i: number) => (t
+    ? <TonerRow key={t.id} printerId={p.id} printerName={p.location} toner={t} allLocations={allLocations} emptiesDefault={p.empties_location_id} onChange={onChange} />
+    : <div key={`gap-${i}`} className="t-gap" aria-hidden="true" />)
   const alerts = snap?.reachable && snap.alerts ? snap.alerts.split(' | ').filter((a) => a.trim()) : [] // blank = a printer sent an empty alert
   // Reasons it can't print first (from error flags / critical alerts), then the other important messages.
   const important = [...st.blocked, ...alerts.filter((a) => isImportantAlert(a) && !st.blocked.includes(a))]
@@ -446,8 +468,11 @@ function DetailMain({ p, busy, spinning, onRefresh, onClose, onChange, allLocati
           )}
         </div>
 
-        <div className="d-toners">
-          <div className="lab">Toneri</div>
+        {/* What the printer itself reports. On desktop this wrapper dissolves (display: contents) and its four
+            parts sit in the grid beside the matching parts of the reserve; on the phone it is one card. */}
+        <div className="d-levels">
+          <div className="lab d-th">Toneri printerī</div>
+          <div className="d-tl">
           {toners.length === 0 && (
             <p className="muted pad">{!p.ip ? 'Printeris nav tīklā, tāpēc toneru līmeņi netiek nolasīti. Zemāk ir tā rezerve.' : st.offline ? `Nav SNMP datu. Pēdējais mēģinājums ${snap ? fmtTime(snap.ts) : ''}.` : 'Nav SNMP datu par toneriem.'}</p>
           )}
@@ -466,11 +491,12 @@ function DetailMain({ p, busy, spinning, onRefresh, onClose, onChange, allLocati
               <span className={t.pct !== null && t.pct < LOW_PCT ? 'pv hot' : 'pv'}>{t.pct === null ? '–' : `${t.pct}%`}</span>
             </div>
           ))}
+          </div>
           {/* Drums the printer reports: same rows, named by the linked drum's code when there is one. */}
-          {drums.length > 0 && <div className="lab gap">Drumi</div>}
-          {drums.map((d) => (
+          {drums.length > 0 && <div className="lab d-dh">Drumi printerī</div>}
+          {drums.length > 0 && <div className="d-dl">{drums.map((d) => (
             <div key={d.idx} className="sp">
-              <span className="dot"><i className={d.col || 'g'} /></span>
+              <DotTile color={d.col} kind="drum" />
               <span className="n" title={`Drums${d.name ? ` ${d.name}` : ''}`}>
                 {linkedItem(p, 'drum', d.col)?.code ?? `Drums${d.name ? ` ${d.name}` : ''}`}
                 {d.days !== null && (
@@ -481,7 +507,7 @@ function DetailMain({ p, busy, spinning, onRefresh, onClose, onChange, allLocati
               <span className="tr"><i className={d.pct !== null && d.pct < LOW_PCT ? 'o' : d.col || 'g'} style={{ width: `${d.pct ?? 0}%` }} /></span>
               <span className={d.pct !== null && d.pct < LOW_PCT ? 'pv hot' : 'pv'}>{d.pct === null ? '–' : `${d.pct}%`}</span>
             </div>
-          ))}
+          ))}</div>}
         </div>
 
         {others.length > 0 && <div className="d-others"><Others key={p.id} others={others} /></div>}
@@ -492,10 +518,15 @@ function DetailMain({ p, busy, spinning, onRefresh, onClose, onChange, allLocati
               starts closed, except for a printer that isn't on the network, where it is all there is to see. */}
           <Fold label="Rezerve" startOpen={!p.ip || window.matchMedia('(min-width: 801px)').matches} hot={p.toners.some((t) => t.qty < t.optimal_qty)}
             count={`${p.toners.reduce((n, t) => n + t.qty, 0)}/${p.toners.reduce((n, t) => n + t.optimal_qty, 0)}`}>
-            {p.toners.length === 0 && <p className="muted pad">Printerim nav piesaistītu toneru. Pievienojiet tos sadaļā Pārvaldība.</p>}
-            {reserve.map((t) => (
-              <TonerRow key={t.id} printerId={p.id} printerName={p.location} toner={t} allLocations={allLocations} onChange={onChange} />
-            ))}
+            {/* In parts, like the left side: toners, drums, the rest. On desktop each part is a grid cell level
+                with the same part on the left. */}
+            <div className="d-rt">
+              {p.toners.length === 0 && <p className="muted pad">Printerim nav piesaistītu komponentu. Pievienojiet tos sadaļā Pārvaldība.</p>}
+              {resToners.map(row)}
+            </div>
+            {resDrums.length > 0 && <div className="lab d-rdh">Drumi rezervē</div>}
+            {resDrums.length > 0 && <div className="d-rd">{resDrums.map(row)}</div>}
+            {resOther.length > 0 && <div className="d-ro"><div className="lab d-roh">Citi rezervē</div>{resOther.map(row)}</div>}
           </Fold>
         </div>
       </div>

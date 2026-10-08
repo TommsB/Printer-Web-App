@@ -3,9 +3,12 @@ import { api, UNASSIGNED, type Order, type StockLoc, type StoreLocation } from '
 import { invalidate, useApiData } from '../cache'
 import { prepareFiles } from '../files'
 import { missing } from '../lib'
+import { offerUndo } from '../undo'
 import { PendingFiles } from './DefectFiles'
+import { EmptyPlace } from './EmptyPlace'
 import { ConfirmDialog, DestructiveDialog, InfoDialog } from './Dialog'
 import { Stepper } from './Stepper'
+import { CDot } from './ColorDot'
 
 /**
  * The four actions from a toner row's ⋮ menu. Each is its own component that owns its form state,
@@ -28,13 +31,22 @@ interface Common {
 const isInt = (s: string, min: number, max: number) => /^\d+$/.test(s.trim()) && +s >= min && +s <= max
 const REASONS = ['Inventarizācija', 'Atrasts', 'Bojāts / norakstīts', 'Cits']
 
-/** Izlietots: take one cartridge out of the reserve (asks which location when there are several). */
-export function UseDialog({ printerId, printerName, toner: t, onDone, onClose }: Common) {
+/** Izlietots: take one cartridge out of the reserve (asks which location when there are several), and say
+ *  where the empty one goes — the printer's default place for empties is pre-selected. */
+export function UseDialog({ printerId, printerName, toner: t, onDone, onClose, locations, emptiesDefault }: Common & {
+  locations: StoreLocation[]; emptiesDefault?: number | null
+}) {
   const places = t.locations
   const [fromId, setFromId] = useState(places[0]?.location_id ?? 0)
+  const leavesEmpty = (t.kind ?? 'toner') !== 'other' // only toners and drums are counted as empties
+  const [emptyTo, setEmptyTo] = useState(locations.some((l) => l.id === emptiesDefault && l.active) ? emptiesDefault! : 0)
   return (
     <DestructiveDialog title="Atzīmēt kā izlietotu" confirmLabel="Jā, izlietots" disabled={!fromId} onClose={onClose}
-      onConfirm={async () => { await api.useStock(printerId, t.id, fromId, 1); onDone() }}>
+      onConfirm={async () => {
+        const done = await api.useStock(printerId, t.id, fromId, 1, leavesEmpty && emptyTo ? emptyTo : null)
+        offerUndo(`Izlietots: ${t.code} −1 (${printerName})`, [done.movement_id])
+        onDone()
+      }}>
       <p className="dlg-text">Noņemt <b>1 gab. {t.code}</b> no krājuma?<br /><span className="muted">{printerName} · kopā {t.qty} → {t.qty - 1}</span></p>
       {places.length > 1
         ? <label>No kuras vietas
@@ -43,6 +55,7 @@ export function UseDialog({ printerId, printerName, toner: t, onDone, onClose }:
             </select>
           </label>
         : places[0] && <p className="dlg-text muted">No: {places[0].name}</p>}
+      {leavesEmpty && <EmptyPlace value={emptyTo} onChange={setEmptyTo} locations={locations} drum={t.kind === 'drum'} />}
     </DestructiveDialog>
   )
 }
@@ -62,7 +75,7 @@ export function OrderDialog({ printerId, printerName, toner: t, onDone, onClose 
         invalidate('basket') // Krājumi's basket must load fresh (this dialog also opens from Statuss)
         onDone()
       }}>
-      <p className="dlg-text"><i className={`cdot ${t.color ? t.color.toLowerCase() : 'g'}`} /> <b>{t.code}</b> · {printerName}</p>
+      <p className="dlg-text"><CDot color={t.color} kind={t.kind} /> <b>{t.code}</b> · {printerName}</p>
       <p className="dlg-text muted">
         Toneris parādīsies groza daļā „Pielikts papildus” (Krājumi); pasūtīts tas tiek tur.
         {short > 0 && ` Grozā jau ir ×${short}, kas trūkst līdz normai — šis daudzums būs papildus tam.`}
@@ -84,8 +97,8 @@ export interface WarrantyValues { removed_pct: number | null; defect: string; no
  * `onCreate` makes the record; the chosen photos/files are then attached to it here, and `onDone` refreshes
  * whatever is behind the dialog. If only the files fail, the record stays and confirming again retries just them.
  */
-export function WarrantyForm({ code, color, printerName, initialPct, children, onCreate, onDone, onClose }: {
-  code: string; color: string; printerName: string
+export function WarrantyForm({ code, color, kind, printerName, initialPct, children, onCreate, onDone, onClose }: {
+  code: string; color: string; kind?: string; printerName: string
   initialPct?: number | null
   children?: React.ReactNode
   onCreate: (v: WarrantyValues) => Promise<Order>
@@ -114,7 +127,7 @@ export function WarrantyForm({ code, color, printerName, initialPct, children, o
         }
         await onDone()
       }}>
-      <p className="dlg-text"><i className={`cdot ${color ? color.toLowerCase() : 'g'}`} /> <b>{code}</b> · {printerName}</p>
+      <p className="dlg-text"><CDot color={color} kind={kind} /> <b>{code}</b> · {printerName}</p>
       <label>Defekts<input value={defect} onChange={(e) => setDefect(e.target.value)} autoComplete="off" placeholder="piem. Smērē…" /></label>
       <label>Izņemts pie (%, ja zināms)
         <input value={pctText} inputMode="numeric" autoComplete="off" onChange={(e) => setPctText(e.target.value)} placeholder="piem. 60…" />
@@ -137,7 +150,7 @@ export function WarrantyForm({ code, color, printerName, initialPct, children, o
 /** "Atzīmēt kā bojātu" from a toner row's ⋮ menu (the reserve itself is not touched). */
 export function WarrantyDialog({ printerId, printerName, toner: t, onDone, onClose }: Common) {
   return (
-    <WarrantyForm code={t.code} color={t.color} printerName={printerName} onClose={onClose}
+    <WarrantyForm code={t.code} color={t.color} kind={t.kind} printerName={printerName} onClose={onClose}
       onCreate={(v) => api.createWarranty({ printer_id: printerId, toner_id: t.id, ...v })}
       onDone={() => {
         invalidate('defects') // Krājumi's Defekti list must load fresh (this dialog also opens from Statuss)
@@ -247,7 +260,8 @@ export function CorrectDialog({ printerId, printerName, toner: t, onDone, onClos
             </select>
             <button type="button" className="btn small" disabled={!addLoc} onClick={() => {
               const l = active.find((x) => x.id === addLoc)
-              if (l) setCounts([...counts, { location_id: l.id, name: l.name, current: 0, value: '0' }])
+              // Starts at 1: a place is added because something is there (0 would have to be changed every time).
+              if (l) setCounts([...counts, { location_id: l.id, name: l.name, current: 0, value: '1' }])
               setAddLoc(0)
             }}>Pievienot</button>
           </div>

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { UNASSIGNED, type StoreLocation } from '../api'
 import { Icon } from '../icons'
 import { CorrectDialog, LocationDialog, OrderDialog, UseDialog, WarrantyDialog, type TonerRowData } from './TonerDialogs'
+import { DotTile } from './ColorDot'
 
 export type { TonerRowData }
 
@@ -11,6 +12,7 @@ interface Props {
   printerName: string
   toner: TonerRowData
   allLocations: StoreLocation[]
+  emptiesDefault?: number | null // the printer's default place for empty cartridges ("Izlietots" pre-selects it)
   onChange: () => void
 }
 
@@ -18,7 +20,7 @@ interface Props {
 type OpenDialog = 'use' | 'order' | 'location' | 'correct' | 'warranty' | null
 
 /** Toners are the normal case and get no tag; a drum or another consumable is marked, since the colour dot alone can't tell. */
-const KIND_TAG: Record<string, string> = { drum: 'Drums', other: 'Cits' }
+const KIND_TAG: Record<string, string> = { other: 'Cits' } // a drum needs no tag: its colour mark carries a "D"
 
 /** Latvian: 1, 21, 31… lokācija (but 11 lokācijas); everything else lokācijas. */
 const plural = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'lokācija' : 'lokācijas')
@@ -27,7 +29,7 @@ const plural = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'lokācija' : 'l
  * One cartridge of one printer, on a single line: colour · code · where it is · qty/norm · ⋮.
  * The ⋮ menu opens the deliberate actions (each confirms in a dialog and is logged).
  */
-export function TonerRow({ printerId, printerName, toner: t, allLocations, onChange }: Props) {
+export function TonerRow({ printerId, printerName, toner: t, allLocations, emptiesDefault, onChange }: Props) {
   const [dialog, setDialog] = useState<OpenDialog>(null)
   const places = t.locations
   const common = { printerId, printerName, toner: t, onDone: onChange, onClose: () => setDialog(null) }
@@ -42,7 +44,7 @@ export function TonerRow({ printerId, printerName, toner: t, allLocations, onCha
     <div className="trow">
       <div className="t">
         <span className="cd">
-          <span className="dot"><i className={t.color ? t.color.toLowerCase() : 'g'} /></span>
+          <DotTile color={t.color} kind={t.kind} />
           <span className="code">{t.code}</span>
           {t.kind && KIND_TAG[t.kind] && <span className="tag-s">{KIND_TAG[t.kind]}</span>}
           {label && (
@@ -65,7 +67,7 @@ export function TonerRow({ printerId, printerName, toner: t, allLocations, onCha
         </span>
       </div>
 
-      {dialog === 'use' && <UseDialog {...common} />}
+      {dialog === 'use' && <UseDialog {...common} locations={allLocations} emptiesDefault={emptiesDefault} />}
       {dialog === 'order' && <OrderDialog {...common} />}
       {dialog === 'location' && <LocationDialog {...common} locations={allLocations} />}
       {dialog === 'correct' && <CorrectDialog {...common} locations={allLocations} />}

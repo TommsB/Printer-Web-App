@@ -6,6 +6,7 @@ import { Icon } from '../icons'
 import { DEFECT_STATUS, fmtNum } from '../lib'
 import { DestructiveDialog, Dialog } from './Dialog'
 import { FileViewer } from './FileViewer'
+import { CDot } from './ColorDot'
 
 const isImage = (mime: string) => /^image\/(jpeg|png|webp|gif)$/i.test(mime)
 
@@ -80,7 +81,7 @@ export function DefectDialog({ order, onClose, onChange }: { order: Order; onClo
   return (
     <>
     <Dialog.Frame title={`Defekts: ${order.code}`} onClose={onClose} confirmDiscard={false}>
-      <p className="dlg-text"><i className={`cdot ${order.color ? order.color.toLowerCase() : 'g'}`} /> <b>{order.code}</b> · {order.location}</p>
+      <p className="dlg-text"><CDot color={order.color} kind={order.kind} /> <b>{order.code}</b> · {order.location}</p>
       <dl className="ddl">
         <dt>Defekts</dt><dd>{order.defect || '–'}</dd>
         <dt>Izņemts pie</dt><dd>{order.removed_pct == null ? 'nav zināms' : `${order.removed_pct}%`}</dd>
