@@ -8,8 +8,10 @@ import { ConfirmDialog, DestructiveDialog } from '../components/Dialog'
 import { prepareFiles } from '../files'
 import { fmtNum, missing } from '../lib'
 import { ORDER_EMAIL, OrderEmailDialog, WARRANTY_EMAIL, type EmailFlavor, type EmailItem } from '../components/OrderEmailDialog'
+import { ReorderList } from '../components/ReorderList'
 import { matches, SearchBox } from '../components/SearchBox'
 import { Stepper } from '../components/Stepper'
+import { Segmented } from '../components/Toggle'
 import { ActionMenu, TonerRow } from '../components/TonerRow'
 import { TopBar } from '../components/TopBar'
 import { offerUndo } from '../undo'
@@ -145,8 +147,12 @@ type Dlg =
   | { kind: 'cancel'; order: Order }
   | null
 
+type SheetTab = 'basket' | 'orders' | 'defects'
+
 export function StockPage() {
-  const { company } = useApp()
+  // Company filter (desktop; '' = all), the same choice as on Statuss. Remembered when you switch sections.
+  const { companies } = useApp()
+  const [company, setCompany] = useRemembered('filter.company', '')
   // Cached: shows the last copy instantly, refreshes in the background.
   const stock = useApiData<StockRow[]>('stock', api.stock, [])
   const ord = useApiData<Order[]>('orders', () => api.orders('ordered'), [])
@@ -171,6 +177,7 @@ export function StockPage() {
   const [flash, setFlash] = useState<number | null>(null)
   if (wanted !== null && flash !== wanted) { // adjust state while rendering
     setOpenId(wanted)
+    setCompany('')
     setOnlyLow(false)
     setQuery('')
     setFlash(wanted)
@@ -203,6 +210,18 @@ export function StockPage() {
     list.some((r) => matches(query, r.location, r.model, r.code, r.ip)))
   // Opening a card closes the one that was open. Animated on desktop: the cards grow/shrink and glide into place.
   const toggle = (id: number) => withViewTransition(() => setOpenId((cur) => (cur === id ? null : id)))
+
+  // "Kārtot", as on Statuss: the cards turn into a drag-to-reorder list of the printers shown here (cards
+  // closed, filters cleared while sorting). The order is the user's own and is shared with Statuss.
+  const [sorting, setSorting] = useState(false)
+  const startSorting = () => { setOpenId(null); setQuery(''); setOnlyLow(false); setSorting(true) }
+  const sortable = printers.data.filter((p) => byPrinter.has(p.id))
+  const reorder = (next: Printer[]) => {
+    // Optimistic: the new order shows at once.
+    const ids = next.map((p) => p.id)
+    printers.setData((list) => [...next, ...list.filter((p) => !ids.includes(p.id))])
+    api.setOrder(ids).catch(() => printers.reload())
+  }
 
   // The basket ("Grozs"), per printer: what is still missing to reach the norm (after subtracting what is
   // already on order) plus whatever was added by hand ("Pievienot grozam" on a toner) — the two add up.
@@ -244,6 +263,44 @@ export function StockPage() {
     try { await api.setBasketQty(entry.id, entry.qty + step) } finally { await bsk.reload() }
   }
   const orderedTotal = openOrders.reduce((n, o) => n + o.qty, 0)
+  // "Pasūtīts" grouped by printer: each printer's orders together, printers in the order they first appear
+  // in the list (newest order first).
+  const firstAt = new Map<number, number>()
+  openOrders.forEach((o, i) => { if (!firstAt.has(o.printer_id)) firstAt.set(o.printer_id, i) })
+  const orderLines = [...openOrders].sort((a, b) => firstAt.get(a.printer_id)! - firstAt.get(b.printer_id)!) // stable
+
+  // Phones: the basket / orders / defects column is a bottom sheet showing one list at a time.
+  const [sheet, setSheet] = useState(false)
+  const [tab, setTab] = useState<SheetTab>('basket')
+  const shownTab: SheetTab = tab === 'defects' && defects.length === 0 ? 'basket' : tab
+  const sheetTabs: { value: SheetTab; label: string }[] = [
+    { value: 'basket', label: `Grozs · ${needTotal}` },
+    { value: 'orders', label: `Pasūtīts · ${orderedTotal}` },
+    ...(defects.length > 0 ? [{ value: 'defects' as const, label: `Defekti · ${defects.length}` }] : []),
+  ]
+  // Desktop: the column's height goes to CSS (--rail-h), which decides where it sticks (see .srail).
+  const rail = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const el = rail.current
+    if (!el) return
+    const ro = new ResizeObserver(() => el.style.setProperty('--rail-h', `${el.offsetHeight}px`))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  // Phones (CSS): while the sheet is open the page under it doesn't scroll and shows no scrollbar.
+  useEffect(() => {
+    if (!sheet) return
+    const root = document.documentElement
+    root.classList.add('sheet-open')
+    return () => root.classList.remove('sheet-open')
+  }, [sheet])
+  // Esc closes the sheet, unless a dialog opened from it is on top (that one takes the key).
+  useEffect(() => {
+    if (!sheet || dlg) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSheet(false) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [sheet, dlg])
 
   // ✉ on either list: the same e-mail text (one shared template), built from that list's items.
   const emailNeeded = () => setDlg({
@@ -282,18 +339,89 @@ export function StockPage() {
 
   return (
     <>
-      <TopBar title={['Krājumi', 'un rezerve']} />
-      <div className="cols">
-        <div className="left">
-          <div className="big">
-            <div className="lab">Grozā vienības</div>
-            <div className={needTotal > 0 ? 'num hot' : 'num'}>{needTotal}</div>
-            <div className="sub">Trūkst līdz normai + pielikts papildus</div>
+      <TopBar title={['Krājumi', 'un rezerve']}>
+        {/* Phones only (CSS): opens the basket / orders sheet. The number is what is in the basket; the small
+            truck means something is on order (a delivery is on its way). */}
+        <button className="rb bell cart-btn" onClick={() => setSheet(true)} aria-haspopup="dialog" title="Grozs un pasūtījumi"
+          aria-label={`Grozs un pasūtījumi (grozā ${needTotal}, pasūtīts ${orderedTotal})`}>
+          {Icon.cart(22)}
+          {needTotal > 0 && <span className="badge-n">{needTotal > 99 ? '99+' : needTotal}</span>}
+          {orderedTotal > 0 && <span className="cart-btn__truck" aria-hidden="true">{Icon.truck(13)}</span>}
+        </button>
+      </TopBar>
+      {/* Printers on the left; basket, defects and orders in a column on the right. On phones that column is
+          a bottom sheet, opened from the button next to the bell (one list at a time, picked by `tab`). */}
+      <div className="scols">
+        <section className="splist">
+          {sorting
+            ? <div className="splist__tools">
+                <b className="splist__title">Kārtot printerus</b>
+                <button className="btn small primary" onClick={() => setSorting(false)}>Gatavs</button>
+              </div>
+            : <div className="splist__tools">
+                {/* Desktop only (CSS): company, and only the printers with something under the norm. */}
+                <div className="splist__filters">
+                  <Segmented label="Uzņēmums" value={company} onChange={setCompany}
+                    options={[{ value: '', label: 'Visi' }, ...companies.map((c) => ({ value: c, label: c }))]} />
+                  <label className="check" title="Rādīt tikai printerus, kuriem kāds toneris ir zem normas">
+                    <input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} /> Tikai zemie
+                  </label>
+                </div>
+                {/* Same pair as on Statuss. An opened search field takes the free width, pushing "Kārtot" to its left. */}
+                <div className="splist__acts">
+                  <button className="icon-btn" onClick={startSorting} aria-label="Kārtot printerus" title="Kārtot (pielāgota secība)">{Icon.sort(18)}</button>
+                  <SearchBox value={query} onChange={setQuery} placeholder="Meklēt pēc printera, modeļa vai toneru koda…" />
+                </div>
+              </div>}
+          {sorting && <>
+            <p className="mhint">Velciet aiz ≡, lai mainītu secību. Tā tiek saglabāta jums un tiek izmantota arī Statusā.</p>
+            <div className="pane splist__sort">
+              <ReorderList items={sortable} label={(p) => p.location} onReorder={reorder}
+                render={(p) => <>
+                  <span className="ic">{Icon.printer(18)}</span>
+                  <span className="rrow__txt"><b>{p.location}</b><small>{p.model}</small></span>
+                </>} />
+            </div>
+          </>}
+          <div className="plist" hidden={sorting}>
+            {groups.map((list) => {
+              const pid = list[0].printer_id
+              const qty = list.reduce((n, r) => n + r.qty, 0)
+              const norm = list.reduce((n, r) => n + r.optimal_qty, 0)
+              const anyLow = list.some((r) => r.low)
+              const isOpen = openId === pid || query !== '' // searching opens the matches
+              return (
+              <article key={pid} id={`stock-${pid}`} className={`grp${isOpen ? ' open' : ''}${flash === pid ? ' flash' : ''}`} style={vtName(`stock-${pid}`, isOpen ? 'card-open' : 'card')}>
+                <button className="gh-btn" aria-expanded={isOpen} onClick={() => toggle(pid)}>
+                  <span className="gh-t">
+                    {/* A printer switched off in Pārvaldība keeps its reserve here; the tag tells it apart. */}
+                    <b>{list[0].location}{!list[0].active && <span className="tag-s gh-off">Neaktīvs</span>}</b>
+                    <span>{list[0].model}</span>
+                  </span>
+                  <span className={anyLow ? 'tot hot' : 'tot'} title={anyLow ? 'Kāds toneris ir zem normas' : 'Krājumā / norma'}>{qty}<small>/{norm}</small></span>
+                  <span className={isOpen ? 'fold-ic open' : 'fold-ic'}>{Icon.chevron(18)}</span>
+                </button>
+                {isOpen && list.map((r) => (
+                  <TonerRow key={r.toner_id} printerId={r.printer_id} printerName={r.location} allLocations={locations.data} emptiesDefault={r.empties_location_id}
+                    toner={{ id: r.toner_id, code: r.code, color: r.color, kind: r.kind, qty: r.qty, optimal_qty: r.optimal_qty, ordered: r.ordered, ordered_extra: r.ordered_extra, locations: r.locations }}
+                    onChange={load} />
+                ))}
+              </article>
+              )
+            })}
+            {groups.length === 0 && <p className="muted">{query ? 'Nekas netika atrasts' : 'Nav ierakstu'}</p>}
+          </div>
+        </section>
+
+        <aside ref={rail} className={sheet ? 'left srail open' : 'left srail'} data-tab={shownTab} aria-label="Grozs un pasūtījumi">
+          <div className="srail__head">
+            <Segmented label="Saraksts" value={shownTab} onChange={setTab} options={sheetTabs} />
+            <button className="icon-btn" onClick={() => setSheet(false)} aria-label="Aizvērt">{Icon.close(18)}</button>
           </div>
 
           {/* The basket: nothing here is ordered yet. "Pasūtīt" moves a printer's cartridges of that part to
               "Pasūtīts". Two parts, each with its own heading and count. */}
-          <section className="pane">
+          <section className="pane t-basket">
             <div className="rh">
               <h3 className="h-ic">{Icon.cart(20)}Grozs</h3>
               <div className="rh-tools">
@@ -303,50 +431,38 @@ export function StockPage() {
             </div>
             {suggest.size === 0 && <p className="muted">Grozs ir tukšs: nekas netrūkst līdz normai un nekas nav pielikts.</p>}
 
-            {normPart.length > 0 && (
-              <div className="bpart">
-                <div className="bpart__head" title="Lietotne šos ieliek pati: norma mīnus krājums mīnus jau pasūtītais">
-                  <span>Trūkst līdz normai</span><b className="bpart__n hot">{normTotal}</b>
-                </div>
-                {normPart.map((p) => (
-                  <div key={p.id} className="ord">
-                    <span className="a"><b>{p.loc}</b>
-                      <small className="needs">{p.items.map((i) => <span key={i.toner_id}><Dot color={i.color} kind={i.kind} />{i.code} ×{i.qty}</span>)}</small></span>
-                    <button className="btn small" onClick={() => setDlg({ kind: 'suggest', loc: p.loc, items: p.items, extra: false })}>Pasūtīt</button>
-                  </div>
-                ))}
+            {/* Two parts under small headings, one line per toner: code, amount, the printer it is for; a rule
+                where the printer changes. "Pasūtīt šos" orders that part; the button below, the whole basket. */}
+            {normPart.length > 0 && <>
+              <div className="bsec hot" title="Lietotne šos ieliek pati: norma mīnus krājums mīnus jau pasūtītais">
+                <span>Trūkst līdz normai · {normTotal}</span>
+                <button className="bsec__go" onClick={() => setDlg({ kind: 'suggest', loc: 'Trūkst līdz normai', items: normPart.flatMap((p) => p.items), extra: false })}>Pasūtīt šos</button>
               </div>
-            )}
+              {normPart.map((p, pi) => p.items.map((i, n) => (
+                <div key={`${p.id}-${i.toner_id}`} className={n === 0 && pi > 0 ? 'bline sep' : 'bline'}>
+                  <Dot color={i.color} kind={i.kind} /><b>{i.code}</b><span className="bqty">×{i.qty}</span><small>{p.loc}</small>
+                </div>
+              )))}
+            </>}
 
-            {extraPart.length > 0 && (
-              <div className="bpart">
-                <div className="bpart__head" title="Pielikts ar „Pievienot grozam” pie tonera; papildus tam, kas trūkst līdz normai">
-                  <span>Pielikts papildus</span><b className="bpart__n">{addedTotal}</b>
-                </div>
-                {extraPart.map((p) => (
-                  <div key={p.id} className="ord">
-                    <span className="a"><b>{p.loc}</b>
-                      {/* One line per toner: code on the left; on the right a small stepper (the app's usual round
-                          buttons) for how many were added by hand, then × to take it out. − at 1 asks, like ×. */}
-                      <small className="needs needs--lines">{p.items.map((i) => (
-                        <span key={i.toner_id}>
-                          <span className="needs__code"><Dot color={i.color} kind={i.kind} />{i.code}</span>
-                          <span className="qstep">
-                            <button onClick={() => stepExtra(p.loc, i, -1)} aria-label={`Mazāk: ${i.code}`} title="Mazāk">{Icon.minus(13)}</button>
-                            <b aria-label={`Daudzums: ${i.qty}`}>{i.qty}</b>
-                            <button onClick={() => stepExtra(p.loc, i, 1)} disabled={i.qty >= 1000} aria-label={`Vairāk: ${i.code}`} title="Vairāk">{Icon.plus(13)}</button>
-                          </span>
-                          <button className="needs__x" onClick={() => setDlg({ kind: 'unbasket', loc: p.loc, item: i })}
-                            title="Izņemt no groza" aria-label={`Izņemt no groza ${i.code} ×${i.qty}`}>{Icon.close(13)}</button>
-                        </span>
-                      ))}</small></span>
-                    <button className="btn small" onClick={() => setDlg({ kind: 'suggest', loc: p.loc, items: p.items, extra: true })}>Pasūtīt</button>
-                  </div>
-                ))}
+            {extraPart.length > 0 && <>
+              <div className="bsec" title="Pielikts ar „Pievienot grozam” pie tonera; papildus tam, kas trūkst līdz normai">
+                <span>Pielikts papildus · {addedTotal}</span>
+                <button className="bsec__go" onClick={() => setDlg({ kind: 'suggest', loc: 'Pielikts papildus', items: extraPart.flatMap((p) => p.items), extra: true })}>Pasūtīt šos</button>
               </div>
-            )}
-            {/* The whole basket at once (with a single line in it, that line's own "Pasūtīt" does the same). */}
-            {normPart.length + extraPart.length > 1 && (
+              {extraPart.map((p, pi) => p.items.map((i, n) => (
+                <div key={`${p.id}-${i.toner_id}`} className={n === 0 && pi > 0 ? 'bline sep' : 'bline'}>
+                  <Dot color={i.color} kind={i.kind} /><b>{i.code}</b><small>{p.loc}</small>
+                  {/* How many were added by hand. − at 1 takes the toner out of the basket (asks first). */}
+                  <span className="bstep">
+                    <button onClick={() => stepExtra(p.loc, i, -1)} aria-label={i.qty > 1 ? `Mazāk: ${i.code}` : `Izņemt no groza ${i.code}`} title={i.qty > 1 ? 'Mazāk' : 'Izņemt no groza'}>{Icon.minus(13)}</button>
+                    <b aria-label={`Daudzums: ${i.qty}`}>{i.qty}</b>
+                    <button onClick={() => stepExtra(p.loc, i, 1)} disabled={i.qty >= 1000} aria-label={`Vairāk: ${i.code}`} title="Vairāk">{Icon.plus(13)}</button>
+                  </span>
+                </div>
+              )))}
+            </>}
+            {suggest.size > 0 && (
               <button className="btn primary recv-all-btn" onClick={() => setDlg({ kind: 'orderAll' })}>Pasūtīt visus ({needTotal} gab.)</button>
             )}
           </section>
@@ -354,7 +470,7 @@ export function StockPage() {
           {/* Defective cartridges waiting to be handed over for warranty. Not "on order" yet: "Nodots garantijā"
               moves one to "Pasūtīts" (tagged Garantija). Only shown when there is something on it. */}
           {defects.length > 0 && (
-            <section className="pane">
+            <section className="pane t-defects">
               <div className="rh">
                 <h3>Defekti</h3>
                 <div className="rh-tools">
@@ -381,7 +497,7 @@ export function StockPage() {
             </section>
           )}
 
-          <section className="pane">
+          <section className="pane t-orders">
             <div className="rh">
               <h3 className="h-ic">{Icon.truck(20)}Pasūtīts</h3>
               <div className="rh-tools">
@@ -390,15 +506,15 @@ export function StockPage() {
               </div>
             </div>
             {openOrders.length === 0 && <p className="muted">Pašlaik nekas nav pasūtīts.</p>}
-            {openOrders.map((o) => (
-              <div key={o.id} className="ord">
+            {orderLines.map((o, i) => (
+              // One compact line: code, amount, the printer it is for. When and who ordered it is in Vēsture →
+              // Pasūtījumi (and in the line's tooltip, with the note). A printer's lines follow each other
+              // with no rule between them.
+              <div key={o.id} className={i > 0 && orderLines[i - 1].printer_id === o.printer_id ? 'ord ord--line same' : 'ord ord--line'}
+                title={[`${fmtTime(o.created_ts)} · ${o.created_by}`, o.warranty ? claimNote(o) : '', o.note].filter(Boolean).join(' · ')}>
                 <span className="a">
                   <b><Dot color={o.color} kind={o.kind} /> {o.code} <span className="pv solid sm">×{o.qty}</span>{!!o.warranty && <span className="tag-w">Garantija</span>}{filesMark(o)}</b>
-                  <small>
-                    {o.location} · {fmtTime(o.created_ts)} · {o.created_by}
-                    {!!o.warranty && ` · ${claimNote(o)}`}
-                    {o.note && ` · ${o.note}`}
-                  </small>
+                  <small>{o.location}</small>
                 </span>
                 {/* One ⋮ per order (like the toner rows) instead of two buttons on every row.
                     A warranty claim: Saņemt = the replacement arrived, Noraidīts = the claim was rejected. */}
@@ -417,46 +533,11 @@ export function StockPage() {
               <button className="btn primary recv-all-btn" onClick={() => setDlg({ kind: 'receiveAll' })}>Saņemt visus ({orderedTotal} gab.)</button>
             )}
           </section>
-        </div>
-
-        <section className="pane">
-          <div className="rh">
-            <h3>Pēc printera</h3>
-            <div className="rh-tools">
-              <label className="check"><input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} /> Tikai zemie</label>
-              <SearchBox value={query} onChange={setQuery} placeholder="Meklēt pēc printera, modeļa vai toneru koda…" />
-            </div>
-          </div>
-          <div className="plist">
-            {groups.map((list) => {
-              const pid = list[0].printer_id
-              const qty = list.reduce((n, r) => n + r.qty, 0)
-              const norm = list.reduce((n, r) => n + r.optimal_qty, 0)
-              const anyLow = list.some((r) => r.low)
-              const isOpen = openId === pid || query !== '' // searching opens the matches
-              return (
-              <article key={pid} id={`stock-${pid}`} className={`grp${isOpen ? ' open' : ''}${flash === pid ? ' flash' : ''}`} style={vtName(`stock-${pid}`, 'card')}>
-                <button className="gh-btn" aria-expanded={isOpen} onClick={() => toggle(pid)}>
-                  <span className="gh-t">
-                    {/* A printer switched off in Pārvaldība keeps its reserve here; the tag tells it apart. */}
-                    <b>{list[0].location}{!list[0].active && <span className="tag-s gh-off">Neaktīvs</span>}</b>
-                    <span>{list[0].model}</span>
-                  </span>
-                  <span className={anyLow ? 'tot hot' : 'tot'} title={anyLow ? 'Kāds toneris ir zem normas' : 'Krājumā / norma'}>{qty}<small>/{norm}</small></span>
-                  <span className={isOpen ? 'fold-ic open' : 'fold-ic'}>{Icon.chevron(18)}</span>
-                </button>
-                {isOpen && list.map((r) => (
-                  <TonerRow key={r.toner_id} printerId={r.printer_id} printerName={r.location} allLocations={locations.data} emptiesDefault={r.empties_location_id}
-                    toner={{ id: r.toner_id, code: r.code, color: r.color, kind: r.kind, qty: r.qty, optimal_qty: r.optimal_qty, ordered: r.ordered, ordered_extra: r.ordered_extra, locations: r.locations }}
-                    onChange={load} />
-                ))}
-              </article>
-              )
-            })}
-            {groups.length === 0 && <p className="muted">{query ? 'Nekas netika atrasts' : 'Nav ierakstu'}</p>}
-          </div>
-        </section>
+        </aside>
       </div>
+
+      {/* Phones only (CSS): the shade behind the open sheet. */}
+      {sheet && <div className="srail__shade" onClick={() => setSheet(false)} />}
 
       {dlg?.kind === 'send' && (
         <ConfirmDialog title="Nodot garantijā" confirmLabel={dlg.orders.length > 1 ? `Nodot (${dlg.orders.length})` : 'Nodot'} onClose={() => setDlg(null)}

@@ -2,12 +2,15 @@ import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'rea
 import { useSearchParams } from 'react-router-dom'
 import { api, fmtClock, fmtTime, type Order, type Printer, type StoreLocation, type Supply, type UsageMonth } from '../api'
 import { useApiData } from '../cache'
+import { AnalyticsSheet } from '../components/AnalyticsSheet'
 import { CompactBar } from '../components/CompactBar'
 import { DefectDialog } from '../components/DefectFiles'
 import { ReorderList } from '../components/ReorderList'
 import { matches, SearchBox } from '../components/SearchBox'
+import { Segmented } from '../components/Toggle'
 import { TonerRow } from '../components/TonerRow'
 import { TopBar } from '../components/TopBar'
+import { useRemembered } from '../uiMemory'
 import { useApp } from '../ctx'
 import { Icon } from '../icons'
 import { attentionReasons, DEFECT_STATUS, fmtDate, fmtDaysLeft, fmtHours, fmtNum, isImportantAlert, linkedItem, LOW_PCT, printerState, SOON_DAYS, splitSupplies, type Col } from '../lib'
@@ -21,7 +24,6 @@ function isToday(ts: string): boolean {
 }
 
 const SPIN_MS = 800 // one turn of the refresh icon (matches .spin in index.css)
-const barClass =(col: Col, pct: number | null) => (pct !== null && pct < LOW_PCT ? 'o' : col)
 
 function Bars({ p, emptyText }: { p: Printer; emptyText: string }) {
   const { toners } = splitSupplies(p)
@@ -30,7 +32,8 @@ function Bars({ p, emptyText }: { p: Printer; emptyText: string }) {
     <span className="bars" role="img" aria-label={toners.map((t) => `${t.name} ${t.pct ?? '–'}%`).join(', ')}>
       {toners.map((t) => (
         <span key={t.col} className="tb">
-          <i className="bar"><b className={barClass(t.col, t.pct)} style={{ width: `${t.pct ?? 0}%` }} /></i>
+          {/* The bar keeps the toner's own colour even when low (so you can tell which is which); only the number turns orange. */}
+          <i className="bar"><b className={t.col} style={{ width: `${t.pct ?? 0}%` }} /></i>
           <small className={t.pct !== null && t.pct < LOW_PCT ? 'hot' : ''}>{t.pct === null ? '–' : `${t.pct}%`}</small>
         </span>
       ))}
@@ -58,7 +61,9 @@ function AttentionDot({ p }: { p: Printer }) {
 }
 
 export function PrintersPage() {
-  const { company } = useApp()
+  // Company filter (desktop; '' = all), the same choice as on Krājumi. Remembered when you switch sections.
+  const { companies } = useApp()
+  const [company, setCompany] = useRemembered('filter.company', '')
   // Cached: shows the last copy instantly, refreshes in the background.
   const { data: printers, setData: setPrinters, loading, reload: load } = useApiData<Printer[]>('printers', api.printers, [])
   const locs = useApiData<StoreLocation[]>('locations', api.locations, [])
@@ -120,6 +125,7 @@ export function PrintersPage() {
   }
   // "Kārtot": the list turns into a drag-to-reorder list (details closed, search cleared while sorting).
   const [sorting, setSorting] = useState(false)
+  const [analytics, setAnalytics] = useState(false)
   const startSorting = () => { select(null); setQuery(''); setSorting(true) }
   const reorder = (next: Printer[]) => {
     // Optimistic: the new order shows at once; saved per user (Krājumi follows it too).
@@ -129,31 +135,48 @@ export function PrintersPage() {
   }
 
   const refreshBtn = (
-    <button className={refreshing === 'all' ? 'rb spin' : 'rb'} onClick={() => refresh()} disabled={busy} aria-busy={refreshing === 'all'} aria-label="Atjaunot SNMP" title="Atjaunot SNMP">{Icon.refresh()}</button>
+    <button className={refreshing === 'all' ? 'rb ref-btn--top spin' : 'rb ref-btn--top'} onClick={() => refresh()} disabled={busy} aria-busy={refreshing === 'all'} aria-label="Atjaunot SNMP" title="Atjaunot SNMP">{Icon.refresh()}</button>
   )
 
   return (
     <>
-      <TopBar title={['Printeru', 'statuss']}>{refreshBtn}</TopBar>
+      {/* "Analītika" and "Atjaunot SNMP" are both round buttons at the top on desktop. On phones four don't
+          fit beside the title: Analītika stays at the top and the refresh moves to the left of the tools row
+          (CSS shows one of the two refresh buttons). */}
+      <TopBar title={['Printeru', 'statuss']}>
+        <button className="rb" onClick={() => setAnalytics(true)} aria-haspopup="dialog" aria-label="Analītika" title="Analītika">{Icon.chart(22)}</button>
+        {refreshBtn}
+      </TopBar>
       <div className={open ? 'stage open' : 'stage'}>
-        <section className="pane list-pane" style={vtName('list-pane', 'pane')}>
-          <div className="rh">
-            <h3>{sorting ? 'Kārtot printerus' : 'Visi printeri'}</h3>
-            {sorting
-              ? <button className="btn small primary" onClick={() => setSorting(false)}>Gatavs</button>
-              : <div className="rh-tools">
+        {/* The printers are white cards straight on the page (as on Krājumi), under a row of tools. */}
+        <section className="list-pane" style={vtName('list-pane', 'list')}>
+          {sorting
+            ? <div className="splist__tools">
+                <b className="splist__title">Kārtot printerus</b>
+                <button className="btn small primary" onClick={() => setSorting(false)}>Gatavs</button>
+              </div>
+            : <div className="splist__tools">
+                {/* Desktop only (CSS): the company filter, shared with Krājumi. */}
+                <div className="splist__filters">
+                  <Segmented label="Uzņēmums" value={company} onChange={setCompany}
+                    options={[{ value: '', label: 'Visi' }, ...companies.map((c) => ({ value: c, label: c }))]} />
+                </div>
+                <div className="splist__acts">
+                  <button className={refreshing === 'all' ? 'icon-btn ref-btn--tools spin' : 'icon-btn ref-btn--tools'} onClick={() => refresh()} disabled={busy} aria-busy={refreshing === 'all'} aria-label="Atjaunot SNMP" title="Atjaunot SNMP">{Icon.refresh(18)}</button>
                   <button className="icon-btn" onClick={startSorting} aria-label="Kārtot printerus" title="Kārtot (pielāgota secība)">{Icon.sort(18)}</button>
                   <SearchBox value={query} onChange={setQuery} placeholder="Meklēt pēc vietas, modeļa vai IP…" />
-                </div>}
-          </div>
+                </div>
+              </div>}
           {sorting && <p className="mhint">Velciet aiz ≡, lai mainītu secību. Tā tiek saglabāta jums un tiek izmantota arī Krājumos.</p>}
           {loading && <p className="muted">Ielādē…</p>}
           {sorting
-            ? <ReorderList items={inScope} label={(p) => p.location} onReorder={reorder}
-                render={(p) => <>
-                  <span className="ic">{Icon.printer(18)}</span>
-                  <span className="rrow__txt"><b>{p.location}</b><small>{[p.model, p.ip].filter(Boolean).join(' · ')}</small></span>
-                </>} />
+            ? <div className="pane splist__sort">
+                <ReorderList items={inScope} label={(p) => p.location} onReorder={reorder}
+                  render={(p) => <>
+                    <span className="ic">{Icon.printer(18)}</span>
+                    <span className="rrow__txt"><b>{p.location}</b><small>{[p.model, p.ip].filter(Boolean).join(' · ')}</small></span>
+                  </>} />
+              </div>
             : <div className="list">
             {rows.map((p) => {
               const st = printerState(p)
@@ -179,6 +202,7 @@ export function PrintersPage() {
         </section>
 
         {/* inert while closed: hidden from screen readers and its buttons can't be tabbed to. */}
+        {analytics && <AnalyticsSheet printers={inScope} onClose={() => setAnalytics(false)} />}
         <section ref={detailPane} className="pane detail-pane" inert={!open}>
           {shown && <Detail key={shown.id} p={shown} open={open} busy={busy} spinning={refreshing === shown.id} onRefresh={() => refresh(shown.id)} onClose={() => select(null)} onChange={load} allLocations={locs.data} />}
         </section>
@@ -487,7 +511,7 @@ function DetailMain({ p, busy, spinning, onRefresh, onClose, onChange, allLocati
                     title={`Prognoze pēc pēdējo dienu patēriņa: pietiks apmēram ${t.days} d.`}>{fmtDaysLeft(t.days)}</small>
                 )}
               </span>
-              <span className="tr"><i className={barClass(t.col, t.pct)} style={{ width: `${t.pct ?? 0}%` }} /></span>
+              <span className="tr"><i className={t.col} style={{ width: `${t.pct ?? 0}%` }} /></span>
               <span className={t.pct !== null && t.pct < LOW_PCT ? 'pv hot' : 'pv'}>{t.pct === null ? '–' : `${t.pct}%`}</span>
             </div>
           ))}
@@ -504,7 +528,7 @@ function DetailMain({ p, busy, spinning, onRefresh, onClose, onChange, allLocati
                     title={`Prognoze pēc pēdējo dienu nolietojuma: pietiks apmēram ${d.days} d.`}>{fmtDaysLeft(d.days)}</small>
                 )}
               </span>
-              <span className="tr"><i className={d.pct !== null && d.pct < LOW_PCT ? 'o' : d.col || 'g'} style={{ width: `${d.pct ?? 0}%` }} /></span>
+              <span className="tr"><i className={d.col || 'g'} style={{ width: `${d.pct ?? 0}%` }} /></span>
               <span className={d.pct !== null && d.pct < LOW_PCT ? 'pv hot' : 'pv'}>{d.pct === null ? '–' : `${d.pct}%`}</span>
             </div>
           ))}</div>}

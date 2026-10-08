@@ -35,7 +35,7 @@ export function withViewTransition(update: () => void, kind: 'state' | 'tab' | '
  * `shape` = its corner radius class (index.css): the moving snapshot is clipped to its current size with those
  * corners, so a growing/shrinking element reveals/hides content instead of showing its end state at once.
  */
-export const vtName = (name: string, shape?: 'pane' | 'row' | 'card' | 'rv'): React.CSSProperties =>
+export const vtName = (name: string, shape?: 'pane' | 'list' | 'row' | 'card' | 'card-open' | 'rv'): React.CSSProperties =>
   ({ viewTransitionName: name, ...(shape && { viewTransitionClass: shape }) }) as React.CSSProperties
 
 /** onClick for the section tabs (top nav + phone bottom bar): a short cross-fade between sections. */

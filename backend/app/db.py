@@ -47,6 +47,16 @@ CREATE TABLE IF NOT EXISTS page_counts (
     page_count INTEGER NOT NULL,
     PRIMARY KEY (printer_id, day)
 );
+-- Every supply's level at the end of each day, kept for good like page_counts: what the "Analītika" charts
+-- are drawn from (printers.py → analytics), also further back than the readings themselves are kept.
+CREATE TABLE IF NOT EXISTS supply_days (
+    printer_id INTEGER NOT NULL REFERENCES printers(id) ON DELETE CASCADE,
+    day TEXT NOT NULL,  -- YYYY-MM-DD, local
+    idx TEXT NOT NULL,
+    description TEXT NOT NULL,
+    pct INTEGER NOT NULL,
+    PRIMARY KEY (printer_id, day, idx, description)
+);
 -- Push notifications (push.py): one row per browser/phone that turned them on;
 -- app_kv holds server-wide values (the VAPID key pair); push_state remembers which problems were already
 -- announced, so a printer that stays offline is reported once, not at every poll.
@@ -403,6 +413,14 @@ def init_db() -> None:
                 " SELECT printer_id, substr(ts, 1, 10), page_count FROM snmp_snapshots WHERE id IN ("
                 "  SELECT MAX(id) FROM snmp_snapshots WHERE reachable = 1 AND page_count IS NOT NULL"
                 "  GROUP BY printer_id, substr(ts, 1, 10))")
+
+        # Same for supply_days: the levels of the days whose readings are still kept.
+        if not conn.execute("SELECT 1 FROM supply_days LIMIT 1").fetchone():
+            conn.execute(
+                "INSERT OR IGNORE INTO supply_days (printer_id, day, idx, description, pct)"
+                " SELECT s.printer_id, substr(s.ts, 1, 10), u.idx, u.description, u.pct FROM snmp_snapshots s"
+                " JOIN snmp_supplies u ON u.snapshot_id = s.id WHERE u.pct IS NOT NULL AND s.id IN ("
+                "  SELECT MAX(id) FROM snmp_snapshots WHERE reachable = 1 GROUP BY printer_id, substr(ts, 1, 10))")
 
         if conn.execute("SELECT COUNT(*) FROM locations").fetchone()[0] == 0:
             conn.executemany("INSERT INTO locations (name, sort) VALUES (?, ?)",

@@ -41,6 +41,8 @@ export interface Printer {
   snapshot: Snapshot | null; toners: PrinterToner[]
 }
 /** One month of a printer's use (newest first from the API). */
+/** The chosen period (7, 30 or 90 days) for the "Analītika" charts: pages printed per day, and each reported supply's level at the end of each day. */
+export interface Analytics { days: string[]; pages: (number | null)[]; supplies: { idx: string; description: string; pct: (number | null)[] }[] }
 export interface UsageMonth {
   month: string // "2026-10"
   pages: number | null // null = no page counter readings that month (e.g. a printer that isn't on the network)
@@ -190,6 +192,7 @@ export const api = {
   printer: (id: number) => req<Printer>('GET', `/api/printers/${id}`),
   refresh: () => req<{ polled: number }>('POST', '/api/printers/refresh'),
   printerUsage: (id: number) => req<UsageMonth[]>('GET', `/api/printers/${id}/usage`),
+  printerAnalytics: (id: number, days: number) => req<Analytics>('GET', `/api/printers/${id}/analytics?days=${days}`),
   refreshOne: (id: number) => req<{ polled: number }>('POST', `/api/printers/${id}/refresh`),
   createPrinter: (b: PrinterInput) => req<Printer>('POST', '/api/printers', b),
   updatePrinter: (id: number, b: PrinterInput) => req<Printer>('PUT', `/api/printers/${id}`, b),

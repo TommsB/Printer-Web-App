@@ -14,6 +14,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="theme-color" content="#F1F1ED" />
     <meta name="format-detection" content="telephone=no" />
+    <!-- The chosen colour theme (Profils → Izskats, see src/theme.ts) goes on before the first paint. -->
+    <script>
+      try {
+        var t = localStorage.getItem('theme'), bg = { dark: '#26282C', blue: '#EEF2F7', green: '#EDF1EC' }[t]
+        if (bg) { document.documentElement.dataset.theme = t; document.querySelector('meta[name="theme-color"]').content = bg }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

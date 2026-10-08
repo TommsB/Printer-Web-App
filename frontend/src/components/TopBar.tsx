@@ -4,6 +4,7 @@ import { useApp } from '../ctx'
 import { useNavCounts } from '../navCounts'
 import { Icon } from '../icons'
 import { ROLE_LV } from '../lib'
+import { THEMES, useTheme } from '../theme'
 import { useTabClick } from '../viewTransition'
 import { CompactBar } from './CompactBar'
 import { Dialog } from './Dialog'
@@ -27,6 +28,7 @@ export function TopBar({ title, children, sticky }: { title: [string, string]; c
   const tabClick = useTabClick()
   const [heading, setHeading] = useState<HTMLHeadingElement | null>(null)
   const [profile, setProfile] = useState(false)
+  const [theme, setTheme] = useTheme()
 
   return (
     <header className="top">
@@ -56,6 +58,16 @@ export function TopBar({ title, children, sticky }: { title: [string, string]; c
           <div className="profile">
             <span className="profile__ic">{Icon.user(24)}</span>
             <span className="profile__txt"><b>{user}</b><span>{ROLE_LV[role]}</span></span>
+          </div>
+          {/* Izskats: the colour theme, kept on this device. Each button previews its page, card and accent. */}
+          <p className="profile__lab" id="themes-lab">Izskats</p>
+          <div className="themes" role="radiogroup" aria-labelledby="themes-lab">
+            {THEMES.map((t) => (
+              <button key={t.id} type="button" role="radio" aria-checked={theme === t.id} className={theme === t.id ? 'on' : ''} onClick={() => setTheme(t.id)}>
+                <span className="themes__sw" style={{ background: t.bg }}><i style={{ background: t.card }} /><b style={{ background: t.mark }} /></span>
+                {t.label}
+              </button>
+            ))}
           </div>
           <PushSettings />
           <Dialog.Footer>

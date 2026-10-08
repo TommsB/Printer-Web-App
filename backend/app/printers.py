@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import datetime, timedelta
 from ipaddress import IPv4Address
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -194,6 +195,47 @@ def usage(printer_id: int, conn: sqlite3.Connection = Depends(db_dep)) -> list[d
             " GROUP BY month, t.id ORDER BY t.code", (printer_id,)):
         month(r["month"])["defects"].append({"code": r["code"], "color": r["color"], "kind": r["kind"], "qty": r["qty"]})
     return sorted(months.values(), key=lambda m: m["month"], reverse=True)[:USAGE_MONTHS]
+
+
+ANALYTICS_PERIODS = (7, 30, 90)  # the periods the "Analītika" sheet offers
+
+
+@router.get("/{printer_id}/analytics")
+def analytics(printer_id: int, days: int = 30, conn: sqlite3.Connection = Depends(db_dep)) -> dict:
+    """The last `days` days (7, 30 or 90), day by day, for the "Analītika" charts.
+
+    `pages`: printed that day, from the daily page counter (a day with no reading counts 0 and its pages land
+    on the next day that has one; None before the very first reading; a counter that went down adds nothing).
+    `supplies`: every supply the printer reported, with its level (pct) at the end of each day, None where
+    there was no reading (from the daily supply_days, kept for good). What is a toner, and how much of it
+    went, is worked out in the UI, which already knows how to tell the supplies apart.
+    """
+    if days not in ANALYTICS_PERIODS:
+        raise HTTPException(422, "Periods var būt 7, 30 vai 90 dienas")
+    today = datetime.now().date()
+    days = [(today - timedelta(days=i)).isoformat() for i in range(days - 1, -1, -1)]
+
+    counts = {r["day"]: r["page_count"] for r in conn.execute(
+        "SELECT day, page_count FROM page_counts WHERE printer_id = ? AND day >= ?", (printer_id, days[0]))}
+    before = conn.execute("SELECT page_count FROM page_counts WHERE printer_id = ? AND day < ? ORDER BY day DESC LIMIT 1",
+                          (printer_id, days[0])).fetchone()
+    prev = before["page_count"] if before else None
+    pages: list[int | None] = []
+    for d in days:
+        cur = counts.get(d)
+        if cur is None:
+            pages.append(None if prev is None else 0)
+            continue
+        pages.append(None if prev is None else max(0, cur - prev))
+        prev = cur
+
+    series: dict[tuple[str, str], dict[str, int]] = {}
+    for r in conn.execute("SELECT day, idx, description, pct FROM supply_days WHERE printer_id = ? AND day >= ? ORDER BY day",
+                          (printer_id, days[0])):
+        series.setdefault((r["idx"], r["description"]), {})[r["day"]] = r["pct"]
+    supplies = [{"idx": idx, "description": desc, "pct": [by_day.get(d) for d in days]}
+                for (idx, desc), by_day in series.items()]
+    return {"days": days, "pages": pages, "supplies": supplies}
 
 
 @router.post("/{printer_id}/refresh")

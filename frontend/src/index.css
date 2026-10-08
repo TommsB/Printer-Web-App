@@ -3,11 +3,39 @@
   --line: #E8E8E3; --line2: #EFEFEA; --tile: #F2F2EE; --pillbg: #E6E6E0; --hover: #FAFAF8; --sel: #F4F4F0;
   --accent: #F07A22; --hot: #E0640F; --bad: #C8321E; --alert-bg: #FDF0E4; --alert-ink: #9A4208;
   --k: #33332F; --c: #2AA7D8; --m: #D9488E; --y: #F2C230; --g: #A3A39B; --o: #F07A22;
+  /* Derived roles (themes below change these; the look of the light theme is unchanged). */
+  --on-ink: #fff; --ink-hover: #4A4A45; --primary: var(--ink); --on-primary: var(--on-ink); --outline: var(--ink); --badge: var(--accent); --on-badge: #fff; --accent-line: var(--accent);
+  --nav: var(--ink); --nav-fg: #B8B8B0; --nav-pill: #fff; --nav-pill-fg: var(--ink); --seg-on: #fff; --track: #EBEBE6; --line3: #C9C9C2;
+  --ok: #2E7D4F; --ok-ink: #24603D; --ok-bg: #E7F3EB; --warn-ink: #9A6B08; --warn-bg: #FBF3DC; --info-ink: #3C5A99; --info-bg: #EAEFF8; --bad-bg: #FBE9E6;
   --ease: cubic-bezier(.2, .8, .2, 1);
   font-family: 'Geist Variable', 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: var(--ink);
   color-scheme: light;
 }
+/* ---------- Themes (Profils → Izskats; see theme.ts). "light" is the :root above. ---------- */
+:root[data-theme="dark"] {
+  --bg: #26282C; --card: #303338; --ink: #F2F2EF; --muted: #B4B6BA; --faint: #8C8F94;
+  --line: #44484E; --line2: #3B3E44; --tile: #3B3E44; --pillbg: #3A3D43; --hover: #363940; --sel: #3A3D43;
+  --hot: #FF9A4D; --bad: #F0705C; --alert-bg: #45331F; --alert-ink: #FFB27A;
+  --k: #D8D8D2; --g: #8C8F94;
+  --on-ink: #26282C; --ink-hover: #D5D5CF; --nav: #3A3D43; --nav-fg: #C2C4C8; --nav-pill: #F2F2EF; --nav-pill-fg: #26282C; --seg-on: #54585F; --track: #44484E; --line3: #666A70;
+  --ok: #7CCB94; --ok-ink: #8FD3A4; --ok-bg: #26432F; --warn-ink: #E8C46A; --warn-bg: #443B1E; --info-ink: #9DB7EE; --info-bg: #2B3852; --bad-bg: #4A2A25;
+  color-scheme: dark;
+}
+:root[data-theme="dark"] .drum.k { color: #26282C; } /* the "D" on a black drum, which is drawn light here */
+:root[data-theme="blue"] {
+  --bg: #EEF2F7; --ink: #16233A; --muted: #5A6880; --faint: #8A97AB;
+  --line: #DDE4EE; --line2: #E9EEF5; --tile: #EDF2F8; --pillbg: #DFE6F0; --hover: #F7F9FC; --sel: #EEF3F9;
+  --k: #16233A; --ink-hover: #2A3A56; --track: #E3E9F1; --line3: #BFC9D8;
+  --primary: #A9C4F2; --on-primary: #16233A; --outline: #8FB0EA; --badge: #A9C4F2; --on-badge: #16233A; --accent-line: #6F9BE6; /* pastel, so dark text on it */
+}
+:root[data-theme="green"] {
+  --bg: #EDF1EC; --ink: #1F2D26; --muted: #5C6B62; --faint: #8C9A91;
+  --line: #DCE4DB; --line2: #E8EEE7; --tile: #ECF1EB; --pillbg: #DDE5DC; --hover: #F7FAF6; --sel: #EEF3ED;
+  --k: #1F2D26; --ink-hover: #33443B; --track: #E2E9E1; --line3: #BECABF;
+  --primary: #A8D5BC; --on-primary: #1F2D26; --outline: #86C2A2; --badge: #A8D5BC; --on-badge: #1F2D26; --accent-line: #5FB088; /* pastel, so dark text on it */
+}
+
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
 button { font: inherit; color: inherit; }
@@ -16,7 +44,7 @@ a { color: inherit; }
 button, a, label, input, select, textarea, summary { touch-action: manipulation; }
 h1, h2, h3 { margin: 0; text-wrap: balance; }
 /* Skip link: hidden until focused with the keyboard. */
-.skip { position: fixed; left: 16px; top: -100px; z-index: 100; padding: 10px 18px; border-radius: 20px; background: var(--ink); color: #fff; font-weight: 500; text-decoration: none; }
+.skip { position: fixed; left: 16px; top: -100px; z-index: 100; padding: 10px 18px; border-radius: 20px; background: var(--ink); color: var(--on-ink); font-weight: 500; text-decoration: none; }
 .skip:focus { top: calc(12px + env(safe-area-inset-top, 0px)); }
 :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .muted { color: var(--faint); font-size: 14px; }
@@ -36,16 +64,16 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .nv { display: flex; gap: 4px; height: 48px; padding: 4px; border-radius: 24px; background: var(--pillbg); margin-right: 8px; }
 .nv a { display: flex; align-items: center; padding: 0 18px; border-radius: 20px; font-size: 15px; font-weight: 500; color: var(--muted); text-decoration: none; }
-.nv a.on { background: #fff; color: var(--ink); }
+.nv a.on { background: var(--card); color: var(--ink); }
 .pills { display: flex; gap: 10px; }
 .pill { flex: none; height: 48px; padding: 0 22px; border-radius: 24px; border: 0; background: var(--pillbg); color: var(--muted); font-size: 15px; font-weight: 500; cursor: pointer; }
-.pill.on { background: var(--ink); color: #fff; }
+.pill.on { background: var(--ink); color: var(--on-ink); }
 .acts { display: flex; gap: 10px; }
-.rb { width: 48px; height: 48px; border-radius: 50%; border: 0; background: #fff; color: var(--ink); display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
-.rb.dk { background: var(--ink); color: #fff; }
+.rb { width: 48px; height: 48px; border-radius: 50%; border: 0; background: var(--card); color: var(--ink); display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+.rb.dk { background: var(--ink); color: var(--on-ink); }
 .rb.sm { background: var(--tile); }
 .rb:hover:not(:disabled) { background: var(--sel); }
-.rb.dk:hover { background: #4A4A45; }
+.rb.dk:hover { background: var(--ink-hover); }
 .rb:disabled { opacity: .5; cursor: default; }
 
 /* ---------- panes, common ---------- */
@@ -57,7 +85,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .meta { font-size: 14px; color: var(--faint); }
 .lab { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); font-weight: 500; margin: 6px 0 4px; }
 .lab.gap { margin-top: 22px; }
-.md { font-size: 13.5px; color: #9A9A93; margin-top: 2px; }
+.md { font-size: 13.5px; color: var(--faint); margin-top: 2px; }
 .md a { text-decoration: none; }
 .md a:hover { text-decoration: underline; }
 .dot { width: 40px; height: 40px; border-radius: 50%; background: var(--tile); display: flex; align-items: center; justify-content: center; flex: none; }
@@ -76,23 +104,26 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .detail-pane { flex: 1 1 0; width: 0; overflow: hidden; padding: 0; margin-left: 0; opacity: 0; transform: translateX(48px); pointer-events: none; align-self: stretch;
   transition: opacity .4s ease .1s, transform .55s var(--ease); }
 .stage.open .detail-pane { padding: 28px; margin-left: 24px; opacity: 1; transform: none; pointer-events: auto; }
+@media (min-width: 801px) { .detail-pane { border-radius: 22px; box-shadow: 0 1px 2px rgba(40, 40, 36, .08); } }
 .list { display: flex; flex-direction: column; gap: 8px; }
 
 /* Desktop rows: medium density. The phone gets its own tighter sizes in the media query below. */
 .item { display: grid; grid-template-columns: 44px minmax(0, 1.3fr) minmax(0, 1.2fr) 196px 96px 96px 40px; grid-template-areas: "ic nm st bars pg up chev" "ic md st bars pg up chev";
-  column-gap: 16px; align-items: center; border: 1px solid var(--line); border-radius: 20px; padding: 12px 16px; background: #fff; text-align: left; cursor: pointer; width: 100%; font-size: inherit; color: inherit; }
+  column-gap: 16px; align-items: center; border: 1px solid transparent; border-radius: 22px; padding: 12px 16px; background: var(--card); text-align: left; cursor: pointer; width: 100%; font-size: inherit; color: inherit;
+  box-shadow: 0 1px 2px rgba(40, 40, 36, .08); transition: box-shadow .25s ease, border-color .25s ease; }
 .item:hover { background: var(--hover); }
-.item.on { background: var(--sel); border-color: #D4D4CC; }
+/* The open printer: the same dark outline and lift as an open card on Krājumi. */
+.item.on { background: var(--card); border-color: var(--outline); box-shadow: inset 0 0 0 .5px var(--outline), 0 12px 32px rgba(40, 40, 36, .13); }
 .ic { grid-area: ic; width: 44px; height: 44px; border-radius: 50%; background: var(--tile); display: flex; align-items: center; justify-content: center; position: relative; }
 /* SNMP connection badge on the printer icon (bottom right): green ✓ / red ×, ringed in the row's colour. */
 .conn { position: absolute; right: -3px; bottom: -3px; width: 17px; height: 17px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  color: #fff; box-shadow: 0 0 0 2px #fff; }
+  color: #fff; box-shadow: 0 0 0 2px var(--card); }
 .conn svg { stroke-width: 3; }
 .conn.ok { background: #2E9E5B; }
 .conn.bad { background: var(--bad); }
 .conn.stop { background: var(--hot); }
 .item:hover .conn { box-shadow: 0 0 0 2px var(--hover); }
-.item.on .conn { box-shadow: 0 0 0 2px var(--sel); }
+.item.on .conn { box-shadow: 0 0 0 2px var(--card); }
 .nm { grid-area: nm; font-size: 16px; font-weight: 600; letter-spacing: -.02em; align-self: end; }
 .md { grid-area: md; align-self: start; }
 .item .md { font-size: 13px; margin-top: 2px; }
@@ -105,22 +136,22 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .chev { grid-area: chev; display: flex; align-items: center; justify-content: flex-end; gap: 10px; color: var(--faint); }
 /* "Needs attention" dot (maintenance / reserve below norm): top right of the printer icon, only when there's
    a reason. Ringed in the row's colour like the connection badge below it. */
-.sdot { position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1.5px #fff; }
+.sdot { position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1.5px var(--card); }
 .item:hover .sdot { box-shadow: 0 0 0 1.5px var(--hover); }
-.item.on .sdot { box-shadow: 0 0 0 1.5px var(--sel); }
+.item.on .sdot { box-shadow: 0 0 0 1.5px var(--card); }
 .bars { display: flex; gap: 8px; align-items: flex-start; }
 .bars.none { font-size: 12.5px; color: var(--faint); align-items: center; }
 .tb { display: flex; flex-direction: column; gap: 4px; width: 43px; }
 .tb small { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; line-height: 1; }
 .tb small.hot { color: var(--hot); font-weight: 600; }
-.bar { width: 100%; height: 7px; border-radius: 3.5px; background: #EBEBE6; overflow: hidden; display: block; }
+.bar { width: 100%; height: 7px; border-radius: 3.5px; background: var(--track); overflow: hidden; display: block; }
 .bar b { display: block; height: 100%; border-radius: 3px; }
 .item:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .nm { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .nm-t { min-width: 0; }
 /* "Kārtot": drag-to-reorder list (ReorderList). Rows shift to make room while one is dragged. */
 .rlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.rrow { display: flex; align-items: center; gap: 12px; padding: 8px 6px 8px 12px; border: 1px solid var(--line); border-radius: 20px; background: #fff; }
+.rrow { display: flex; align-items: center; gap: 12px; padding: 8px 6px 8px 12px; border: 1px solid var(--line); border-radius: 20px; background: var(--card); }
 .rlist.dragging .rrow { transition: transform .2s var(--ease); }
 .rlist.dragging .rrow.lifted { transition: none; position: relative; z-index: 2; box-shadow: 0 12px 28px rgba(40, 40, 36, .16); border-color: var(--ink); }
 .rlist.dragging { user-select: none; -webkit-user-select: none; }
@@ -149,7 +180,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .norms__row { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--ink); font-size: 14px; }
 /* Number stepper: [▾] [ n ] [▴] */
 .stepper { display: inline-flex; align-items: center; gap: 4px; flex: none; }
-.stepper__btn { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: #fff; color: var(--ink);
+.stepper__btn { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: var(--ink);
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; touch-action: manipulation; }
 .stepper__btn:hover:not(:disabled) { border-color: var(--ink); }
 .stepper__btn:disabled { opacity: .35; cursor: default; }
@@ -163,7 +194,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .kebab { width: 36px; height: 36px; border-radius: 50%; border: 0; background: none; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .kebab:hover, .kebab.on { background: var(--tile); color: var(--ink); }
 /* ⋮ menu: fixed-position popover (placed by StockControls), right-aligned to the button. */
-.menu { position: fixed; z-index: 50; min-width: 170px; display: flex; flex-direction: column; padding: 6px; background: #fff; border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 12px 32px rgba(40, 40, 36, .14); }
+.menu { position: fixed; z-index: 50; min-width: 170px; display: flex; flex-direction: column; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 12px 32px rgba(40, 40, 36, .14); }
 .menu button { min-height: 42px; padding: 0 12px; border: 0; border-radius: 10px; background: none; text-align: left; font-size: 14.5px; cursor: pointer; }
 .menu button:hover:not(:disabled) { background: var(--tile); }
 .menu button:disabled { opacity: .4; cursor: default; }
@@ -175,8 +206,8 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .stp.ro.hot { border-color: var(--accent); }
 /* "On order" marker on a toner row: cart + count. Green = covers what's missing; amber (.part) = still short. */
 .ordered-mark { flex: none; display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 6px 0 5px; border-radius: 10px;
-  background: #E7F3EB; color: #24603D; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
-.ordered-mark.part { background: #FBF3DC; color: #9A6B08; }
+  background: var(--ok-bg); color: var(--ok-ink); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
+.ordered-mark.part { background: var(--warn-bg); color: var(--warn-ink); }
 .ordered-mark svg { stroke-width: 2; }
 .pv.sm { display: inline-flex; min-width: 0; height: 24px; padding: 0 9px; font-size: 13px; vertical-align: middle; margin-left: 4px; }
 .ord__btns { display: flex; gap: 6px; flex: none; }
@@ -196,11 +227,11 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .email-text:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 /* B / I / U buttons */
 .sbar { display: inline-flex; gap: 4px; flex: none; }
-.sbtn { width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font-size: 15px; cursor: pointer; }
+.sbtn { width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); font-size: 15px; cursor: pointer; }
 .sbtn.b { font-weight: 700; } .sbtn.i { font-style: italic; font-family: Georgia, serif; } .sbtn.u { text-decoration: underline; }
 @media (hover: hover) { .sbtn:hover { border-color: var(--ink); } }
 .email-head .fnote { flex: 1; min-width: 0; }
-.copied { font-size: 13.5px; color: #24603D; font-weight: 500; }
+.copied { font-size: 13.5px; color: var(--ok-ink); font-weight: 500; }
 .email-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .email-head .btn { flex: none; }
 .email-preview { margin: 0; width: 100%; padding: 10px 14px; border-radius: 16px; background: var(--tile); color: var(--ink);
@@ -214,8 +245,8 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .recv-all-btn { display: block; width: 100%; margin-top: 12px; }
 /* Login page: "Pieslēgties ar Microsoft" (shown when configured) above the password form */
 /* .btn.ms-btn (two classes): .btn is defined later in this file and would otherwise repaint it white. */
-.btn.ms-btn { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; text-decoration: none; background: var(--ink); border-color: var(--ink); color: #fff; }
-.btn.ms-btn:hover { background: #4A4A45; border-color: #4A4A45; }
+.btn.ms-btn { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; text-decoration: none; background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+.btn.ms-btn:hover { background: var(--ink-hover); border-color: var(--ink-hover); }
 .login__or { display: flex; align-items: center; gap: 12px; margin: 4px 0; font-size: 12.5px; color: var(--faint); }
 .login__or::before, .login__or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 /* Password field with a show/hide eye (user editor) */
@@ -227,7 +258,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 @media (hover: hover) { .pw__eye:hover { color: var(--ink); background: var(--pillbg); } }
 /* Profile window (round button in the top bar): who is logged in, their role, and Iziet */
 .profile { display: flex; align-items: center; gap: 14px; }
-.profile__ic { flex: none; width: 52px; height: 52px; border-radius: 50%; background: var(--ink); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
+.profile__ic { flex: none; width: 52px; height: 52px; border-radius: 50%; background: var(--ink); color: var(--on-ink); display: inline-flex; align-items: center; justify-content: center; }
 .profile__txt { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .profile__txt b { font-size: 18px; font-weight: 600; letter-spacing: -.02em; overflow-wrap: anywhere; }
 .profile__txt span { font-size: 13.5px; color: var(--muted); }
@@ -258,7 +289,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .fnote.warn { color: var(--hot); }
 /* "Garantija" tag on a warranty claim (Pasūtīts, Saņemt visus, order history). */
 .tag-w { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 8px; margin-left: 6px; border-radius: 10px;
-  background: #EAEFF8; color: #3C5A99; font-size: 11.5px; font-weight: 600; letter-spacing: 0; vertical-align: middle; white-space: nowrap; }
+  background: var(--info-bg); color: var(--info-ink); font-size: 11.5px; font-weight: 600; letter-spacing: 0; vertical-align: middle; white-space: nowrap; }
 /* "Saņemt visus": each order with its printer on the right. */
 .recv-all__to { margin-left: auto; min-width: 0; font-size: 13px; color: var(--muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* "Jāpasūta" rows: each missing toner with its colour dot. */
@@ -285,7 +316,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .emp-btn { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 16px; border: 1px solid var(--line); border-radius: 21px;
   background: none; color: var(--muted); font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; }
 .emp-btn:hover { color: var(--ink); border-color: var(--ink); }
-.emp-btn.on { background: #fff; border-color: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(40, 40, 36, .08); }
+.emp-btn.on { background: var(--card); border-color: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(40, 40, 36, .08); }
 .emp-btn__n { min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 10px; background: var(--pillbg); color: var(--ink);
   display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .cbar .emp-btn { height: 36px; padding: 0 12px; font-size: 13px; }
@@ -307,7 +338,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .needs--lines > span { display: flex; align-items: center; gap: 8px; }
 .needs__code { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; color: var(--ink); font-size: 14px; }
 .qstep { flex: none; display: inline-flex; align-items: center; gap: 4px; }
-.qstep button { width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: #fff; color: var(--ink);
+.qstep button { width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--card); color: var(--ink);
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .qstep button:hover:not(:disabled) { border-color: var(--ink); }
 .qstep button:disabled { opacity: .35; cursor: default; }
@@ -320,10 +351,10 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .gh-off { margin-left: 8px; vertical-align: middle; font-weight: 500; letter-spacing: 0; }
 /* "Atsaukt" bar after Izlietots / Saņemt (components/UndoToast.tsx): bottom centre, above the phone tab bar */
 .undo { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 70; display: flex; align-items: center; gap: 14px;
-  max-width: calc(100vw - 32px); padding: 10px 10px 10px 18px; border-radius: 26px; background: var(--ink); color: #fff; font-size: 14px;
+  max-width: calc(100vw - 32px); padding: 10px 10px 10px 18px; border-radius: 26px; background: var(--ink); color: var(--on-ink); font-size: 14px;
   box-shadow: 0 10px 30px rgba(30, 30, 28, .28); animation: undo-in .22s var(--ease) both; }
 .undo__txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.undo__btn { flex: none; height: 34px; padding: 0 16px; border: 0; border-radius: 17px; background: #fff; color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
+.undo__btn { flex: none; height: 34px; padding: 0 16px; border: 0; border-radius: 17px; background: var(--on-ink); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
 .undo__btn:disabled { opacity: .6; }
 @keyframes undo-in { from { opacity: 0; transform: translate(-50%, 8px); } }
 @media (max-width: 800px) { .undo { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); } }
@@ -394,7 +425,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .clip-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 0;
   border-radius: 50%; background: none; color: var(--faint); cursor: pointer; }
 .clip-btn:hover { background: var(--tile); color: var(--ink); }
-.clip-btn.has { color: #2E7D4F; background: #E7F3EB; }
+.clip-btn.has { color: var(--ok); background: var(--ok-bg); }
 .cgrp__head .clip-btn { margin: 0 -2px; }
 @media (pointer: coarse) { .clip-btn { width: 36px; height: 36px; } }
 /* "Saņemt visus": one block per company, each with its own delivery note */
@@ -431,7 +462,7 @@ button.flist__name { border: 0; background: none; padding: 0; font: inherit; tex
 .fview__body img { display: block; max-width: 100%; max-height: min(600px, 100vh - 140px); max-height: min(600px, 100dvh - 140px);
   object-fit: contain; border-radius: 8px; }
 .fview__pdf { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.fview__pdf canvas { max-width: 100%; height: auto; background: #fff; box-shadow: 0 1px 4px rgba(40, 40, 36, .15); }
+.fview__pdf canvas { max-width: 100%; height: auto; background: var(--card); box-shadow: 0 1px 4px rgba(40, 40, 36, .15); }
 .fview__note { margin: 40px 16px; color: var(--muted); text-align: center; }
 @media (max-width: 800px) {
   .fview { padding: 0; }
@@ -452,8 +483,8 @@ button.flist__name { border: 0; background: none; padding: 0; font: inherit; tex
 .dfx small { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .dfx__st { font-size: 13px; font-weight: 600; white-space: nowrap; }
 .dfx__st.defect { color: var(--hot); }
-.dfx__st.ordered { color: #9A6B08; }
-.dfx__st.received { color: #2E7D4F; }
+.dfx__st.ordered { color: var(--warn-ink); }
+.dfx__st.received { color: var(--ok); }
 .dfx__st.cancelled { color: var(--muted); }
 .ev__files { display: inline-flex; align-items: center; gap: 2px; margin-left: 8px; color: var(--muted); }
 .lab__n { margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: var(--tile); font-size: 12px; letter-spacing: 0; }
@@ -542,21 +573,81 @@ button.flist__name { border: 0; background: none; padding: 0; font: inherit; tex
 .big .lab { font-size: 16px; letter-spacing: 0; text-transform: none; color: var(--muted); font-weight: 400; margin: 0; }
 .num { font-size: 84px; font-weight: 300; letter-spacing: -.05em; line-height: 1; margin-top: 6px; font-variant-numeric: tabular-nums; }
 .num.hot { color: var(--hot); }
-.sub { font-size: 14px; color: #9A9A93; margin-top: 8px; }
+.sub { font-size: 14px; color: var(--faint); margin-top: 8px; }
 .ord { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line2); }
 .ord:first-of-type { border-top: 0; }
 .ord .a { flex: 1; min-width: 0; }
 .ord b { font-size: 16px; font-weight: 600; letter-spacing: -.02em; display: block; }
-.ord small { font-size: 13.5px; color: #9A9A93; }
+.ord small { font-size: 13.5px; color: var(--faint); }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.grp { border: 1px solid var(--line); border-radius: 26px; padding: 0 18px; }
+/* Krājumi: printers on the left, basket / defects / orders in a column on the right that stays in view
+   (phones: that column is a bottom sheet, see the phone block). */
+.scols { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 24px; align-items: start; }
+.splist__tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+/* Stays in view without a scrollbar of its own: when it fits the window it sticks under the top; when it is
+   taller, it scrolls with the page until its bottom reaches the window's bottom and sticks there
+   (--rail-h is its measured height, set in StockPage). */
+.srail { position: sticky; top: min(calc(var(--hdr-h, 0px) + 16px), calc(100vh - var(--rail-h, 0px) - 16px)); }
+.splist__tools .icon-btn, .splist__tools .search { background: var(--card); } /* on the page background, not inside a white pane */
+/* Grozs: small text headings for the two parts, one compact line per toner, a rule where the printer changes. */
+.bsec { display: flex; align-items: baseline; gap: 8px; padding: 10px 0 2px; border-top: 1px solid var(--line2); font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.bsec.hot { color: var(--alert-ink); }
+.bline + .bsec { margin-top: 6px; }
+.bsec span { flex: 1; min-width: 0; }
+.bsec__go { flex: none; padding: 4px 0; border: 0; background: none; color: var(--ink); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.bline { display: flex; align-items: center; gap: 10px; min-height: 38px; }
+.bline.sep { border-top: 1px solid var(--line2); }
+.bline > b { flex: none; max-width: 60%; font-size: 15.5px; font-weight: 600; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bline > small { flex: 1; min-width: 0; font-size: 13.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bqty { flex: none; padding: 1px 7px; border-radius: 10px; background: var(--alert-bg); color: var(--alert-ink); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* − n + in one small pill */
+.bstep { flex: none; display: flex; align-items: center; height: 30px; border: 1px solid var(--line); border-radius: 15px; }
+.bstep button { width: 30px; height: 28px; padding: 0; border: 0; border-radius: 14px; background: none; color: var(--ink); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.bstep button:disabled { opacity: .35; cursor: default; }
+.bstep b { min-width: 16px; text-align: center; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+@media (hover: hover) { .bstep button:hover:not(:disabled) { background: var(--tile); } }
+@media (pointer: coarse) { .bline { min-height: 44px; } .bstep { height: 36px; border-radius: 18px; } .bstep button { width: 38px; height: 34px; border-radius: 17px; } }
+/* "Pasūtīts" line: code + amount, then the printer on the same line (cut with … when it doesn't fit). */
+.ord--line { padding: 5px 0; gap: 8px; }
+.ord--line.same { border-top: 0; padding-top: 0; } /* same printer as the line above */
+/* The amount on an order line: small and soft, not the bright solid pill. */
+.ord--line .pv.solid.sm { height: 20px; padding: 0 7px; margin-left: 2px; border-radius: 10px; border-color: transparent; background: var(--alert-bg); color: var(--alert-ink); font-size: 12px; font-weight: 600; }
+/* Small dark truck at the bottom right of the basket button: something is on order. */
+.cart-btn__truck { position: absolute; right: -2px; bottom: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--ink); color: var(--on-ink);
+  display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px var(--bg); }
+.ord--line .a { display: flex; align-items: center; gap: 10px; }
+.ord--line .a b { flex: none; max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ord--line .a small { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Filters above the printers (desktop): company switch and the "Tikai zemie" on/off pill. */
+.splist__filters { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 0 1 auto; flex-wrap: wrap; }
+.splist__filters .seg { align-self: auto; max-width: 100%; background: var(--pillbg); }
+/* Statuss with a printer open: the list is narrow, so the switch is tighter (and scrolls sideways if it must). */
+.stage.open .splist__filters .seg button { padding: 0 10px; }
+/* "Tikai zemie": the app's own checkbox look (white rounded box, dark with a white tick when on). */
+.splist__filters .check { gap: 9px; min-height: 42px; padding: 0 6px; font-size: 13.5px; font-weight: 500; cursor: pointer; user-select: none; }
+.splist__filters .check:has(input:checked) { color: var(--ink); }
+.splist__filters .check input { appearance: none; -webkit-appearance: none; flex: none; box-sizing: border-box; width: 20px; min-width: 0; height: 20px; min-height: 0; margin: 0; padding: 0; border: 1.5px solid var(--line3); border-radius: 7px; background: var(--card); cursor: pointer;
+  display: grid; place-content: center; transition: background .15s, border-color .15s; }
+.splist__filters .check input::after { content: ''; width: 10px; height: 6px; margin-top: -2px; border-left: 2px solid var(--on-ink); border-bottom: 2px solid var(--on-ink); transform: rotate(-45deg) scale(0); transition: transform .15s var(--ease); }
+.splist__filters .check input:checked { background: var(--ink); border-color: var(--ink); }
+.splist__filters .check input:checked::after { transform: rotate(-45deg) scale(1); }
+.splist__filters .check input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+@media (hover: hover) { .splist__filters .check:hover input:not(:checked) { border-color: var(--ink); } }
+.splist__acts { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex: 1 0 auto; } /* never squeezed under the filters */
+.splist__title { font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
+.splist__sort { border-radius: 22px; padding: 6px 14px; box-shadow: 0 1px 2px rgba(40, 40, 36, .08); }
+.plist[hidden] { display: none; }
+.srail .pane { border-radius: 22px; padding: 18px; box-shadow: 0 1px 2px rgba(40, 40, 36, .08); }
+.srail__head, .srail__shade, .cart-btn { display: none; }
+/* Printer card: no grey line, just a white shape on the page; the transparent border keeps room for the open outline. */
+.grp { border: 1px solid transparent; border-radius: 22px; padding: 0 18px; box-shadow: 0 1px 2px rgba(40, 40, 36, .08); }
 .grp.open { padding-bottom: 6px; }
 .plist { display: flex; flex-direction: column; gap: 10px; }
 .gh-btn { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 68px; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; }
 /* Open card "lifts": soft shadow, and the other cards step back. (Searching opens several — then none fade.) */
-.grp { background: #fff; transition: opacity .25s ease, box-shadow .25s ease, border-color .25s ease; }
-/* Dark outline (1px border + .5px ring = ~1.5px, without shifting the layout) plus the lift shadow. */
-.grp.open { border-color: var(--ink); box-shadow: 0 0 0 .5px var(--ink), 0 12px 32px rgba(40, 40, 36, .13); }
+.grp { background: var(--card); transition: opacity .25s ease, box-shadow .25s ease, border-color .25s ease; }
+/* Dark outline, ~1.5px: the 1px border (transparent while closed, so nothing shifts) plus a .5px ring just inside it — inside, so a moving card is never clipped short of it. Then the lift shadow. */
+.grp.open { border-color: var(--outline); box-shadow: inset 0 0 0 .5px var(--outline), 0 12px 32px rgba(40, 40, 36, .13); }
 .plist:has(.grp.open) .grp:not(.open) { opacity: .5; }
 /* Hover only with a mouse: on phones a tapped element keeps its :hover look. */
 @media (hover: hover) {
@@ -565,14 +656,14 @@ button.flist__name { border: 0; background: none; padding: 0; font: inherit; tex
 }
 .gh-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .gh-t b { font-size: 16.5px; font-weight: 600; letter-spacing: -.02em; }
-.gh-t span { font-size: 13.5px; color: #9A9A93; }
+.gh-t span { font-size: 13.5px; color: var(--faint); }
 .tot { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .tot small { font-size: 14px; font-weight: 400; color: var(--faint); margin-left: 1px; }
 .tot.hot { color: var(--hot); }
 .gh-btn .fold-ic { color: var(--faint); }
 .gh { padding: 14px 0 8px; }
 .gh b { font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
-.gh div { font-size: 13.5px; color: #9A9A93; margin-top: 2px; }
+.gh div { font-size: 13.5px; color: var(--faint); margin-top: 2px; }
 /* Toner row (Krājumi): one line — dot · code · qty/norm · ⋮ */
 .t { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 54px; padding: 6px 0; border-top: 1px solid var(--line2); }
 .cd { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
@@ -609,13 +700,13 @@ button.flist__name { border: 0; background: none; padding: 0; font: inherit; tex
 .form-row .short-input { max-width: 200px; }
 /* Notification count on the Žurnāls tab (top nav + phone bottom bar) and in the review heading */
 .badge-n { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px;
-  border-radius: 9px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 600; line-height: 1; margin-left: 6px;
+  border-radius: 9px; background: var(--badge); color: var(--on-badge); font-size: 11px; font-weight: 600; line-height: 1; margin-left: 6px;
   font-variant-numeric: tabular-nums; vertical-align: middle; }
 /* Where a tapped notification points: the entry is outlined for a moment (LogPage / StockPage). */
 .rv.flash, .grp.flash { animation: flash 2.6s ease-out; }
 @keyframes flash { 0%, 65% { box-shadow: 0 0 0 2.5px var(--accent); } }
 .bnav a { position: relative; }
-.bnav .badge-n { position: absolute; top: 4px; right: calc(50% - 22px); margin: 0; box-shadow: 0 0 0 2px var(--ink); }
+.bnav .badge-n { position: absolute; top: 4px; right: calc(50% - 22px); margin: 0; box-shadow: 0 0 0 2px var(--nav); }
 /* ---------- Pārvaldība ---------- */
 .mpane { padding-top: 18px; }
 .mhead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -654,7 +745,7 @@ button.flist__name { border: 0; background: none; padding: 0; font: inherit; tex
 .btn.spin:disabled { opacity: 1; }
 .snmp-test { margin: 0; padding: 10px 14px; border-radius: 16px; font-size: 13px; line-height: 1.45; }
 .snmp-test.bad { background: var(--alert-bg); color: var(--alert-ink); }
-.snmp-test.ok { background: #E7F3EB; color: #24603D; }
+.snmp-test.ok { background: var(--ok-bg); color: var(--ok-ink); }
 .snmp-test__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 28px;
   padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .snmp-test.ok { padding-top: 6px; padding-bottom: 6px; }
@@ -681,7 +772,7 @@ textarea { font: inherit; padding: 10px 14px; border: 1px solid var(--line); bor
 .toggle__txt small { font-size: 12px; color: var(--muted); }
 .toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .toggle__ui { flex: none; position: relative; width: 46px; height: 28px; border-radius: 14px; background: var(--line); transition: background .2s; }
-.toggle__ui::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .2); transition: transform .2s var(--ease); }
+.toggle__ui::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 1px 3px rgba(0, 0, 0, .2); transition: transform .2s var(--ease); }
 .toggle input:checked + .toggle__ui { background: var(--ink); }
 .toggle input:checked + .toggle__ui::after { transform: translateX(18px); }
 .toggle input:focus-visible + .toggle__ui { outline: 2px solid var(--ink); outline-offset: 2px; }
@@ -699,7 +790,7 @@ textarea { font: inherit; padding: 10px 14px; border: 1px solid var(--line); bor
 .review .rh { margin-bottom: 4px; }
 .review__hint { margin: 0 0 10px; font-size: 13px; color: var(--alert-ink); }
 .rvlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.rv { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: #fff; border-radius: 18px; padding: 10px 12px; }
+.rv { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--card); border-radius: 18px; padding: 10px 12px; }
 .rv__head { display: flex; align-items: center; gap: 10px; flex: 1 1 240px; min-width: 0; }
 .rv .dot { width: 30px; height: 30px; }
 .rv .dot i { width: 11px; height: 11px; }
@@ -713,8 +804,8 @@ textarea { font: inherit; padding: 10px 14px; border: 1px solid var(--line); bor
 .seg { display: flex; gap: 4px; padding: 4px; background: var(--tile); border-radius: 22px; overflow-x: auto; scrollbar-width: none; min-width: 0; }
 .seg::-webkit-scrollbar { display: none; }
 .seg button { flex: none; height: 34px; padding: 0 14px; border: 0; border-radius: 17px; background: none; color: var(--muted); font-size: 13.5px; font-weight: 500; cursor: pointer; }
-.seg button:hover:not(.on) { color: var(--ink); background: rgba(255, 255, 255, .55); }
-.seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(40, 40, 36, .08); }
+.seg button:hover:not(.on) { color: var(--ink); background: color-mix(in srgb, var(--card) 55%, transparent); }
+.seg button.on { background: var(--seg-on); color: var(--ink); box-shadow: 0 1px 2px rgba(40, 40, 36, .08); }
 .empty { padding: 24px 0; text-align: center; }
 
 .day { margin-top: 14px; }
@@ -736,11 +827,11 @@ button.day__head { width: 100%; height: 34px; padding-top: 0; padding-bottom: 0;
 .ev.open .ev__main { background: var(--sel); }
 .ev__ic { flex: none; width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--tile); color: var(--muted); }
 .k-out { background: #FDF0E4; color: var(--hot); }
-.k-used { background: #FBE9E6; color: var(--bad); }
-.k-in { background: #E7F3EB; color: #2E7D4F; }
-.k-move { background: #EAEFF8; color: #3C5A99; }
+.k-used { background: var(--bad-bg); color: var(--bad); }
+.k-in { background: var(--ok-bg); color: var(--ok); }
+.k-move { background: var(--info-bg); color: var(--info-ink); }
 .k-fix { background: var(--tile); color: var(--muted); }
-.k-wait { background: #FBF3DC; color: #9A6B08; } /* order still on the way */
+.k-wait { background: var(--warn-bg); color: var(--warn-ink); } /* order still on the way */
 .ev__d.struck { text-decoration: line-through; color: var(--faint); } /* cancelled order's quantity */
 /* Vēsture: switch between "Krājumu kustība" and "Pasūtījumi" (in the page, and stacked above the filters in the compact bar) */
 .viewsw { display: flex; }
@@ -758,7 +849,7 @@ button.day__head { width: 100%; height: 34px; padding-top: 0; padding-bottom: 0;
 .sugg__head { font-size: 13px; font-weight: 600; color: var(--alert-ink); }
 .sugg__row { display: flex; align-items: center; gap: 8px; min-height: 40px; }
 .sugg__row small { flex: 1; min-width: 0; color: var(--muted); font-size: 12.5px; }
-.sugg__row .btn, .sugg__all { background: #fff; }
+.sugg__row .btn, .sugg__all { background: var(--card); }
 .sugg__all { align-self: flex-start; }
 /* Printer editor: search box + list of codes to add (tap a code to add it) */
 .pick__q { width: 100%; }
@@ -782,11 +873,11 @@ button.day__head { width: 100%; height: 34px; padding-top: 0; padding-bottom: 0;
 .cdot.drum { width: 16px !important; height: 16px !important; font-size: 9.5px; vertical-align: -3px; }
 .cdot.big.drum { width: 20px !important; height: 20px !important; font-size: 11.5px; }
 .dot i.drum { width: 22px !important; height: 22px !important; font-size: 12px; }
-.drum.y { color: var(--ink); }
+.drum.y { color: #33332F; }
 .drum.cmy { text-shadow: 0 0 2px rgba(0, 0, 0, .55); }
 .ev__d { flex: none; min-width: 44px; text-align: right; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; padding-right: 4px; }
 .d-out { color: var(--hot); }
-.d-in { color: #2E7D4F; }
+.d-in { color: var(--ok); }
 .d-move { color: var(--muted); font-weight: 500; }
 .ev__more { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 4px 6px 12px 50px; }
 .ev__more dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 13px; }
@@ -796,7 +887,7 @@ button.day__head { width: 100%; height: 34px; padding-top: 0; padding-bottom: 0;
 .btn.more { display: block; margin: 16px auto 4px; }
 .code { font-size: 15px; font-weight: 500; }
 .low { font-size: 12.5px; color: var(--hot); margin-top: 1px; }
-.stp { display: flex; align-items: center; gap: 2px; height: 48px; padding: 0 4px; border-radius: 24px; border: 1px solid var(--line); flex: none; background: #fff; }
+.stp { display: flex; align-items: center; gap: 2px; height: 48px; padding: 0 4px; border-radius: 24px; border: 1px solid var(--line); flex: none; background: var(--card); }
 .sb { width: 44px; height: 44px; border-radius: 50%; border: 0; background: transparent; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
 .sb:disabled { opacity: .3; cursor: default; }
 .q { min-width: 44px; text-align: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; display: inline-flex; align-items: baseline; justify-content: center; }
@@ -814,15 +905,15 @@ tr.inactive { opacity: .5; }
 .toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .toolbar h2 { font-size: 22px; font-weight: 600; letter-spacing: -.03em; }
 .toolbar .btn:last-child { margin-left: auto; }
-.btn { border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 0 20px; border-radius: 22px; cursor: pointer; font-weight: 500; min-height: 44px; }
+.btn { border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: 0 20px; border-radius: 22px; cursor: pointer; font-weight: 500; min-height: 44px; }
 .btn:hover:not(:disabled) { border-color: var(--ink); }
 .btn:disabled { opacity: .5; cursor: default; }
-.btn.primary { background: var(--ink); border-color: var(--ink); color: #fff; }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
 .btn.danger { color: var(--hot); }
 .btn.small { padding: 0 14px; min-height: 36px; font-size: 14px; border-radius: 18px; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid var(--line); background: #fff; font-size: 14px; cursor: pointer; }
-.chip.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid var(--line); background: var(--card); font-size: 14px; cursor: pointer; }
+.chip.on { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
 .chip button { background: none; border: 0; color: var(--faint); cursor: pointer; font-size: 16px; padding: 0; }
 .form-row { display: flex; gap: 8px; margin-top: 16px; }
 .form-row input { max-width: 240px; } .form-row select { max-width: 140px; }
@@ -842,7 +933,7 @@ input[type=checkbox] { width: auto; min-height: 0; }
 .modal__actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 .login { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
-.login__form { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 12px; background: #fff; border-radius: 32px; padding: 28px; }
+.login__form { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 12px; background: var(--card); border-radius: 32px; padding: 28px; }
 .login__form h1 { font-size: 34px; font-weight: 600; letter-spacing: -.035em; margin-bottom: 8px; }
 .login__form .btn { min-height: 48px; }
 
@@ -852,14 +943,14 @@ input[type=checkbox] { width: auto; min-height: 0; }
    page shows through softly. Below the phone's printer-detail overlay (z 30) and dialogs (z 40). */
 .cbar { position: fixed; top: 0; left: 0; right: 0; z-index: 25; display: flex; flex-direction: column; align-items: center; gap: 8px;
   padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
-  background: rgba(241, 241, 237, .86); -webkit-backdrop-filter: saturate(1.4) blur(16px); backdrop-filter: saturate(1.4) blur(16px);
+  background: color-mix(in srgb, var(--bg) 86%, transparent); -webkit-backdrop-filter: saturate(1.4) blur(16px); backdrop-filter: saturate(1.4) blur(16px);
   border-bottom: 1px solid var(--line);
   opacity: 0; transform: translateY(-8px); pointer-events: none; transition: opacity .2s ease, transform .25s var(--ease); }
 .cbar.on { opacity: 1; transform: none; pointer-events: auto; }
 .cbar__row { position: relative; width: 100%; display: flex; justify-content: center; align-items: center; min-height: 24px; }
 .cbar__row.has-start { min-height: 36px; padding: 0 44px; } /* room for the button, title stays centred */
 .cbar__start { position: absolute; left: 0; top: 50%; transform: translateY(-50%); display: flex; }
-.cbar__start .icon-btn { width: 36px; height: 36px; background: #fff; }
+.cbar__start .icon-btn { width: 36px; height: 36px; background: var(--card); }
 .cbar__title { font-size: 16px; font-weight: 600; letter-spacing: -.02em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Printer details bar: above the phone's details overlay (z 30); on desktop it replaces the page's own bar. */
 .cbar--detail { z-index: 31; }
@@ -887,7 +978,7 @@ body:has(.cbar--detail.on) .cbar:not(.cbar--detail) { opacity: 0; pointer-events
 
   .stage { display: block; }
   .list-pane, .stage.open .list-pane { width: 100%; }
-  .item, .stage.open .item { grid-template-columns: 36px minmax(0, 1fr) auto; /* auto: chevron, or dot + chevron */ grid-template-areas: "ic nm chev" "ic st chev" ". bars bars"; row-gap: 0; padding: 10px 12px; border-radius: 18px; }
+  .item, .stage.open .item { grid-template-columns: 36px minmax(0, 1fr) auto; /* auto: chevron, or dot + chevron */ grid-template-areas: "ic nm chev" "ic st chev" ". bars bars"; row-gap: 0; padding: 12px 14px; border-radius: 22px; }
   .item .md, .item .pg { display: none; }
   .stage.open .st { display: block; }
   .item .bars { margin-top: 8px; }
@@ -904,18 +995,18 @@ body:has(.cbar--detail.on) .cbar:not(.cbar--detail) { opacity: 0; pointer-events
     padding: calc(20px + env(safe-area-inset-top, 0px)) 16px calc(40px + env(safe-area-inset-bottom, 0px)); }
   .stage.open .detail-pane { transform: none; padding: calc(20px + env(safe-area-inset-top, 0px)) 16px calc(40px + env(safe-area-inset-bottom, 0px)); margin: 0; }
   .dn { min-width: 0; }
-  .back-btn { display: inline-flex; background: #fff; }
+  .back-btn { display: inline-flex; background: var(--card); }
   .close-x { display: none; }
   .dhead { gap: 8px; margin-bottom: 12px; }
   .dhead h2 { font-size: 20px; }
-  .dhead .icon-btn { width: 36px; height: 36px; background: #fff; }
+  .dhead .icon-btn { width: 36px; height: 36px; background: var(--card); }
   .dacts { gap: 6px; }
   .igrid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .icard { background: #fff; border: 0; border-radius: 24px; }
+  .icard { background: var(--card); border: 0; border-radius: 24px; }
   /* Phone: each section is its own white card, so it's obvious where one ends and the next starts. */
   .dgrid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "stats" "toners" "reserve" "others"; row-gap: 12px; margin-top: 4px; }
   .d-levels { grid-area: toners; } .d-reserve { grid-area: reserve; }
-  .d-stats, .d-levels, .d-reserve, .d-others { background: #fff; border-radius: 24px; padding: 16px 18px; }
+  .d-stats, .d-levels, .d-reserve, .d-others { background: var(--card); border-radius: 24px; padding: 16px 18px; }
   .d-stats { margin: 0; border: 0; padding: 12px 16px; border-radius: 20px; }
   .stat { padding: 0 10px; }
   .stat b { font-size: 14.5px; }
@@ -930,6 +1021,30 @@ body:has(.cbar--detail.on) .cbar:not(.cbar--detail) { opacity: 0; pointer-events
   .sp.res .n { flex: 1 0 auto; width: auto; }
 
   .cols { grid-template-columns: 1fr; }
+  /* Krājumi on phones: only the printers in the page. Basket / orders / defects slide up as a sheet from the
+     button next to the bell; the sheet shows the one list picked in its switch and is always the same height. */
+  .scols { grid-template-columns: 1fr; }
+  /* No "Tikai zemie" here; "Kārtot" and the search button sit at the right. The opened search field grows
+     over the free width, which slides "Kārtot" to the left edge. */
+  .page:has(.splist__tools) { gap: 14px; }
+  .splist__tools { margin-bottom: 12px; }
+  .splist__filters { display: none; }
+  .splist__tools .search { flex: 1; min-width: 0; animation: search-grow .28s var(--ease); }
+  .cart-btn { display: flex; }
+  /* Three round buttons beside the title, same size and spacing as on the other pages; only the minimum space
+     kept between the title and the buttons is smaller, so they stay on the title's row. */
+  .top:has(.cart-btn) { column-gap: 6px; }
+  .srail { position: fixed; left: 0; right: 0; top: auto; bottom: 0; z-index: 35; height: 80vh; height: 80dvh; overflow-y: auto; gap: 10px;
+    padding: 0 12px calc(16px + env(safe-area-inset-bottom, 0px)); border-radius: 28px 28px 0 0; background: var(--bg); overscroll-behavior: contain;
+    box-shadow: 0 -12px 40px rgba(30, 30, 28, .22); transform: translateY(105%); visibility: hidden; transition: transform .35s var(--ease), visibility 0s .35s; }
+  .srail.open { transform: none; visibility: visible; transition: transform .35s var(--ease); }
+  .srail__head { display: flex; align-items: center; gap: 8px; position: sticky; top: 0; z-index: 2; padding: 12px 0 8px; background: var(--bg); }
+  .srail__head .seg { flex: 1; align-self: auto; background: var(--pillbg); }
+  .srail__head .seg button { flex: 1; justify-content: center; padding: 0 8px; height: 38px; }
+  .srail__head .icon-btn { flex: none; background: var(--card); }
+  .srail .pane { display: none; }
+  .srail[data-tab="basket"] .t-basket, .srail[data-tab="orders"] .t-orders, .srail[data-tab="defects"] .t-defects { display: block; }
+  .srail__shade { display: block; position: fixed; inset: 0; z-index: 34; background: rgba(30, 30, 28, .45); animation: page-in .2s ease-out; }
   .grid { grid-template-columns: 1fr; }
   .num { font-size: 64px; }
 
@@ -954,22 +1069,24 @@ body:has(.cbar--detail.on) .cbar:not(.cbar--detail) { opacity: 0; pointer-events
   .rv__btns { width: 100%; flex-wrap: wrap; }
   .rv__btns .btn { flex: 1; }
   .rv__btns .btn.primary { flex: 1 0 100%; } /* main action on its own row; Garantija + Ignorēt share the next */
-  .bnav { display: grid; position: fixed; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); height: 64px; border-radius: 32px; background: var(--ink); grid-template-columns: repeat(4, 1fr); padding: 6px; z-index: 20; }
-  .bnav a { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; border-radius: 26px; color: #B8B8B0; text-decoration: none; min-height: 44px; transition: color .25s; }
-  .bnav a.on { color: var(--ink); }
+  .bnav { display: grid; position: fixed; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); height: 64px; border-radius: 32px; background: var(--nav); grid-template-columns: repeat(4, 1fr); padding: 6px; z-index: 20; }
+  .bnav a { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; border-radius: 26px; color: var(--nav-fg); text-decoration: none; min-height: 44px; transition: color .25s; }
+  .bnav a.on { color: var(--nav-pill-fg); }
   /* Sliding white pill behind the active tab (one quarter of the bar, moved by translateX in App.tsx). */
-  .bnav__pill { position: absolute; top: 6px; bottom: 6px; left: 6px; width: calc((100% - 12px) / 4); border-radius: 26px; background: #fff; transition: transform .32s var(--ease); }
+  .bnav__pill { position: absolute; top: 6px; bottom: 6px; left: 6px; width: calc((100% - 12px) / 4); border-radius: 26px; background: var(--nav-pill); transition: transform .32s var(--ease); }
   /* Section switch on phones: a quick fade-in of the new page (no snapshots, see useTabClick). */
   .page { animation: page-in .2s ease-out; }
   /* Krājumi card opened: its toner rows fade in (phones have no view transitions). */
   .grp.open .trow { animation: row-in .24s var(--ease) both; }
 }
 @keyframes page-in { from { opacity: 0; } }
+@keyframes search-grow { from { flex-grow: 0; flex-basis: 40px; } }
 @keyframes row-in { from { opacity: 0; transform: translateY(-6px); } }
 @media (max-width: 800px) {
   .form-row { flex-wrap: wrap; } .form-row input, .form-row select { max-width: none; }
-  /* Printer details open: the list behind can't scroll (short details used to scroll it instead). */
-  html.detail-open, html.detail-open body { overflow: hidden; }
+  /* Printer details open: the list behind can't scroll (short details used to scroll it instead). The same
+     for a sheet from the bottom (Analītika, Grozs): no scrolling, and no scrollbar, of the page under it. */
+  html.detail-open, html.detail-open body, html.sheet-open, html.sheet-open body { overflow: hidden; }
   /* Login: form in the upper part of the screen, so the keyboard never covers it (iOS doesn't scroll
      the first focused field into view reliably). */
   .login { min-height: 100dvh; align-items: flex-start; padding-top: calc(8vh + env(safe-area-inset-top, 0px)); }
@@ -985,10 +1102,15 @@ html[data-vt="tab"]::view-transition-group(*) { animation-duration: 180ms; }
 /* Clip each moving snapshot to its current (animating) size with the element's own corners. Without this a
    growing element showed its full end state at once — e.g. closing a printer: the full-width list covered the
    details immediately, so closing looked unanimated. */
-::view-transition-group(*.pane), ::view-transition-group(*.row), ::view-transition-group(*.card), ::view-transition-group(*.rv) { overflow: hidden; }
+::view-transition-group(*.pane), ::view-transition-group(*.list), ::view-transition-group(*.row), ::view-transition-group(*.card), ::view-transition-group(*.rv) { overflow: hidden; }
 ::view-transition-group(*.pane) { border-radius: 32px; }
-::view-transition-group(*.row) { border-radius: 20px; }
-::view-transition-group(*.card) { border-radius: 26px; }
+::view-transition-group(*.list), ::view-transition-group(*.row) { border-radius: 22px; } /* the cards' own corners; a larger radius here cuts their outline off at the corners */
+::view-transition-group(*.card), ::view-transition-group(*.card-open) { overflow: hidden; border-radius: 22px; }
+/* A card that is opening grows from the top, so until it is done its picture's own bottom border is still
+   out of view. The moving box draws the dark outline itself (all four sides, round corners) the whole way;
+   the pictures sit under that border, exactly where the card's own border is. */
+::view-transition-group(*.card-open) { box-sizing: border-box; border: 1px solid var(--outline); }
+::view-transition-image-pair(*.card-open) { inset: -1px; }
 ::view-transition-group(*.rv) { border-radius: 18px; }
 /* Statuss, opening/closing a printer (desktop): one movement of the whole list. The rows aren't separate
    layers here (they are only for the pin reorder), and the pace matches the details' slide (.55s). */
@@ -1010,7 +1132,123 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .detail-pane, .fold-ic, .toggle__ui, .toggle__ui::after, .bnav__pill, .bnav a, .grp, .cbar { transition: none !important; }
-  .page, .grp.open .trow { animation: none !important; }
+  .page, .grp.open .trow, .splist__tools .search { animation: none !important; }
 }
 .login__field { display: flex; flex-direction: column; }
 .review__err { margin: 0 0 10px; }
+
+/* ---------- Profils → Izskats: four colour themes to pick from ---------- */
+.themes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.themes button { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 4px; border: 1px solid var(--line); border-radius: 16px; background: none; color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; }
+.themes button.on { border-color: var(--outline); box-shadow: inset 0 0 0 .5px var(--outline); color: var(--ink); }
+.themes__sw { width: 100%; height: 38px; border-radius: 10px; border: 1px solid rgba(128, 128, 128, .25); display: flex; align-items: center; justify-content: center; gap: 5px; }
+.themes__sw i { width: 18px; height: 12px; border-radius: 4px; }
+.themes__sw b { width: 12px; height: 12px; border-radius: 50%; }
+.profile__lab { margin: 4px 0 -4px; font-size: 13px; font-weight: 600; color: var(--muted); }
+
+/* ---------- Analītika (components/AnalyticsSheet.tsx): a sheet from the bottom, most of the screen ---------- */
+.ref-btn--tools { display: none; }
+.asheet__shade { position: fixed; inset: 0; z-index: 36; background: rgba(30, 30, 28, .45); animation: page-in .2s ease-out; }
+.asheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 37; width: min(1240px, 100%); height: 90vh; height: 90dvh; margin: 0 auto; padding: 0 24px 28px; overflow-y: auto; overscroll-behavior: contain;
+  border-radius: 28px 28px 0 0; background: var(--bg); box-shadow: 0 -12px 40px rgba(30, 30, 28, .22); animation: sheet-up .38s var(--ease) both;
+  display: flex; flex-direction: column; }
+.asheet > * { flex: none; }
+@keyframes sheet-up { from { transform: translateY(100%); } }
+.asheet__head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 12px; padding: 18px 0 12px; background: var(--bg); }
+.asheet__head h2 { flex: 1; min-width: 0; margin: 0; display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 600; letter-spacing: -.03em; }
+.asheet__sel { position: relative; }
+.asheet__sel select { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; }
+.asheet__sel:focus-within { box-shadow: 0 0 0 2px var(--ink); }
+.asheet__sel--days { width: auto; gap: 6px; padding: 0 12px 0 10px; border-radius: 20px; color: var(--ink); }
+.asheet__sel--days b { font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.asheet__who { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 12px; margin: 0 2px 14px; }
+.asheet__who b { font-size: 18px; font-weight: 600; letter-spacing: -.02em; }
+.asheet__who span { font-size: 13.5px; color: var(--muted); }
+.asheet__head .icon-btn { background: var(--card); }
+.asheet__ask { margin: 8px 0 14px; font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
+.asheet__find { max-width: 320px; margin-bottom: 12px; background: var(--card); }
+.asheet__pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.asheet__pick button { display: flex; flex-direction: column; gap: 2px; min-height: 64px; padding: 12px 18px; border: 1px solid transparent; border-radius: 22px; background: var(--card); color: var(--ink);
+  font: inherit; text-align: left; cursor: pointer; box-shadow: 0 1px 2px rgba(40, 40, 36, .08); animation: an-in .4s var(--ease) both; }
+.asheet__pick button b { font-size: 16px; font-weight: 600; letter-spacing: -.02em; }
+.asheet__pick button span { font-size: 13.5px; color: var(--faint); }
+@media (hover: hover) { .asheet__pick button:hover { border-color: var(--outline); } }
+.asheet__wait { padding: 24px 2px; }
+/* The charts fill whatever height the sheet has: the two line charts share it, the donut card stretches beside them. */
+.an { flex: 1 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.an-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.an-tile, .an-card { background: var(--card); border-radius: 22px; box-shadow: 0 1px 2px rgba(40, 40, 36, .08); animation: an-in .5s var(--ease) both; }
+.an-tile { padding: 14px 18px; display: flex; flex-direction: column; gap: 2px; }
+.an-tile span { font-size: 13px; color: var(--muted); }
+.an-tile b { font-size: 26px; font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.an-tile:nth-child(2) { animation-delay: .05s; } .an-tile:nth-child(3) { animation-delay: .1s; } .an-tile:nth-child(4) { animation-delay: .15s; }
+.an-cols { flex: 1 0 auto; display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr); gap: 14px; align-items: stretch; }
+.an-lines { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.an-card { display: flex; flex-direction: column; padding: 16px 18px 12px; min-width: 0; animation-delay: .2s; }
+.an-lines .an-card { flex: 1 0 auto; }
+.an-lines .an-card + .an-card { animation-delay: .3s; }
+.an-share { animation-delay: .4s; }
+.an-card__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.an-card__head h3 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.02em; }
+.an-card__val { font-size: 13px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.an-card__val b { color: var(--ink); font-size: 14.5px; }
+.an-card__s { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; } /* one toner's value in a chart's readout */
+.an-card__s i { width: 8px; height: 8px; border-radius: 50%; }
+.an-plot { flex: 1 0 auto; position: relative; width: 100%; }
+.an-plot svg { position: absolute; left: 0; top: 0; display: block; touch-action: pan-y; } /* out of the flow, so it follows the box and never props it open */
+.an-grid { stroke: var(--line2); stroke-width: 1; }
+.an-tick { fill: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+.an-line { fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 1; animation: an-draw 1.2s cubic-bezier(.3, .7, .2, 1) .35s both; }
+.an-area { fill: currentColor; opacity: .09; animation: an-fade .8s ease .9s both; }
+.an-cursor { stroke: currentColor; stroke-width: 1; opacity: .35; }
+@keyframes an-draw { from { stroke-dashoffset: 1; } }
+@keyframes an-fade { from { opacity: 0; } }
+@keyframes an-in { from { opacity: 0; transform: translateY(12px); } }
+.an-none { padding: 18px 0 14px; }
+.an-donut { flex: 1 1 200px; display: block; width: 100%; min-height: 160px; max-height: 420px; margin: 4px auto 8px; }
+.an-donut__bg { fill: none; stroke: var(--track); stroke-width: 20; }
+.an-donut__seg { fill: none; stroke-width: 20; animation: an-seg 1s cubic-bezier(.3, .7, .2, 1) .55s both; }
+@keyframes an-seg { from { stroke-dasharray: 0 var(--len); } }
+.an-donut__n { fill: var(--ink); font-size: 22px; font-weight: 600; letter-spacing: -.03em; }
+.an-donut__l { fill: var(--muted); font-size: 9px; }
+.an-legend { list-style: none; margin: 0; padding: 0; }
+.an-legend li { display: flex; align-items: center; gap: 10px; min-height: 36px; border-top: 1px solid var(--line2); font-size: 14.5px; }
+.an-legend i { flex: none; width: 11px; height: 11px; border-radius: 50%; }
+.an-legend span { flex: 1; min-width: 0; }
+.an-legend b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.an-legend small { width: 52px; text-align: right; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.an-note { margin: 0; }
+@media (max-width: 800px) {
+  .ref-btn--top { display: none; }
+  .ref-btn--tools { display: inline-flex; margin-right: auto; }
+  /* Phones: nearly the whole screen, and everything packed to fit it without scrolling — one-line tiles, low
+     charts, the donut beside its legend. */
+  .asheet { height: 94vh; height: 94dvh; padding: 0 12px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .asheet__head { padding: 10px 0 8px; }
+  .asheet__head h2 { font-size: 19px; }
+  .asheet__head { padding: 8px 0 4px; }
+  .asheet__who { flex-wrap: nowrap; gap: 8px; margin: 0 2px 8px; white-space: nowrap; }
+  .asheet__who b { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; font-size: 15.5px; }
+  .asheet__who span { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; }
+  .an-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .an-tile { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding: 0 12px; border-radius: 16px; }
+  .an-tile span { font-size: 12px; line-height: 1.15; }
+  .an-tile b { font-size: 17px; white-space: nowrap; }
+  .an-cols { display: flex; flex-direction: column; }
+  .an-lines { flex: 1 0 auto; }
+  .an, .an-lines, .an-cols { gap: 8px; }
+  .an-card { padding: 10px 12px 6px; border-radius: 18px; }
+  .an-card__head { margin-bottom: 4px; }
+  .an-card__head h3 { font-size: 14px; }
+  .an-card__s { margin-left: 7px; gap: 3px; } .an-card__val b { font-size: 13px; }
+  .an-share { display: grid; grid-template-columns: 96px minmax(0, 1fr); column-gap: 14px; align-items: center; padding-bottom: 10px; }
+  .an-share .an-card__head, .an-share .an-none { grid-column: 1 / -1; }
+  .an-donut { flex: none; width: 96px; min-height: 0; margin: 0; }
+  .an-donut__n { font-size: 26px; }
+  .an-legend li { min-height: 23px; border-top: 0; font-size: 13.5px; }
+  .an-legend small { width: 44px; font-size: 12.5px; }
+  .an-note { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .asheet, .asheet__shade, .asheet__pick button, .an-tile, .an-card, .an-line, .an-area, .an-donut__seg { animation: none !important; }
+}

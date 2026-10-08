@@ -40,6 +40,11 @@ def poll_all_sync(printer_id: int | None = None) -> int:
                     "INSERT INTO page_counts (printer_id, day, page_count) VALUES (?,?,?)"
                     " ON CONFLICT(printer_id, day) DO UPDATE SET page_count = excluded.page_count",
                     (pid, ts[:10], r.page_count))
+            if r.reachable:  # each supply's last level of the day, kept for the analytics charts
+                conn.executemany(
+                    "INSERT INTO supply_days (printer_id, day, idx, description, pct) VALUES (?,?,?,?,?)"
+                    " ON CONFLICT(printer_id, day, idx, description) DO UPDATE SET pct = excluded.pct",
+                    [(pid, ts[:10], s["idx"], s["description"], s["pct"]) for s in r.supplies if s["pct"] is not None])
             if r.reachable:
                 try:  # a detection problem must never stop the poll from being saved
                     replacements.detect(conn, pid, cur.lastrowid)

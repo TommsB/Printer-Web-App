@@ -25,6 +25,16 @@ export const Icon = {
   // Žurnāls entry types
   // Used = line going down, received = line going up, moved = two arrows passing each other, defect = warning sign
   trendDown: (s = 18) => svg(s, <><path d="M3 7l6 6 4-4 7.5 7.5" /><path d="M21 11v6h-6" /></>),
+  stopwatch: (s = 20) => svg(s, <><circle cx="12" cy="13.5" r="7.5" /><path d="M12 9.5v4l2.5 1.5" /><path d="M10 3h4" /><path d="M12 3v3" /><path d="M5.6 6.6l1.4 1.4" /></>),
+  // Analītika: four bars with a rising arrow over them; the arrow is in the theme's accent colour.
+  chart: (s = 20) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 21v-5" /><path d="M10 21v-7.5" /><path d="M15 21v-9" /><path d="M20 21v-7.5" />
+      <g stroke="var(--accent-line)" strokeWidth="2.2" strokeLinecap="round">
+        <path d="M4 11.5l4.5-4.5h4L18 3.5" /><path d="M14.2 3h4.3v4.3" />
+      </g>
+    </svg>
+  ),
   trendUp: (s = 18) => svg(s, <><path d="M3 17l6-6 4 4 7.5-7.5" /><path d="M15 7h6v6" /></>),
   swap: (s = 18) => svg(s, <><path d="M7 5L4 8l3 3" /><path d="M4 8h12.5a3.5 3.5 0 0 1 3.5 3.5" /><path d="M17 13l3 3-3 3" /><path d="M20 16H7.5A3.5 3.5 0 0 1 4 12.5" /></>),
   hazard: (s = 18) => svg(s, <><path d="M12 4.5l8.5 14.5h-17z" /><path d="M12 10v4.5" /><path d="M12 17.2v.01" /></>),
