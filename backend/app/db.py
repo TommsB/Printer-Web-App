@@ -59,16 +59,31 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
 );
 CREATE TABLE IF NOT EXISTS app_kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
--- Every notification the server announced (the bell button's history), whether or not anyone had push on.
+-- The bell button's history: one row per user per notification they were told about (whether or not they
+-- have push on), so each user can delete theirs and has their own notification hours.
 CREATE TABLE IF NOT EXISTS push_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
     category TEXT NOT NULL,
     title TEXT NOT NULL,
     body TEXT NOT NULL DEFAULT '',
-    url TEXT NOT NULL DEFAULT '/'
+    url TEXT NOT NULL DEFAULT '/',
+    username TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS push_state (key TEXT PRIMARY KEY, since_ts TEXT NOT NULL);
+-- Notifications held back because they came up outside a user's notification hours. Delivered when their
+-- hours start, unless the problem (key = its push_state key) is gone by then.
+CREATE TABLE IF NOT EXISTS push_pending (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    key TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '',
+    url TEXT NOT NULL DEFAULT '/',
+    tag TEXT NOT NULL DEFAULT '',
+    created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+);
 -- Small per-user settings, e.g. the order e-mail template (settings.py).
 CREATE TABLE IF NOT EXISTS user_settings (
     username TEXT NOT NULL,
@@ -165,19 +180,20 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     note TEXT NOT NULL DEFAULT '',
     ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
 );
--- Toner replacements detected from SNMP (level jumped up). Reviewed in Žurnāls: confirm (= mark used) or dismiss.
+-- Toner and drum replacements detected from SNMP (level jumped up). Reviewed in Žurnāls: confirm (= mark used) or dismiss.
 CREATE TABLE IF NOT EXISTS toner_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     printer_id INTEGER NOT NULL REFERENCES printers(id) ON DELETE CASCADE,
-    toner_id INTEGER REFERENCES toner_models(id) ON DELETE SET NULL,  -- NULL if no linked cartridge matches the colour
+    toner_id INTEGER REFERENCES toner_models(id) ON DELETE SET NULL,  -- NULL if no linked item of that kind matches the colour
     supply TEXT NOT NULL,          -- SNMP supply description, e.g. "Black Cartridge HP CF360X"
-    color TEXT NOT NULL DEFAULT '',
+    color TEXT NOT NULL DEFAULT '',  -- K/C/M/Y; '' for a drum the printer reports without a colour
     from_pct INTEGER NOT NULL,
     to_pct INTEGER NOT NULL,
     ts TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'open',  -- open | confirmed | dismissed
     resolved_by TEXT,
-    resolved_ts TEXT
+    resolved_ts TEXT,
+    kind TEXT NOT NULL DEFAULT 'toner'  -- toner | drum: what was replaced (same values as toner_models.kind)
 );
 CREATE INDEX IF NOT EXISTS idx_toner_events_status ON toner_events(status);
 CREATE TABLE IF NOT EXISTS snmp_snapshots (
@@ -277,6 +293,33 @@ def _make_ip_optional() -> None:
         conn.close()
 
 
+def _split_push_log_per_user(conn: sqlite3.Connection) -> None:
+    """The notification history used to be one list shared by everyone. Give every user their own copy of
+    it (and move their "seen up to here" mark to the matching copy), then drop the shared rows."""
+    if "username" not in _columns(conn, "push_log"):
+        conn.execute("ALTER TABLE push_log ADD COLUMN username TEXT NOT NULL DEFAULT ''")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_push_log_user ON push_log(username, id)")
+    shared = conn.execute("SELECT id, ts, category, title, body, url FROM push_log WHERE username = '' ORDER BY id").fetchall()
+    if not shared:
+        return
+    for (username,) in conn.execute("SELECT username FROM users").fetchall():
+        row = conn.execute("SELECT value FROM user_settings WHERE username = ? AND key = 'push_seen_id'", (username,)).fetchone()
+        try:
+            old_seen = int(row[0]) if row else 0
+        except ValueError:
+            old_seen = 0
+        new_seen = 0
+        for r in shared:
+            new_id = conn.execute("INSERT INTO push_log (ts, category, title, body, url, username) VALUES (?,?,?,?,?,?)",
+                                  (r["ts"], r["category"], r["title"], r["body"], r["url"], username)).lastrowid
+            if r["id"] <= old_seen:
+                new_seen = new_id
+        # The copies have new (higher) ids: without this, everything already read would count as unread again.
+        conn.execute("INSERT INTO user_settings (username, key, value) VALUES (?, 'push_seen_id', ?)"
+                     " ON CONFLICT(username, key) DO UPDATE SET value = excluded.value", (username, str(new_seen)))
+    conn.execute("DELETE FROM push_log WHERE username = ''")
+
+
 def init_db() -> None:
     _make_ip_optional()
     with get_db() as conn:
@@ -314,6 +357,10 @@ def init_db() -> None:
             conn.execute("ALTER TABLE stock_movements ADD COLUMN location_id INTEGER")
         if "to_location_id" not in mcols:
             conn.execute("ALTER TABLE stock_movements ADD COLUMN to_location_id INTEGER")
+
+        _split_push_log_per_user(conn)
+        if "kind" not in _columns(conn, "toner_events"):  # drum replacements are detected too (replacements.py)
+            conn.execute("ALTER TABLE toner_events ADD COLUMN kind TEXT NOT NULL DEFAULT 'toner'")
 
         # Pins were replaced by a custom order: each user's pinned printers (in pin order) become the
         # start of their order, the rest follow as before.

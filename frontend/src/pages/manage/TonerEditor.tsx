@@ -40,6 +40,9 @@ export function TonerEditor({ toner, users, onClose, onSaved }: Props) {
         <div className="field"><span>Veids</span>
           <Segmented label="Veids" value={kind} onChange={setKind} options={KINDS} />
         </div>
+        {/* What the kind means for the app, so the colour is filled in right. */}
+        {kind === 'drum' && <p className="fnote">Drums: lietotne rāda tā līmeni, pamana nomaiņu un brīdina, kad tas ir zems un rezervē nav neviena. Norādiet krāsu; ja vienu kodu lieto vairākām krāsām, krāsu atstājiet tukšu („–”).</p>}
+        {kind === 'other' && <p className="fnote">Cits (piem., atkritumu tvertne): tikai uzskaitei rezervē un pasūtīšanai. Līmenim un nomaiņai lietotne neseko.</p>}
         {toner && (
           <p className="fnote">{users.length
             ? <>Izmanto: {users.map((p) => p.location).join(', ')}. Dzēst var tikai neizmantotu toneri.</>

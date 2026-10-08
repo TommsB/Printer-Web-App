@@ -65,8 +65,28 @@ no spare. They are sent after each SNMP poll, once per problem (`backend/app/pus
 - The server needs outbound internet to the push services (Apple `*.push.apple.com`, Google
   `fcm.googleapis.com`, Mozilla `updates.push.services.mozilla.com`).
 - iPhone/iPad: only in the home-screen app (Safari → Share → Add to Home Screen), iOS 16.4 or newer.
+- **Notification hours** (same window → **Paziņojumu laiks**): each user can limit notifications to a time of
+  day (from–to, may run past midnight) and weekdays. Outside those hours nothing is sent or added to their
+  bell list. What came up meanwhile waits and is delivered at the first poll inside their hours, with the time
+  it started — unless the problem is over by then (a printer off for the night and back in the morning stays
+  silent). Times are the server's local time (`TZ` in the Dockerfile).
+- **Bell list**: per user. × removes one entry, "Notīrīt visus" all of them; other users keep theirs. It holds
+  each user's last 300 notifications.
 - The server's key pair is created on first use and lives in the database (`app_kv`). Restoring an older
   database copy, or starting with a new one, means every device has to switch notifications on again.
+
+### Toners, drums and other consumables
+The catalogue (Pārvaldība → Toneri) has three kinds; all of them can be linked to a printer with a norm, kept
+in the reserve, ordered and received the same way.
+- **Toneris** and **Drums** are tied to what the printer reports over SNMP: the level is shown in the printer
+  view, a replacement is detected (Vēsture → Jāpārbauda; confirming takes 1 from that item's reserve), and a
+  "zems pēdējais toneris / drums" notification is sent when it is low (toner < 40%, drum < 15%, or forecast to
+  run out within two weeks) with no spare in the reserve.
+- **Cits** (waste box, fuser…): reserve and orders only; its level and replacement are not tracked.
+- A supply is matched to a linked item by **kind and colour** (`replacements.py: classify, pick`; the same
+  rules are in `frontend/src/lib.ts`), so a black drum is never taken for the black toner. Give drums their
+  colour; a drum code used for several colours gets no colour ("–") and then stands for every drum colour that
+  has no item of its own.
 
 ### Database
 SQLite at `/app/data/printers.db` inside the `printer-data` volume (a named volume, because SQLite WAL breaks on Windows bind mounts).

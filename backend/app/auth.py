@@ -254,5 +254,7 @@ def delete_user(username: str, conn: sqlite3.Connection = Depends(db_dep), admin
     conn.execute("DELETE FROM user_printer_order WHERE username = ?", (username,))
     conn.execute("DELETE FROM user_settings WHERE username = ?", (username,))
     conn.execute("DELETE FROM push_subscriptions WHERE username = ?", (username,))  # no more notifications
+    conn.execute("DELETE FROM push_log WHERE username = ?", (username,))  # their bell list…
+    conn.execute("DELETE FROM push_pending WHERE username = ?", (username,))  # …and what waited for their hours
     _drop_sessions(conn, username)
     return {"deleted": username}

@@ -14,6 +14,7 @@ import { Stepper } from './Stepper'
 
 export interface TonerRowData {
   id: number; code: string; color: string; qty: number; optimal_qty: number; ordered: number; ordered_extra?: number; locations: StockLoc[]
+  kind?: string // 'toner' | 'drum' | 'other': drums and other consumables get a small tag on the row
 }
 
 interface Common {

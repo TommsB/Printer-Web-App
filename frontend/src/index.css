@@ -242,11 +242,20 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .nday .ev__l1 .nt { white-space: normal; overflow-wrap: anywhere; }
 .nbody { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .ntime { flex: none; align-self: flex-start; padding-top: 2px; font-size: 12.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+/* Each entry: the row itself (opens it) and a small × to delete it from your own list. */
+.nday .ev { display: flex; align-items: flex-start; gap: 2px; }
+.nday .ev__main { flex: 1; min-width: 0; }
+.ev__del { flex: none; width: 36px; height: 36px; margin-top: 6px; border: 0; border-radius: 50%; background: none; color: var(--faint); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.ev__del:hover { color: var(--ink); background: var(--tile); }
 .ev.unread .ev__main { background: var(--alert-bg); }
 .ev.unread .nt::after { content: ''; display: inline-block; width: 7px; height: 7px; margin-left: 7px; border-radius: 50%; background: var(--accent); vertical-align: middle; }
 /* Profile window → Paziņojumi */
 .push { gap: 12px; }
 .push__test { align-self: flex-start; }
+/* Paziņojumu laiks: weekday chips are short labels (P O T C Pk S Sv), so give them one size */
+.chips.days { gap: 6px; }
+.chips.days .chip { justify-content: center; min-width: 44px; height: 40px; padding: 0 8px; border-radius: 20px; font-weight: 500; }
+.fnote.warn { color: var(--hot); }
 /* "Garantija" tag on a warranty claim (Pasūtīts, Saņemt visus, order history). */
 .tag-w { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 8px; margin-left: 6px; border-radius: 10px;
   background: #EAEFF8; color: #3C5A99; font-size: 11.5px; font-weight: 600; letter-spacing: 0; vertical-align: middle; white-space: nowrap; }

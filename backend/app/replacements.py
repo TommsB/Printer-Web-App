@@ -1,8 +1,9 @@
-"""Detect toner replacements from SNMP levels and let the user review them.
+"""Detect toner and drum replacements from SNMP levels and let the user review them.
 
-After each poll, every toner's level is compared with the previous successful reading of the same
-printer. A big jump up (+30 points or more, ending at 50% or higher) means a new cartridge was put in;
-natural readings only go down, so small wobbles and coarse 10% steps don't trigger it.
+After each poll, every toner's and drum's level is compared with the previous successful reading of the
+same printer. A big jump up (+30 points or more, ending at 50% or higher) means a new one was put in;
+natural readings only go down, so small wobbles and coarse 10% steps don't trigger it. Other supplies
+(waste box, fuser, belt…) are not tracked: they can be kept in the reserve and ordered, nothing more.
 
 A detection is only *logged* (toner_events, status 'open'). The user reviews it in Žurnāls:
 - confirm: removes 1 from the reserve (a normal 'taken' movement) and closes the event,
@@ -45,6 +46,53 @@ def toner_color(description: str, mono: bool) -> str | None:
     return None
 
 
+_DRUM = re.compile(r"drum|photoconductor|imaging unit|image unit", re.I)
+_NOT_DRUM = re.compile(r"developer|transfer|waste|fus|belt|roller", re.I)
+
+
+def drum_color(description: str, mono: bool) -> str | None:
+    """'K'/'C'/'M'/'Y' if this supply is a drum of that colour, '' for a drum the printer names without a
+    colour (e.g. "Drum Unit" on a colour printer), None if it isn't a drum."""
+    if not _DRUM.search(description) or _NOT_DRUM.search(description):
+        return None
+    d = description.lower()
+    for word, col in _COLORS:
+        if word in d:
+            return col
+    return "K" if mono else ""
+
+
+def classify(description: str, mono: bool) -> tuple[str, str] | None:
+    """(kind, colour) for the supplies that are tied to the reserve — ('toner', 'C'), ('drum', 'K'), ('drum', '') —
+    or None for everything else (waste box, fuser, belt…: shown as levels only)."""
+    col = toner_color(description, mono)
+    if col is not None:
+        return "toner", col
+    col = drum_color(description, mono)
+    if col is not None:
+        return "drum", col
+    return None
+
+
+def pick(linked: list, kind: str, col: str, mono: bool):
+    """Which of the printer's linked catalogue items (rows with id, kind, upper-case color) this supply is.
+
+    Same kind and colour wins — the kind matters: a black drum must never be taken for the black toner.
+    Without a colour match: a mono printer's only item of that kind; and for drums, the printer's one drum
+    that has no colour set (a drum code shared by several colours, or the only drum)."""
+    same = [t for t in linked if t["kind"] == kind]
+    by_color = [t for t in same if col and t["color"] == col]
+    if by_color:
+        return by_color[0]
+    if mono and len(same) == 1:
+        return same[0]
+    if kind == "drum":
+        uncoloured = [t for t in same if not t["color"]]
+        if len(uncoloured) == 1:
+            return uncoloured[0]
+    return None
+
+
 def detect(conn: sqlite3.Connection, printer_id: int, snapshot_id: int) -> int:
     """Compare a new snapshot with the previous reachable one; log jumps. Returns how many were found."""
     prev = conn.execute(
@@ -57,7 +105,7 @@ def detect(conn: sqlite3.Connection, printer_id: int, snapshot_id: int) -> int:
     old = {(r["idx"], r["description"]): r["pct"] for r in conn.execute(
         "SELECT idx, description, pct FROM snmp_supplies WHERE snapshot_id = ?", (prev["id"],))}
     linked = conn.execute(
-        "SELECT t.id, UPPER(t.color) AS color FROM printer_toners pt JOIN toner_models t ON t.id = pt.toner_id"
+        "SELECT t.id, t.kind, UPPER(t.color) AS color FROM printer_toners pt JOIN toner_models t ON t.id = pt.toner_id"
         " WHERE pt.printer_id = ?", (printer_id,)).fetchall()
     ts = conn.execute("SELECT ts FROM snmp_snapshots WHERE id = ?", (snapshot_id,)).fetchone()["ts"]
 
@@ -67,13 +115,14 @@ def detect(conn: sqlite3.Connection, printer_id: int, snapshot_id: int) -> int:
         after = s["pct"]
         if before is None or after is None or after - before < MIN_RISE or after < MIN_AFTER:
             continue
-        col = toner_color(s["description"], mono)
-        if col is None:
+        what = classify(s["description"], mono)  # toners and drums; other supplies aren't tracked
+        if what is None:
             continue
-        match = [t["id"] for t in linked if t["color"] == col] or ([linked[0]["id"]] if mono and len(linked) == 1 else [])
+        kind, col = what
+        item = pick(linked, kind, col, mono)
         conn.execute(
-            "INSERT INTO toner_events (printer_id, toner_id, supply, color, from_pct, to_pct, ts) VALUES (?,?,?,?,?,?,?)",
-            (printer_id, match[0] if match else None, s["description"], col, before, after, ts))
+            "INSERT INTO toner_events (printer_id, toner_id, supply, color, from_pct, to_pct, ts, kind) VALUES (?,?,?,?,?,?,?,?)",
+            (printer_id, item["id"] if item else None, s["description"], col, before, after, ts, kind))
         found += 1
     return found
 
@@ -83,7 +132,7 @@ def detect(conn: sqlite3.Connection, printer_id: int, snapshot_id: int) -> int:
 router = APIRouter(prefix="/api/events", tags=["events"])
 
 _SQL = """
-SELECT e.id, e.printer_id, e.toner_id, e.supply, e.color, e.from_pct, e.to_pct, e.ts, e.status,
+SELECT e.id, e.printer_id, e.toner_id, e.supply, e.color, e.kind, e.from_pct, e.to_pct, e.ts, e.status,
        e.resolved_by, e.resolved_ts, p.location AS printer_location, p.model, t.code AS toner_code,
        COALESCE(pt.qty, 0) AS qty
 FROM toner_events e
@@ -130,7 +179,8 @@ def confirm(event_id: int, body: ConfirmIn, conn: sqlite3.Connection = Depends(d
     if e["status"] != "open":
         raise HTTPException(409, "Jau apstrādāts")
     if not e["toner_id"]:
-        raise HTTPException(400, "Printerim nav piesaistīta šīs krāsas tonera — izmantojiet 'Ignorēt'")
+        what = "šīs krāsas drums" if e["kind"] == "drum" else "šīs krāsas toneris"
+        raise HTTPException(400, f"Printerim nav piesaistīts {what} — izmantojiet 'Ignorēt'")
     loc = body.location_id
     if loc is None:
         if not e["locations"]:

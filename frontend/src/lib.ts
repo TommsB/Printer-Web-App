@@ -34,10 +34,18 @@ function colorOf(desc: string): [Col, string] | null {
   return null
 }
 
-/** Splits SNMP supplies into per-colour toner levels (K,C,M,Y order) and everything else. */
-export function splitSupplies(p: Printer): { toners: TonerLevel[]; others: Supply[] } {
+// Same rules as backend/app/replacements.py (drum_color): which SNMP supplies are drums.
+const DRUM = /drum|photoconductor|imaging unit|image unit/i
+const NOT_DRUM = /developer|transfer|waste|fus|belt|roller/i
+/** A drum's level. col '' = the printer reports it without a colour (e.g. "Drum Unit" on a colour printer). */
+export interface DrumLevel { idx: string; col: Col | ''; name: string; pct: number | null; days: number | null }
+
+/** Splits SNMP supplies into per-colour toner levels (K,C,M,Y order), drum levels, and everything else. */
+export function splitSupplies(p: Printer): { toners: TonerLevel[]; drums: DrumLevel[]; others: Supply[] } {
   const supplies = p.snapshot?.reachable ? p.snapshot.supplies ?? [] : []
+  const mono = p.color_type === 'Melnbalts'
   const toners: TonerLevel[] = []
+  const drums: DrumLevel[] = []
   const used = new Set<string>()
   for (const s of supplies) {
     const c = colorOf(s.description)
@@ -45,12 +53,37 @@ export function splitSupplies(p: Printer): { toners: TonerLevel[]; others: Suppl
     toners.push({ col: c[0], name: c[1], pct: s.pct, days: s.days_left ?? null })
     used.add(s.idx)
   }
-  if (toners.length === 0 && p.color_type === 'Melnbalts') {
+  if (toners.length === 0 && mono) {
     const s = supplies.find((x) => /toner|cartridge/i.test(x.description) && !NOT_TONER.test(x.description))
     if (s) { toners.push({ col: 'k', name: 'Black', pct: s.pct, days: s.days_left ?? null }); used.add(s.idx) }
   }
-  toners.sort((a, b) => 'kcmy'.indexOf(a.col) - 'kcmy'.indexOf(b.col))
-  return { toners, others: supplies.filter((s) => !used.has(s.idx) && s.pct !== null) }
+  for (const s of supplies) {
+    if (used.has(s.idx) || !DRUM.test(s.description) || NOT_DRUM.test(s.description)) continue
+    const c = colorOf(s.description) ?? (mono ? (['k', 'Black'] as [Col, string]) : null)
+    drums.push({ idx: s.idx, col: c ? c[0] : '', name: c ? c[1] : '', pct: s.pct, days: s.days_left ?? null })
+    used.add(s.idx)
+  }
+  const rank = (col: string) => (col ? 'kcmy'.indexOf(col) : 9)
+  toners.sort((a, b) => rank(a.col) - rank(b.col))
+  drums.sort((a, b) => rank(a.col) - rank(b.col))
+  return { toners, drums, others: supplies.filter((s) => !used.has(s.idx) && s.pct !== null) }
+}
+
+/**
+ * Which of the printer's linked catalogue items an SNMP supply of this kind and colour is (same rules as
+ * backend/app/replacements.py `pick`). The kind matters: a black drum must never be taken for the black toner.
+ * Without a colour match: a mono printer's only item of that kind; for drums, the one drum with no colour set.
+ */
+export function linkedItem(p: Printer, kind: 'toner' | 'drum', col: Col | ''): Printer['toners'][number] | undefined {
+  const same = p.toners.filter((t) => t.kind === kind)
+  const byColor = col ? same.find((t) => t.color.toLowerCase() === col) : undefined
+  if (byColor) return byColor
+  if (p.color_type === 'Melnbalts' && same.length === 1) return same[0]
+  if (kind === 'drum') {
+    const uncoloured = same.filter((t) => !t.color)
+    if (uncoloured.length === 1) return uncoloured[0]
+  }
+  return undefined
 }
 
 const STATUS_LV: Record<string, string> = {

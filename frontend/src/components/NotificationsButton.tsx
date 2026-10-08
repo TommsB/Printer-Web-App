@@ -4,7 +4,7 @@ import { api, fmtClock, fmtTime, parseTs, type PushHistory, type PushLogItem } f
 import { useApiData } from '../cache'
 import { Icon } from '../icons'
 import { dayLabel } from '../lib'
-import { Dialog } from './Dialog'
+import { DestructiveDialog, Dialog } from './Dialog'
 
 const KIND: Record<PushLogItem['category'], { icon: () => ReactNode; cls: string }> = {
   printer: { icon: () => Icon.printer(18), cls: 'k-out' },
@@ -15,9 +15,10 @@ const EMPTY: PushHistory = { items: [], seen: 0, unread: 0 }
 const REFRESH_MS = 60_000
 
 /**
- * Bell button in the top bar: the notifications the server has announced (the same ones that are pushed to
- * phones), newest first, with a badge for the ones this user hasn't seen. Everyone sees the same history,
- * whether or not they have push switched on. Opening the list marks it as seen; tapping an entry goes there.
+ * Bell button in the top bar: the notifications this user was told about (the same ones that are pushed to
+ * their phone, within their notification hours), newest first, with a badge for the ones they haven't seen.
+ * It fills whether or not they have push switched on. Opening the list marks it as seen; tapping an entry
+ * goes there; × removes one entry and "Notīrīt visus" all of them — from this user's list only.
  */
 export function NotificationsButton() {
   const { data, setData, reload } = useApiData<PushHistory>('push-history', api.pushHistory, EMPTY)
@@ -45,6 +46,18 @@ export function NotificationsButton() {
     }
   }
   const go = (item: PushLogItem) => { setOpen(false); navigate(item.url) }
+
+  // Deleting only touches this user's own list. The row goes at once; the reload then pulls in an older
+  // entry to take its place (the list shows the newest ones), or puts the row back if the server refused.
+  const [askClear, setAskClear] = useState(false)
+  const remove = (item: PushLogItem) => {
+    setData({ ...data, items: data.items.filter((n) => n.id !== item.id), unread: Math.max(0, data.unread - (item.id > data.seen ? 1 : 0)) })
+    api.pushDelete(item.id).catch(() => {}).finally(() => { reload().catch(() => {}) })
+  }
+  const clearAll = async () => {
+    await api.pushClear()
+    setData({ ...data, items: [], unread: 0 })
+  }
 
   // Group by day, like Vēsture.
   const days: { day: string; items: PushLogItem[] }[] = []
@@ -80,6 +93,7 @@ export function NotificationsButton() {
                         </span>
                         <span className="ntime">{fmtClock(n.ts)}</span>
                       </button>
+                      <button type="button" className="ev__del" onClick={() => remove(n)} aria-label={`Dzēst paziņojumu: ${n.title}`} title="Dzēst">{Icon.close(16)}</button>
                     </li>
                   )
                 })}
@@ -87,9 +101,17 @@ export function NotificationsButton() {
             </div>
           ))}
           <Dialog.Footer>
+            {data.items.length > 0 && (
+              <Dialog.Start><button type="button" className="btn danger" onClick={() => setAskClear(true)}>Notīrīt visus</button></Dialog.Start>
+            )}
             <Dialog.Cancel>Aizvērt</Dialog.Cancel>
           </Dialog.Footer>
         </Dialog.Frame>
+      )}
+      {open && askClear && (
+        <DestructiveDialog title="Notīrīt visus paziņojumus?" confirmLabel="Notīrīt" onClose={() => setAskClear(false)} onConfirm={clearAll}>
+          <p className="dlg-text">Tiks dzēsti visi jūsu paziņojumi, arī vecākie, kas šajā sarakstā vairs nav redzami. Citu lietotāju saraksti nemainās.</p>
+        </DestructiveDialog>
       )}
     </>
   )

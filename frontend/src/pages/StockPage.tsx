@@ -426,7 +426,7 @@ export function StockPage() {
                 </button>
                 {isOpen && list.map((r) => (
                   <TonerRow key={r.toner_id} printerId={r.printer_id} printerName={r.location} allLocations={locations.data}
-                    toner={{ id: r.toner_id, code: r.code, color: r.color, qty: r.qty, optimal_qty: r.optimal_qty, ordered: r.ordered, ordered_extra: r.ordered_extra, locations: r.locations }}
+                    toner={{ id: r.toner_id, code: r.code, color: r.color, kind: r.kind, qty: r.qty, optimal_qty: r.optimal_qty, ordered: r.ordered, ordered_extra: r.ordered_extra, locations: r.locations }}
                     onChange={load} />
                 ))}
               </article>

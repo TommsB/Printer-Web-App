@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type PushPrefs, type PushStatus } from '../api'
+import { api, type PushPrefs, type PushSchedule, type PushStatus } from '../api'
 import { currentSubscription, disablePush, enablePush, pushSupport, type PushSupport } from '../push'
 import { Toggle } from './Toggle'
 
@@ -11,13 +11,21 @@ const WHY_NOT: Record<Exclude<PushSupport, 'ok'>, string> = {
 }
 const KINDS: { key: keyof PushPrefs; label: string; hint: string }[] = [
   { key: 'printer', label: 'Printeris nevar drukāt', hint: 'Iestrēdzis papīrs, atvērtas durtiņas, nav papīra, vai printeris neatbild' },
-  { key: 'replacement', label: 'Nomainīts toneris', hint: 'Jāapstiprina sadaļā Vēsture' },
-  { key: 'toner', label: 'Zems pēdējais toneris', hint: 'Toneris zem 40% vai beigsies 2 nedēļu laikā, un rezervē nav neviena' },
+  { key: 'replacement', label: 'Nomainīts toneris vai drums', hint: 'Jāapstiprina sadaļā Vēsture' },
+  { key: 'toner', label: 'Zems pēdējais toneris vai drums', hint: 'Toneris zem 40% (drums zem 15%) vai beigsies 2 nedēļu laikā, un rezervē nav neviena' },
 ]
+// Index = the server's weekday number (0 = Monday).
+const DAYS = [
+  { short: 'P', name: 'Pirmdiena' }, { short: 'O', name: 'Otrdiena' }, { short: 'T', name: 'Trešdiena' },
+  { short: 'C', name: 'Ceturtdiena' }, { short: 'Pk', name: 'Piektdiena' }, { short: 'S', name: 'Sestdiena' },
+  { short: 'Sv', name: 'Svētdiena' },
+]
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 
 /**
  * Profile window → Paziņojumi. "Šajā ierīcē" is per device (each phone/browser is switched on separately,
- * because the browser has to ask for permission there); the three kinds are per user, for all their devices.
+ * because the browser has to ask for permission there); the three kinds and the notification hours
+ * (Paziņojumu laiks: from–to and weekdays) are per user, for all their devices and their bell list.
  * Every switch applies at once.
  */
 export function PushSettings() {
@@ -79,19 +87,72 @@ export function PushSettings() {
     } finally { setBusy(false) }
   }
 
+  // Notification hours apply at once, like the switches above. With no weekday chosen there is nothing valid
+  // to save yet: keep it on screen (with a hint) and save as soon as a day is picked.
+  const setSchedule = async (patch: Partial<PushSchedule>) => {
+    if (!status) return
+    const schedule = { ...status.schedule, ...patch }
+    setStatus({ ...status, schedule })
+    setNote('')
+    if (schedule.enabled && schedule.days.length === 0) return
+    if (!TIME.test(schedule.start) || !TIME.test(schedule.end)) return // a time field that is being cleared/typed
+    try { await api.pushSchedule(schedule) } catch (err) {
+      setStatus(status)
+      setNote(err instanceof Error ? err.message : 'Neizdevās saglabāt paziņojumu laiku')
+    }
+  }
+  const toggleDay = (day: number) => {
+    if (!status) return
+    const days = status.schedule.days
+    setSchedule({ days: days.includes(day) ? days.filter((d) => d !== day) : [...days, day].sort((a, b) => a - b) })
+  }
+
   const blocked = support !== 'ok'
+  const schedule = status?.schedule
   return (
-    <div className="fsec push">
-      <div className="lab">Paziņojumi</div>
-      <Toggle label="Paziņojumi šajā ierīcē" checked={endpoint !== null} disabled={blocked || !status || busy}
-        hint={blocked ? WHY_NOT[support] : 'Katru ierīci ieslēdz atsevišķi'} onChange={toggleDevice} />
-      {endpoint !== null && status && <>
-        {KINDS.map((k) => (
-          <Toggle key={k.key} label={k.label} hint={k.hint} checked={status.prefs[k.key]} onChange={(on) => setKind(k.key, on)} />
-        ))}
-        <button type="button" className="btn small push__test" disabled={busy} onClick={test}>Nosūtīt testa paziņojumu</button>
-      </>}
-      {note && <p className="fnote" role="status">{note}</p>}
-    </div>
+    <>
+      <div className="fsec push">
+        <div className="lab">Paziņojumi</div>
+        <Toggle label="Paziņojumi šajā ierīcē" checked={endpoint !== null} disabled={blocked || !status || busy}
+          hint={blocked ? WHY_NOT[support] : 'Katru ierīci ieslēdz atsevišķi'} onChange={toggleDevice} />
+        {endpoint !== null && status && <>
+          {KINDS.map((k) => (
+            <Toggle key={k.key} label={k.label} hint={k.hint} checked={status.prefs[k.key]} onChange={(on) => setKind(k.key, on)} />
+          ))}
+          <button type="button" className="btn small push__test" disabled={busy} onClick={test}>Nosūtīt testa paziņojumu</button>
+        </>}
+        {note && <p className="fnote" role="status">{note}</p>}
+      </div>
+
+      {/* Hours apply to the phone notifications and to the bell list alike, so they show even with this device off. */}
+      {schedule && (
+        <div className="fsec push">
+          <div className="lab">Paziņojumu laiks</div>
+          <Toggle label="Tikai noteiktā laikā" checked={schedule.enabled} onChange={(on) => setSchedule({ enabled: on })}
+            hint="Ārpus šī laika paziņojumi nepienāk. Ja problēma joprojām pastāv, kad laiks sākas, par to paziņo tad." />
+          {schedule.enabled && <>
+            <div className="frow">
+              <label>No
+                <input type="time" value={schedule.start} onChange={(e) => setSchedule({ start: e.target.value })} />
+              </label>
+              <label>Līdz
+                <input type="time" value={schedule.end} onChange={(e) => setSchedule({ end: e.target.value })} />
+              </label>
+            </div>
+            <div className="chips days" role="group" aria-label="Nedēļas dienas">
+              {DAYS.map((d, i) => (
+                <button key={d.short} type="button" className={schedule.days.includes(i) ? 'chip on' : 'chip'}
+                  aria-pressed={schedule.days.includes(i)} aria-label={d.name} title={d.name} onClick={() => toggleDay(i)}>{d.short}</button>
+              ))}
+            </div>
+            {schedule.days.length === 0
+              ? <p className="fnote warn" role="status">Izvēlieties vismaz vienu dienu, citādi laiks netiek saglabāts.</p>
+              : schedule.start > schedule.end
+                ? <p className="fnote">Pāri pusnaktij: no {schedule.start} izvēlētajās dienās līdz {schedule.end} nākamajā rītā.</p>
+                : schedule.start === schedule.end && <p className="fnote">Vienāds sākums un beigas: visu diennakti izvēlētajās dienās.</p>}
+          </>}
+        </div>
+      )}
+    </>
   )
 }

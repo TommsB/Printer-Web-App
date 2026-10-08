@@ -17,6 +17,9 @@ interface Props {
 /** Which action dialog is open; each one is its own component (see TonerDialogs.tsx). */
 type OpenDialog = 'use' | 'order' | 'location' | 'correct' | 'warranty' | null
 
+/** Toners are the normal case and get no tag; a drum or another consumable is marked, since the colour dot alone can't tell. */
+const KIND_TAG: Record<string, string> = { drum: 'Drums', other: 'Cits' }
+
 /** Latvian: 1, 21, 31… lokācija (but 11 lokācijas); everything else lokācijas. */
 const plural = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'lokācija' : 'lokācijas')
 
@@ -41,6 +44,7 @@ export function TonerRow({ printerId, printerName, toner: t, allLocations, onCha
         <span className="cd">
           <span className="dot"><i className={t.color ? t.color.toLowerCase() : 'g'} /></span>
           <span className="code">{t.code}</span>
+          {t.kind && KIND_TAG[t.kind] && <span className="tag-s">{KIND_TAG[t.kind]}</span>}
           {label && (
             <button className={places.length === 1 && places[0].name === UNASSIGNED ? 'loc unassigned' : 'loc'}
               onClick={() => setDialog('location')} title={places.map((p) => `${p.name}: ${p.qty}`).join('\n')}>{label}</button>

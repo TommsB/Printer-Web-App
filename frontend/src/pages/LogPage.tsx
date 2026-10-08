@@ -131,7 +131,7 @@ export function LogPage() {
           <div className="rh">
             <h3>Jāpārbauda <span className="badge-n">{events.length}</span></h3>
           </div>
-          <p className="review__hint">Printeris ziņo, ka toneris nomainīts. Apstipriniet, lai noņemtu 1 gab. no rezerves, vai ignorējiet.</p>
+          <p className="review__hint">Printeris ziņo, ka toneris vai drums nomainīts. Apstipriniet, lai noņemtu 1 gab. no rezerves, vai ignorējiet.</p>
           {reviewError && <p className="error review__err" role="alert">{reviewError}</p>}
           <ul className="rvlist">
             {events.map((e) => {
@@ -141,10 +141,11 @@ export function LogPage() {
                   <span className="rv__head">
                     <span className="dot"><i className={e.color ? e.color.toLowerCase() : 'g'} /></span>
                     <span className="rv__txt">
-                      <b>{e.toner_code ?? `${COLOR_LV[e.color] ?? ''} toneris`}</b> · {e.printer_location}
+                      <b>{e.toner_code ?? `${COLOR_LV[e.color] ?? ''} ${e.kind === 'drum' ? 'drums' : 'toneris'}`.trim()}</b>
+                      {e.kind === 'drum' && <span className="tag-s">Drums</span>} · {e.printer_location}
                       <small>
                         {e.from_pct}% → {e.to_pct}% · {fmtTime(e.ts)}
-                        {!e.toner_id && ' · nav piesaistīta tonera'}
+                        {!e.toner_id && (e.kind === 'drum' ? ' · nav piesaistīta druma' : ' · nav piesaistīta tonera')}
                         {e.toner_id && e.qty === 0 && ' · rezervē nav neviena'}
                       </small>
                     </span>

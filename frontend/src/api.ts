@@ -11,7 +11,10 @@ export interface AppUser { username: string; role: Role; created_ts?: string; cr
 export interface PushPrefs { printer: boolean; replacement: boolean; toner: boolean }
 export interface PushLogItem { id: number; ts: string; category: keyof PushPrefs; title: string; body: string; url: string }
 export interface PushHistory { items: PushLogItem[]; seen: number; unread: number }
-export interface PushStatus { public_key: string; prefs: PushPrefs; endpoints: string[] }
+/** Notification hours: when on, the user is only told between start and end ("HH:MM") on these weekdays
+ *  (0 = Monday). What comes up outside waits and is delivered when the hours start, if it still applies. */
+export interface PushSchedule { enabled: boolean; start: string; end: string; days: number[] }
+export interface PushStatus { public_key: string; prefs: PushPrefs; endpoints: string[]; schedule: PushSchedule }
 export interface Snapshot {
   ts: string; reachable: boolean; hostname: string; serial: string; status: string
   uptime_hours: number | null; page_count: number | null; alerts: string; supplies?: Supply[]
@@ -93,9 +96,10 @@ export type SnmpTest =
   | { reachable: true; hostname: string; description: string; serial: string; page_count: number | null
       supplies: { description: string; pct: number | null }[] }
 
-/** A toner replacement detected from SNMP (level jumped up), waiting for review in Žurnāls. */
+/** A toner or drum replacement detected from SNMP (level jumped up), waiting for review in Žurnāls.
+ *  kind: what was replaced; color is '' for a drum the printer reports without a colour. */
 export interface TonerEvent {
-  id: number; printer_id: number; toner_id: number | null; supply: string; color: string
+  id: number; printer_id: number; toner_id: number | null; supply: string; color: string; kind: 'toner' | 'drum'
   from_pct: number; to_pct: number; ts: string; status: 'open' | 'confirmed' | 'dismissed'
   printer_location: string; model: string; toner_code: string | null; qty: number; locations: StockLoc[]
 }
@@ -246,6 +250,10 @@ export const api = {
   /** The bell button: past notifications (newest first) and how many this user hasn't seen. */
   pushHistory: () => req<PushHistory>('GET', '/api/push/history'),
   pushSeen: (id: number) => req<{ seen: number }>('POST', '/api/push/seen', { id }),
+  /** Remove one entry / all entries from this user's own list (other users keep theirs). */
+  pushDelete: (id: number) => req<unknown>('DELETE', `/api/push/history/${id}`),
+  pushClear: () => req<unknown>('DELETE', '/api/push/history'),
+  pushSchedule: (schedule: PushSchedule) => req<PushSchedule>('PUT', '/api/push/schedule', schedule),
   pushTest: (endpoint: string) => req<{ ok: boolean; status: number; reason?: string; contact?: string }>('POST', '/api/push/test', { endpoint }),
   /** Per-user settings (key → text); null = not set yet. */
   getSetting: (key: string) => req<{ value: string | null }>('GET', `/api/settings/${key}`),

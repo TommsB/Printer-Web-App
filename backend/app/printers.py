@@ -240,8 +240,9 @@ def update_printer(printer_id: int, body: PrinterIn, conn: sqlite3.Connection = 
     if cur.rowcount == 0:
         raise HTTPException(404, "Printer not found")
     if ip is None:  # taken off the network: forget what was announced, so a later return starts clean
-        conn.execute("DELETE FROM push_state WHERE key IN (?, ?) OR key LIKE ?",
-                     (f"offline:{printer_id}", f"blocked:{printer_id}", f"lowtoner:{printer_id}:%"))
+        keys = (f"offline:{printer_id}", f"blocked:{printer_id}", f"lowtoner:{printer_id}:%", f"lowdrum:{printer_id}:%")
+        conn.execute("DELETE FROM push_state WHERE key IN (?, ?) OR key LIKE ? OR key LIKE ?", keys)
+        conn.execute("DELETE FROM push_pending WHERE key IN (?, ?) OR key LIKE ? OR key LIKE ?", keys)  # and what waited for someone's hours
     _set_toners(conn, printer_id, body.toner_ids, body.norms)
     return get_printer(printer_id, conn)
 

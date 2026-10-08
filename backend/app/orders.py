@@ -159,11 +159,12 @@ def cartridge_life(conn: sqlite3.Connection, printer_id: int, toner_id: int, eve
     Pages = the page counter then minus the counter when it went in (all colours and mono pages together:
     it is how much the printer printed while this cartridge was in it).
     """
-    color = conn.execute("SELECT UPPER(color) FROM toner_models WHERE id = ?", (toner_id,)).fetchone()[0]
-    same = "printer_id = ? AND (toner_id = ? OR (color != '' AND color = ?))"
+    color, kind = conn.execute("SELECT UPPER(color), kind FROM toner_models WHERE id = ?", (toner_id,)).fetchone()
+    # Same colour only counts within the same kind: a black drum's replacement says nothing about the black toner.
+    same = "printer_id = ? AND (toner_id = ? OR (color != '' AND color = ? AND kind = ?))"
     removed_ts = conn.execute("SELECT strftime('%Y-%m-%dT%H:%M:%S','now','localtime')").fetchone()[0]
     before = ""
-    args: tuple = (printer_id, toner_id, color)
+    args: tuple = (printer_id, toner_id, color, kind)
     if event_id is not None:
         ev = conn.execute("SELECT ts FROM toner_events WHERE id = ? AND printer_id = ?", (event_id, printer_id)).fetchone()
         if ev:

@@ -10,7 +10,7 @@ import { TonerRow } from '../components/TonerRow'
 import { TopBar } from '../components/TopBar'
 import { useApp } from '../ctx'
 import { Icon } from '../icons'
-import { attentionReasons, DEFECT_STATUS, fmtDate, fmtDaysLeft, fmtHours, fmtNum, isImportantAlert, LOW_PCT, printerState, SOON_DAYS, splitSupplies, type Col } from '../lib'
+import { attentionReasons, DEFECT_STATUS, fmtDate, fmtDaysLeft, fmtHours, fmtNum, isImportantAlert, linkedItem, LOW_PCT, printerState, SOON_DAYS, splitSupplies, type Col } from '../lib'
 import { vtName, withViewTransition } from '../viewTransition'
 
 /** Snapshot times are local (no timezone), so compare with the local date. */
@@ -390,13 +390,14 @@ function DetailMain({ p, busy, spinning, onRefresh, onClose, onChange, allLocati
 }) {
   const st = printerState(p)
   const snap = p.snapshot
-  const { toners, others } = splitSupplies(p)
+  const { toners, drums, others } = splitSupplies(p)
   // Show the cartridge code (from the printer's linked toners) instead of "Toner Black"; the dot already shows the colour.
-  const codeFor = (col: Col) => p.toners.find((t) => t.color.toLowerCase() === col)?.code
+  const codeFor = (col: Col) => linkedItem(p, 'toner', col)?.code
   // Reserve in the same colour order as the levels (K, C, M, Y; anything without a colour last), so on
   // desktop each toner sits beside its own reserve row.
   const rank = (color: string) => { const i = 'kcmy'.indexOf(color.toLowerCase()); return color && i >= 0 ? i : 9 }
-  const reserve = [...p.toners].sort((a, b) => rank(a.color) - rank(b.color) || a.code.localeCompare(b.code))
+  const kindRank = (kind: string) => (kind === 'toner' ? 0 : kind === 'drum' ? 1 : 2) // toners, then drums, then the rest
+  const reserve = [...p.toners].sort((a, b) => kindRank(a.kind) - kindRank(b.kind) || rank(a.color) - rank(b.color) || a.code.localeCompare(b.code))
   const alerts = snap?.reachable && snap.alerts ? snap.alerts.split(' | ').filter((a) => a.trim()) : [] // blank = a printer sent an empty alert
   // Reasons it can't print first (from error flags / critical alerts), then the other important messages.
   const important = [...st.blocked, ...alerts.filter((a) => isImportantAlert(a) && !st.blocked.includes(a))]
@@ -463,6 +464,22 @@ function DetailMain({ p, busy, spinning, onRefresh, onClose, onChange, allLocati
               </span>
               <span className="tr"><i className={barClass(t.col, t.pct)} style={{ width: `${t.pct ?? 0}%` }} /></span>
               <span className={t.pct !== null && t.pct < LOW_PCT ? 'pv hot' : 'pv'}>{t.pct === null ? '–' : `${t.pct}%`}</span>
+            </div>
+          ))}
+          {/* Drums the printer reports: same rows, named by the linked drum's code when there is one. */}
+          {drums.length > 0 && <div className="lab gap">Drumi</div>}
+          {drums.map((d) => (
+            <div key={d.idx} className="sp">
+              <span className="dot"><i className={d.col || 'g'} /></span>
+              <span className="n" title={`Drums${d.name ? ` ${d.name}` : ''}`}>
+                {linkedItem(p, 'drum', d.col)?.code ?? `Drums${d.name ? ` ${d.name}` : ''}`}
+                {d.days !== null && (
+                  <small className={d.days <= SOON_DAYS ? 'left hot' : 'left'}
+                    title={`Prognoze pēc pēdējo dienu nolietojuma: pietiks apmēram ${d.days} d.`}>{fmtDaysLeft(d.days)}</small>
+                )}
+              </span>
+              <span className="tr"><i className={d.pct !== null && d.pct < LOW_PCT ? 'o' : d.col || 'g'} style={{ width: `${d.pct ?? 0}%` }} /></span>
+              <span className={d.pct !== null && d.pct < LOW_PCT ? 'pv hot' : 'pv'}>{d.pct === null ? '–' : `${d.pct}%`}</span>
             </div>
           ))}
         </div>
