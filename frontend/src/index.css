@@ -7,6 +7,7 @@
   --on-ink: #fff; --ink-hover: #4A4A45; --primary: var(--ink); --on-primary: var(--on-ink); --outline: var(--ink); --badge: var(--accent); --on-badge: #fff; --accent-line: var(--accent);
   --nav: var(--ink); --nav-fg: #B8B8B0; --nav-pill: #fff; --nav-pill-fg: var(--ink); --seg-on: #fff; --track: #EBEBE6; --line3: #C9C9C2;
   --ok: #2E7D4F; --ok-ink: #24603D; --ok-bg: #E7F3EB; --warn-ink: #9A6B08; --warn-bg: #FBF3DC; --info-ink: #3C5A99; --info-bg: #EAEFF8; --bad-bg: #FBE9E6;
+  --danger: var(--hot); --on-danger: #fff;
   --ease: cubic-bezier(.2, .8, .2, 1);
   font-family: 'Geist Variable', 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: var(--ink);
@@ -23,6 +24,24 @@
   color-scheme: dark;
 }
 :root[data-theme="dark"] .drum.k { color: #26282C; } /* the "D" on a black drum, which is drawn light here */
+/* "Neons": the opening screen's sign as a theme — its purple-black for the page, its pink for the main marks
+   (buttons, the active tab, badges) and its blue for outlines and chart highlights. */
+:root[data-theme="neon"] {
+  --bg: #14121F; --card: #1F1B30; --ink: #F1EEFF; --muted: #A9A3C7; --faint: #7F799E;
+  --line: #332D4D; --line2: #2A2540; --tile: #2A2540; --pillbg: #262139; --hover: #262139; --sel: #2A2540;
+  --hot: #FF9A4D; --bad: #FF6B7A; --alert-bg: #3D2A1E; --alert-ink: #FFB27A;
+  --k: #D8D8D2; --g: #7F799E;
+  --on-ink: #14121F; --ink-hover: #D9D4F2; --nav: #262139; --nav-fg: #C9C3E6; --nav-pill: #FF7AB8; --nav-pill-fg: #14121F; --seg-on: #3A3357; --track: #332D4D; --line3: #564E78;
+  --ok: #7CCB94; --ok-ink: #8FD3A4; --ok-bg: #1F3A2C; --warn-ink: #E8C46A; --warn-bg: #3D341C; --info-ink: #A9B4FF; --info-bg: #262A52; --bad-bg: #47232B;
+  --primary: #FF7AB8; --on-primary: #14121F; --outline: #8C9BFF; --badge: #FF7AB8; --on-badge: #14121F; --accent-line: #8C9BFF;
+  color-scheme: dark;
+}
+:root[data-theme="neon"] .drum.k { color: #14121F; }
+:root[data-theme="neon"] .rb.dk { background: var(--primary); color: var(--on-primary); } /* profile and close buttons: the sign's pink */
+:root[data-theme="neon"] .rb.dk:hover { background: #FF94C6; }
+:root:is([data-theme="blue"], [data-theme="green"]) { --danger: var(--bad); }
+:root[data-theme="neon"] { --danger: var(--bad); --on-danger: #14121F; }
+:root[data-theme="dark"] { --on-danger: #26282C; }
 :root[data-theme="blue"] {
   --bg: #EEF2F7; --ink: #16233A; --muted: #5A6880; --faint: #8A97AB;
   --line: #DDE4EE; --line2: #E9EEF5; --tile: #EDF2F8; --pillbg: #DFE6F0; --hover: #F7F9FC; --sel: #EEF3F9;
@@ -136,7 +155,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .chev { grid-area: chev; display: flex; align-items: center; justify-content: flex-end; gap: 10px; color: var(--faint); }
 /* "Needs attention" dot (maintenance / reserve below norm): top right of the printer icon, only when there's
    a reason. Ringed in the row's colour like the connection badge below it. */
-.sdot { position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1.5px var(--card); }
+.sdot { position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-line); box-shadow: 0 0 0 1.5px var(--card); }
 .item:hover .sdot { box-shadow: 0 0 0 1.5px var(--hover); }
 .item.on .sdot { box-shadow: 0 0 0 1.5px var(--card); }
 .bars { display: flex; gap: 8px; align-items: flex-start; }
@@ -279,7 +298,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .ev__del { flex: none; width: 36px; height: 36px; margin-top: 6px; border: 0; border-radius: 50%; background: none; color: var(--faint); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .ev__del:hover { color: var(--ink); background: var(--tile); }
 .ev.unread .ev__main { background: var(--alert-bg); }
-.ev.unread .nt::after { content: ''; display: inline-block; width: 7px; height: 7px; margin-left: 7px; border-radius: 50%; background: var(--accent); vertical-align: middle; }
+.ev.unread .nt::after { content: ''; display: inline-block; width: 7px; height: 7px; margin-left: 7px; border-radius: 50%; background: var(--accent-line); vertical-align: middle; }
 /* Profile window → Paziņojumi */
 .push { gap: 12px; }
 .push__test { align-self: flex-start; }
@@ -366,7 +385,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 /* List heading with an icon in front (Grozs, Pasūtīts) */
 .rh h3.h-ic { display: inline-flex; align-items: center; gap: 8px; }
 /* .primary too: .btn.primary is defined later in this file and would otherwise win (the button stayed black). */
-.btn.primary.danger-solid { background: var(--hot); border-color: var(--hot); }
+.btn.primary.danger-solid { background: var(--danger); border-color: var(--danger); color: var(--on-danger); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .btn.icon { padding: 0; width: 36px; display: inline-flex; align-items: center; justify-content: center; }
 
@@ -490,7 +509,7 @@ button.flist__name { border: 0; background: none; padding: 0; font: inherit; tex
 .lab__n { margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: var(--tile); font-size: 12px; letter-spacing: 0; }
 .icard .evlist { list-style: none; margin: 4px 0 0; padding: 0; }
 .dacts { display: flex; align-items: center; gap: 8px; }
-.tag { display: inline-flex; height: 30px; align-items: center; padding: 0 14px; border-radius: 15px; background: var(--accent); color: #fff; font-size: 13px; font-weight: 500; margin-top: 12px; }
+.tag { display: inline-flex; height: 30px; align-items: center; padding: 0 14px; border-radius: 15px; background: var(--badge); color: var(--on-badge); font-size: 13px; font-weight: 500; margin-top: 12px; }
 .tag.ok { background: var(--pillbg); color: var(--muted); }
 .tag.bad { background: var(--bad); color: #fff; margin-top: 0; height: 26px; padding: 0 12px; font-size: 12.5px; }
 .alert.info { background: var(--tile); color: var(--muted); }
@@ -704,7 +723,7 @@ button.flist__name { border: 0; background: none; padding: 0; font: inherit; tex
   font-variant-numeric: tabular-nums; vertical-align: middle; }
 /* Where a tapped notification points: the entry is outlined for a moment (LogPage / StockPage). */
 .rv.flash, .grp.flash { animation: flash 2.6s ease-out; }
-@keyframes flash { 0%, 65% { box-shadow: 0 0 0 2.5px var(--accent); } }
+@keyframes flash { 0%, 65% { box-shadow: 0 0 0 2.5px var(--accent-line); } }
 .bnav a { position: relative; }
 .bnav .badge-n { position: absolute; top: 4px; right: calc(50% - 22px); margin: 0; box-shadow: 0 0 0 2px var(--nav); }
 /* ---------- Pārvaldība ---------- */
@@ -763,7 +782,7 @@ button.flist__name { border: 0; background: none; padding: 0; font: inherit; tex
 .lrow { display: flex; align-items: center; gap: 8px; }
 .lrow b { font-weight: 600; min-width: 64px; }
 .lrow__norm { margin-left: auto; font-size: 12.5px; color: var(--faint); }
-.seg--form { align-self: flex-start; max-width: 100%; }
+.seg--form { align-self: flex-start; max-width: 100%; flex: none; } /* never squeezed flat when a window is taller than the screen: the window scrolls instead */
 .seg--form button { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); }
 textarea { font: inherit; padding: 10px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--bg); color: var(--ink); width: 100%; resize: vertical; }
 .toggle { display: flex; align-items: center; justify-content: space-between; gap: 14px; cursor: pointer; }
@@ -909,7 +928,7 @@ tr.inactive { opacity: .5; }
 .btn:hover:not(:disabled) { border-color: var(--ink); }
 .btn:disabled { opacity: .5; cursor: default; }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
-.btn.danger { color: var(--hot); }
+.btn.danger { color: var(--danger); }
 .btn.small { padding: 0 14px; min-height: 36px; font-size: 14px; border-radius: 18px; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid var(--line); background: var(--card); font-size: 14px; cursor: pointer; }
@@ -932,9 +951,19 @@ input[type=checkbox] { width: auto; min-height: 0; }
 .modal__box label.check { flex-direction: row; color: var(--ink); }
 .modal__actions { display: flex; justify-content: flex-end; gap: 8px; }
 
-.login { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+/* The login page wears the chosen theme (kept on the device, so it is known before anyone signs in): the opening
+   screen's sign over the form in the theme's two colours, and a soft patch of the accent colour behind it. */
+:root { --sign-a: var(--ink); --sign-b: var(--accent-line); --sign-glow: 30%; }
+:root[data-theme="dark"] { --sign-b: #FF9A4D; --sign-glow: 55%; } /* the same brighter orange as on the opening screen */
+:root[data-theme="neon"] { --sign-a: var(--outline); --sign-b: var(--primary); --sign-glow: 85%; }
+.login { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px;
+  background: radial-gradient(80vmin 80vmin at 50% 40%, color-mix(in srgb, var(--sign-b) 13%, transparent), transparent 70%); }
+.login__sign { align-self: center; width: 104px; height: auto; margin: 2px 0 6px; overflow: visible; fill: none; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+.login__sign .a { stroke: var(--sign-a); filter: drop-shadow(0 0 3px color-mix(in srgb, var(--sign-a) var(--sign-glow), transparent)) drop-shadow(0 0 10px color-mix(in srgb, var(--sign-a) var(--sign-glow), transparent)); }
+.login__sign .b { stroke: var(--sign-b); filter: drop-shadow(0 0 3px color-mix(in srgb, var(--sign-b) var(--sign-glow), transparent)) drop-shadow(0 0 10px color-mix(in srgb, var(--sign-b) var(--sign-glow), transparent)); }
 .login__form { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 12px; background: var(--card); border-radius: 32px; padding: 28px; }
-.login__form h1 { font-size: 34px; font-weight: 600; letter-spacing: -.035em; margin-bottom: 8px; }
+.login__form h1 { font-size: 34px; font-weight: 600; letter-spacing: -.035em; margin-bottom: 8px; text-align: center; }
+.login__form { box-shadow: 0 1px 2px rgba(40, 40, 36, .08), 0 24px 60px color-mix(in srgb, var(--sign-b) 10%, transparent); }
 .login__form .btn { min-height: 48px; }
 
 .bnav { display: none; }
@@ -1137,39 +1166,66 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
 .login__field { display: flex; flex-direction: column; }
 .review__err { margin: 0 0 10px; }
 
-/* ---------- Profils → Izskats: four colour themes to pick from ---------- */
-.themes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+/* ---------- Profils → Izskats: the colour themes to pick from ---------- */
+.themes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .themes button { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 4px; border: 1px solid var(--line); border-radius: 16px; background: none; color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; }
 .themes button.on { border-color: var(--outline); box-shadow: inset 0 0 0 .5px var(--outline); color: var(--ink); }
 .themes__sw { width: 100%; height: 38px; border-radius: 10px; border: 1px solid rgba(128, 128, 128, .25); display: flex; align-items: center; justify-content: center; gap: 5px; }
 .themes__sw i { width: 18px; height: 12px; border-radius: 4px; }
 .themes__sw b { width: 12px; height: 12px; border-radius: 50%; }
-.profile__lab { margin: 4px 0 -4px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.profile__lab { margin: 4px 0 -4px; font-size: 13px; font-weight: 600; color: var(--muted); display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.profile__lab small { font-size: 12px; font-weight: 400; color: var(--faint); } /* which option is the default */
 
 /* ---------- Analītika (components/AnalyticsSheet.tsx): a sheet from the bottom, most of the screen ---------- */
 .ref-btn--tools { display: none; }
 .asheet__shade { position: fixed; inset: 0; z-index: 36; background: rgba(30, 30, 28, .45); animation: page-in .2s ease-out; }
-.asheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 37; width: min(1240px, 100%); height: 90vh; height: 90dvh; margin: 0 auto; padding: 0 24px 28px; overflow-y: auto; overscroll-behavior: contain;
+.asheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 37; width: min(1240px, 100%); height: 90vh; height: 90dvh; margin: 0 auto; padding: 0 28px 26px; overflow-y: auto; overscroll-behavior: contain;
   border-radius: 28px 28px 0 0; background: var(--bg); box-shadow: 0 -12px 40px rgba(30, 30, 28, .22); animation: sheet-up .38s var(--ease) both;
   display: flex; flex-direction: column; }
 .asheet > * { flex: none; }
 @keyframes sheet-up { from { transform: translateY(100%); } }
-.asheet__head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 12px; padding: 18px 0 12px; background: var(--bg); }
-.asheet__head h2 { flex: 1; min-width: 0; margin: 0; display: flex; align-items: center; gap: 12px; font-size: 30px; font-weight: 600; letter-spacing: -.03em; }
+/* The top row: the title on the left, then the period, the printer and the close button. */
+.asheet__head { position: sticky; top: 0; z-index: 7; display: flex; align-items: flex-end; gap: 10px; padding: 22px 0 6px; background: var(--bg); }
+.asheet__title { flex: 1; min-width: 0; }
+.asheet__kicker { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.asheet__kicker svg { color: var(--ink); }
+.asheet__kicker i { display: none; font-style: normal; } /* "· 30 dienas": phones only, where the period switch is just an icon */
+.asheet__head h2 { margin: 0; min-width: 0; font-size: 38px; font-weight: 600; letter-spacing: -.035em; line-height: 1.08; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asheet__head h2.asheet__big { flex: 1; display: flex; align-items: center; gap: 12px; font-size: 30px; }
+.asheet__period .seg { align-self: auto; background: var(--pillbg); }
+.asheet__period .seg button { height: 38px; padding: 0 16px; }
 .asheet__sel { position: relative; }
 .asheet__sel select { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; }
 .asheet__sel:focus-within { box-shadow: 0 0 0 2px var(--ink); }
-.asheet__sel--days { width: auto; gap: 6px; padding: 0 12px 0 10px; border-radius: 20px; color: var(--ink); }
-.asheet__sel--days b { font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.asheet__who { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 12px; margin: 0 2px 14px; }
-.asheet__who b { font-size: 18px; font-weight: 600; letter-spacing: -.02em; }
-.asheet__who span { font-size: 13.5px; color: var(--muted); }
-.asheet__head .icon-btn { background: var(--card); }
-.asheet__ask { margin: 8px 0 14px; font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
+.asheet__sel--days { display: none; }
+.asheet__head .icon-btn { width: 46px; height: 46px; background: var(--card); color: var(--ink); }
+.asheet__head .icon-btn.asheet__close { background: var(--ink); color: var(--on-ink); }
+.asheet__who { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin: 0 2px 18px; min-height: 22px; }
+.asheet__who span { font-size: 14px; color: var(--muted); }
+.asheet__who em { flex: none; padding: 2px 9px; border-radius: 10px; background: var(--alert-bg); color: var(--alert-ink); font-size: 12.5px; font-style: normal; font-weight: 600; white-space: nowrap; }
+/* ⓘ with a short explanation that opens under it (Hint) */
+.hint { position: relative; display: inline-flex; vertical-align: middle; margin-left: 4px; }
+.hint__btn { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--faint); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.hint__btn[aria-expanded="true"] { color: var(--ink); background: var(--tile); }
+@media (hover: hover) { .hint__btn:hover { color: var(--ink); } }
+.hint__pop { position: absolute; left: -8px; top: calc(100% + 6px); z-index: 5; width: max-content; max-width: min(280px, 72vw); padding: 10px 12px; border-radius: 14px; background: var(--ink); color: var(--on-ink);
+  font-size: 12.5px; font-weight: 400; line-height: 1.4; letter-spacing: 0; text-align: left; text-transform: none; white-space: normal; box-shadow: 0 10px 28px rgba(30, 30, 28, .25); animation: page-in .15s ease-out; }
+.hint__pop b { font-weight: 600; }
+.an-tile .hint, .an-card__head h3 .hint { margin-top: -3px; margin-bottom: -3px; } /* the ⓘ must not make its line taller */
+/* In a tile or a chart heading the explanation opens under the whole tile / heading, from its left edge — so it
+   can't run off the side of a phone screen however far right the ⓘ itself sits. */
+.an-tile, .an-card__head { position: relative; }
+.an-tile .hint, .an-card__head h3 .hint { position: static; }
+.an-tile .hint__pop, .an-card__head .hint__pop { left: 0; top: calc(100% + 4px); max-width: min(300px, 100%); }
+.an-tile .hint__pop { max-width: min(300px, 86vw); }
+/* A tile or card with its explanation open goes above its neighbours (each is its own layer because of the
+   entrance animation, so the later ones would otherwise cover the explanation). */
+.an-tile:has(.hint__pop), .an-card:has(.hint__pop) { z-index: 6; }
+/* The printer picker: a label and a row of cards per company; each rises from below (delays are set inline). */
+.asheet__ask { margin: 10px 0 14px; font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
 .asheet__pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
 .asheet__pick button { display: flex; flex-direction: column; gap: 2px; min-height: 64px; padding: 12px 18px; border: 1px solid transparent; border-radius: 22px; background: var(--card); color: var(--ink);
   font: inherit; text-align: left; cursor: pointer; box-shadow: 0 1px 2px rgba(40, 40, 36, .08); animation: pick-rise .5s var(--ease) both; }
-/* The picker: a label and a row of cards per company; each rises from below once the sheet is up (delays are set inline). */
 .asheet__co + .asheet__co { margin-top: 18px; }
 .asheet__co-name { margin: 0 2px 8px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); animation: pick-rise .5s var(--ease) both; }
 @keyframes pick-rise { from { opacity: 0; transform: translateY(36px); } }
@@ -1177,81 +1233,151 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
 .asheet__pick button span { font-size: 13.5px; color: var(--faint); }
 @media (hover: hover) { .asheet__pick button:hover { border-color: var(--outline); } }
 .asheet__wait { padding: 24px 2px; }
-/* The charts fill whatever height the sheet has: the two line charts share it, the donut card stretches beside them. */
+
+/* The numbers and charts fill whatever height the sheet has. Cards are plain white shapes, no borders. */
 .an { flex: 1 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.an-tile, .an-card { background: var(--card); border-radius: 24px; box-shadow: 0 1px 2px rgba(40, 40, 36, .06); animation: an-in .5s var(--ease) both; }
+/* Tiles: the number is the loud thing; under it how it compares with the period before; the period's shape in the corner. */
 .an-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
-.an-tile, .an-card { background: var(--card); border-radius: 22px; box-shadow: 0 1px 2px rgba(40, 40, 36, .08); animation: an-in .5s var(--ease) both; }
-.an-tile { padding: 14px 18px; display: flex; flex-direction: column; gap: 2px; }
-.an-tile span { font-size: 13px; color: var(--muted); }
-.an-tile b { font-size: 26px; font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.an-tile { display: flex; flex-direction: column; min-height: 126px; padding: 16px 20px 14px; }
 .an-tile:nth-child(2) { animation-delay: .05s; } .an-tile:nth-child(3) { animation-delay: .1s; } .an-tile:nth-child(4) { animation-delay: .15s; }
-.an-cols { flex: 1 0 auto; display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr); gap: 14px; align-items: stretch; }
-.an-lines { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.an-card { display: flex; flex-direction: column; padding: 16px 18px 12px; min-width: 0; animation-delay: .2s; }
-.an-lines .an-card { flex: 1 0 auto; }
-.an-lines .an-card + .an-card { animation-delay: .3s; }
-.an-share { animation-delay: .4s; }
-.an-card__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-.an-card__head h3 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.02em; }
-.an-card__val { font-size: 13px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.an-card__val b { color: var(--ink); font-size: 14.5px; }
-.an-card__s { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; } /* one toner's value in a chart's readout */
-.an-card__s i { width: 8px; height: 8px; border-radius: 50%; }
+.an-tile__l { font-size: 13px; color: var(--muted); }
+.an-tile__row { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 2px; }
+.an-tile__v { font-size: 44px; font-weight: 600; letter-spacing: -.04em; line-height: 1.08; }
+.an-tile__v small { font-size: 22px; font-weight: 500; letter-spacing: -.02em; color: var(--muted); }
+.an-tile__d { padding: 2px 9px; border-radius: 11px; background: var(--tile); font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.an-tile__d b { font-weight: 600; color: var(--ink); }
+.an-tile__d i { font-style: normal; }
+/* The little trend line is drawn in from left to right as the sheet opens, each tile's a beat after the one before. */
+.an-tile__s { position: absolute; right: 18px; bottom: 18px; width: 92px; height: 38px; overflow: visible; pointer-events: none; animation: an-wipe .9s cubic-bezier(.3, .7, .2, 1) .45s both; }
+.an-tile:nth-child(2) .an-tile__s { animation-delay: .55s; } .an-tile:nth-child(3) .an-tile__s { animation-delay: .65s; } .an-tile:nth-child(4) .an-tile__s { animation-delay: .75s; }
+@keyframes an-wipe { from { clip-path: inset(-6px 100% -6px -6px); } to { clip-path: inset(-6px); } }
+.an-tile__s path { fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+.an-cols { flex: 1 0 auto; display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(300px, 1fr); gap: 14px; align-items: stretch; }
+.an-card { display: flex; flex-direction: column; min-width: 0; padding: 20px 24px 16px; border-radius: 28px; animation-delay: .2s; }
+.an-share { animation-delay: .3s; }
+/* Pages and levels share one panel: each block takes half of its height. */
+.an-panel { gap: 18px; }
+.an-block { flex: 1 0 auto; display: flex; flex-direction: column; min-width: 0; }
+.an-card__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px; margin-bottom: 6px; }
+.an-card__head h3 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
+.an-card__val { margin-left: auto; font-size: 13px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.an-card__val b { color: var(--ink); font-size: 15px; }
+.an-card__s { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; } /* one toner's value in the readout */
+.an-card__s i { width: 9px; height: 9px; border-radius: 50%; }
+.an-card__s small { font-size: 11px; color: var(--muted); }
+.an-card__val.on { padding: 2px 10px; border-radius: 12px; background: var(--tile); } /* a day is picked: a pill, date first */
+.an-card__day { margin-right: 6px; font-weight: 600; color: var(--ink); }
+.an-axis { position: relative; height: 18px; margin-top: 4px; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.an-axis span { position: absolute; top: 0; white-space: nowrap; }
+.an-none { padding: 18px 0 14px; }
+
+/* Pages per day: rounded bars growing from one baseline. The picked one takes the accent colour, with its date and count over it. */
+.an-bars { flex: 1 0 auto; display: flex; min-height: 130px; padding-top: 30px; }
+.an-bars__in { position: relative; flex: 1; display: flex; align-items: stretch; gap: 4px; border-bottom: 1px solid var(--line); } /* the baseline, under the bars only (not under the scale's numbers) */
+.an-bars__in.few { gap: 12px; } .an-bars__in.many { gap: 1px; }
+.an-bar { flex: 1; min-width: 0; display: flex; align-items: flex-end; justify-content: center; cursor: pointer; }
+.an-bar i { display: block; width: 100%; max-width: 30px; border-radius: 5px 5px 0 0; background: var(--ink); transform-origin: bottom; animation: bar-up .5s var(--ease) both; }
+.an-bars__in.many .an-bar i { border-radius: 2px 2px 0 0; }
+.an-bar i.zero { height: 3px; border-radius: 2px 2px 0 0; background: var(--pillbg); }
+.an-bar.on i { background: var(--accent-line); } /* the theme's accent: orange, or the blue / green of that theme */
+/* The scale behind the bars: a faint line at 0, half and the top, its number in the left margin. */
+.an-bars__tick { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid var(--line2); pointer-events: none; }
+.an-bars__tick:first-of-type { border-top-color: transparent; } /* 0 sits on the baseline, which is already a line */
+.an-bars__tick b { position: absolute; top: -8px; width: 26px; text-align: right; font-size: 11px; font-weight: 400; line-height: 16px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.an-bar { position: relative; z-index: 1; }
+@keyframes bar-up { from { transform: scaleY(0); } }
+.an-bars__tip { position: absolute; z-index: 2; transform: translateX(-50%); padding: 4px 10px; border-radius: 10px; background: var(--ink); color: var(--on-ink); font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  font-variant-numeric: tabular-nums; pointer-events: none; }
+
+/* Toner levels: thin lines on faint gridlines. */
 .an-plot { flex: 1 0 auto; position: relative; width: 100%; }
 .an-plot svg { position: absolute; left: 0; top: 0; display: block; touch-action: pan-y; } /* out of the flow, so it follows the box and never props it open */
-.an-grid { stroke: var(--line2); stroke-width: 1; }
-.an-tick { fill: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
-.an-line { fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 1; animation: an-draw 1.2s cubic-bezier(.3, .7, .2, 1) .35s both; }
-.an-area { fill: currentColor; opacity: .09; animation: an-fade .8s ease .9s both; }
-.an-cursor { stroke: currentColor; stroke-width: 1; opacity: .35; }
+.an-grid { stroke: var(--line2); stroke-width: 1; shape-rendering: crispEdges; }
+.an-grid--base { stroke: var(--line); }
+.an-end { stroke: var(--card); stroke-width: 2; animation: an-fade .4s ease 1.4s both; }
+.an-endlab text { font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; } /* a line's latest level, in a pill of its colour */
+.an-endlab rect, .an-endlab text { animation: an-fade .4s ease 1.5s both; }
+.an-line { fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 1; animation: an-draw 1.2s cubic-bezier(.3, .7, .2, 1) .35s both; }
+.an-cursor { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 2 3; }
 @keyframes an-draw { from { stroke-dashoffset: 1; } }
 @keyframes an-fade { from { opacity: 0; } }
 @keyframes an-in { from { opacity: 0; transform: translateY(12px); } }
-.an-none { padding: 18px 0 14px; }
-.an-donut { flex: 1 1 200px; display: block; width: 100%; min-height: 160px; max-height: 420px; margin: 4px auto 8px; }
-.an-donut__bg { fill: none; stroke: var(--track); stroke-width: 20; }
-.an-donut__seg { fill: none; stroke-width: 20; animation: an-seg 1s cubic-bezier(.3, .7, .2, 1) .55s both; }
-@keyframes an-seg { from { stroke-dasharray: 0 var(--len); } }
-.an-donut__n { fill: var(--ink); font-size: 22px; font-weight: 600; letter-spacing: -.03em; }
-.an-donut__l { fill: var(--muted); font-size: 9px; }
+
+/* The pie: solid slices on a pale disc, a shadow under it, the share written on each slice. One slice is raised:
+   its top is drawn higher over a darker side. */
+.an-pie { flex: 1 1 220px; min-height: 180px; display: flex; align-items: center; justify-content: center; padding: 12px 0 14px; }
+.an-pie__sq { position: relative; height: 100%; max-height: 330px; aspect-ratio: 1; animation: pie-in .7s var(--ease) .45s both; }
+.an-pie__sq svg { display: block; width: 100%; height: 100%; overflow: visible; }
+@keyframes pie-in { from { opacity: 0; transform: scale(.9) rotate(-14deg); } }
+.an-pie__halo { fill: var(--tile); }
+.an-pie__body { filter: drop-shadow(0 9px 10px rgba(40, 40, 36, .22)); }
+.an-pie__up { animation: pie-up .22s var(--ease); }
+@keyframes pie-up { from { transform: translateY(9px); } }
+.an-pie__hit { fill: transparent; cursor: pointer; }
+.an-pie__pct { position: absolute; transform: translate(-50%, -50%); font-size: 18px; font-weight: 600; letter-spacing: -.02em; white-space: nowrap; pointer-events: none; }
 .an-legend { list-style: none; margin: 0; padding: 0; }
-.an-legend li { display: flex; align-items: center; gap: 10px; min-height: 36px; border-top: 1px solid var(--line2); font-size: 14.5px; }
-.an-legend i { flex: none; width: 11px; height: 11px; border-radius: 50%; }
+.an-legend li { display: flex; align-items: center; gap: 10px; min-height: 38px; border-top: 1px solid var(--line2); font-size: 14.5px; cursor: pointer; }
+.an-legend i { flex: none; width: 11px; height: 11px; border-radius: 50%; transition: transform .2s var(--ease); }
+.an-legend li.on i { transform: scale(1.45); } /* the raised slice's row */
 .an-legend span { flex: 1; min-width: 0; }
 .an-legend b { width: 84px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
 .an-legend small { width: 60px; text-align: right; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
-/* Column labels above the rows: Krāsa · Relatīvais % · Fakts % */
-.an-legend .an-legend__head { min-height: 26px; border-top: 0; font-size: 12px; color: var(--muted); }
+.an-legend .an-legend__head { min-height: 26px; border-top: 0; font-size: 12px; color: var(--muted); cursor: default; }
 .an-legend .an-legend__head b, .an-legend .an-legend__head small { font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; }
 .an-note { margin: 0; }
+
 @media (max-width: 800px) {
   .ref-btn--top { display: none; }
   .ref-btn--tools { display: inline-flex; margin-right: auto; }
-  /* Phones: nearly the whole screen, and everything packed to fit it without scrolling — one-line tiles, low
-     charts, the donut beside its legend. */
-  .asheet { height: 94vh; height: 94dvh; padding: 0 12px calc(10px + env(safe-area-inset-bottom, 0px)); }
-  .asheet__head { padding: 10px 0 8px; }
-  .asheet__head h2 { gap: 10px; font-size: 25px; }
-  .asheet__head h2 svg { width: 24px; height: 24px; }
-  .asheet__head { padding: 8px 0 4px; }
-  .asheet__who { flex-wrap: nowrap; gap: 8px; margin: 0 2px 8px; white-space: nowrap; }
-  .asheet__who b { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; font-size: 15.5px; }
-  .asheet__who span { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; }
+  /* Phones: nearly the whole screen, and everything packed to fit it without scrolling. */
+  .asheet { height: 97vh; height: 97dvh; padding: 0 12px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .asheet__head { align-items: center; gap: 8px; padding: 12px 2px 8px; }
+  .asheet__kicker { font-size: 11px; gap: 6px; }
+  .asheet__kicker svg { width: 13px; height: 13px; }
+  .asheet__kicker i { display: inline; }
+  .asheet__head h2 { font-size: 25px; }
+  .asheet__head h2.asheet__big { font-size: 25px; gap: 10px; }
+  .asheet__head h2.asheet__big svg { width: 24px; height: 24px; }
+  .asheet__period { display: none; }
+  .asheet__sel--days { display: inline-flex; }
+  .asheet__head .icon-btn { width: 44px; height: 44px; }
+  .asheet__who { margin: 0 2px 6px; min-height: 0; }
+  .asheet__who span { display: none; } /* the model line: no room for it here */
+  .asheet__who em { font-size: 11.5px; padding: 1px 7px; }
+  .hint__btn { width: 22px; height: 22px; }
+  .an, .an-cols { gap: 8px; }
   .an-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .an-tile { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding: 0 12px; border-radius: 16px; }
-  .an-tile span { font-size: 12px; line-height: 1.15; }
-  .an-tile b { font-size: 17px; white-space: nowrap; }
+  .an-tile { min-height: 0; padding: 9px 14px 8px; border-radius: 20px; }
+  .an-tile__l { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .an-tile:has(.hint) .an-tile__l { overflow: visible; }
+  .an-tile__row { flex-direction: row; align-items: baseline; gap: 6px; margin-top: 0; }
+  .an-tile__v { font-size: 27px; }
+  .an-tile__v small { font-size: 15px; }
+  .an-tile__d { padding: 0; background: none; font-size: 11.5px; }
+  .an-tile__d i { display: none; }
+  .an-tile__s { right: 12px; bottom: 11px; width: 50px; height: 24px; }
+  .an-tile__s path { stroke-width: 2; }
   .an-cols { display: flex; flex-direction: column; }
-  .an-lines { flex: 1 0 auto; }
-  .an, .an-lines, .an-cols { gap: 8px; }
-  .an-card { padding: 10px 12px 6px; border-radius: 18px; }
-  .an-card__head { margin-bottom: 4px; }
+  .an-card { padding: 12px 14px 10px; border-radius: 22px; }
+  .an-panel { flex: 1 0 auto; gap: 8px; }
+  .an-card__head { margin-bottom: 2px; }
   .an-card__head h3 { font-size: 14px; }
-  .an-card__s { margin-left: 7px; gap: 3px; } .an-card__val b { font-size: 13px; }
-  .an-share { display: grid; grid-template-columns: 96px minmax(0, 1fr); column-gap: 14px; align-items: center; padding-bottom: 10px; }
+  .an-card__s { margin-left: 7px; gap: 3px; } .an-card__s i { width: 8px; height: 8px; } .an-card__val b { font-size: 13px; }
+  .an-bars { min-height: 58px; padding-top: 8px; }
+  .an-bars__tick b { width: 20px; font-size: 10.5px; }
+  .an-bars__tip { display: none; } /* the picked day shows in the heading's readout instead: no room above the bars */
+  .an-bars__in { gap: 2px; } .an-bars__in.few { gap: 8px; }
+  .an-bar i { border-radius: 3px 3px 0 0; }
+  .an-axis { height: 14px; margin-top: 2px; font-size: 10.5px; }
+  .an-endlab text { font-size: 10.5px; }
+  /* the pie beside its table */
+  .an-share { display: grid; grid-template-columns: 104px minmax(0, 1fr); column-gap: 14px; align-items: center; }
   .an-share .an-card__head, .an-share .an-none { grid-column: 1 / -1; }
-  .an-donut { flex: none; width: 96px; min-height: 0; margin: 0; }
-  .an-donut__n { font-size: 26px; }
+  .an-pie { flex: none; min-height: 0; padding: 6px 0 2px; }
+  .an-pie__sq { width: 100px; height: 100px; }
+  .an-pie__pct { font-size: 11px; }
   .an-legend li { min-height: 21px; border-top: 0; font-size: 13.5px; line-height: 1.2; }
   .an-legend b { width: 72px; }
   .an-legend small { width: 50px; font-size: 12.5px; }
@@ -1260,5 +1386,122 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
   .an-note { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .asheet, .asheet__shade, .asheet__pick button, .asheet__co-name, .an-tile, .an-card, .an-line, .an-area, .an-donut__seg { animation: none !important; }
+  .asheet, .asheet__shade, .asheet__pick button, .asheet__co-name, .an-tile, .an-tile__s, .an-card, .an-line, .an-end, .an-bar i, .an-pie__sq, .an-pie__up, .an-endlab rect, .an-endlab text { animation: none !important; }
 }
+
+/* ---------- "Stikls" (Profils → Izskats → Stils; see theme.ts) ----------
+   A soft glow in the theme's own colour sits behind the page; cards and round buttons become see-through
+   with a bright top edge; the bars and sheets that things scroll under are frosted (blurred). Cards are
+   only see-through, not blurred: the glow behind them is smooth already, and blurring every card in a long
+   list would make scrolling heavy. */
+:root[data-surface="glass"] {
+  /* Gaišais: a neutral glow (warm stone and a cool grey), so the glass has depth without turning the page orange. */
+  --tint1: #B9B09C; --tint2: #A9B4C4; --glow: 46%;
+  /* A pane of glass in the light themes: mostly clear, with a sheen that is brightest at the top-left corner,
+     a crisp white rim (strongest on the top and left, where the light falls) and a soft shadow under it. */
+  --glass: linear-gradient(135deg, rgba(255, 255, 255, .64) 0%, rgba(255, 255, 255, .26) 55%, rgba(255, 255, 255, .4) 100%);
+  --glass-hover: linear-gradient(135deg, rgba(255, 255, 255, .82) 0%, rgba(255, 255, 255, .5) 55%, rgba(255, 255, 255, .6) 100%);
+  --glass-edge: rgba(255, 255, 255, .95);
+  --glass-shine: inset 0 1px 0 #fff, inset 1px 0 0 rgba(255, 255, 255, .6), inset 0 -1px 0 rgba(255, 255, 255, .25), 0 10px 28px rgba(51, 51, 47, .09), 0 1px 2px rgba(51, 51, 47, .05);
+  --frost: color-mix(in srgb, var(--bg) 62%, transparent);
+}
+:root[data-surface="glass"]:is([data-theme="dark"], [data-theme="neon"]) {
+  --tint1: #F07A22; --tint2: #6F7C99; --glow: 22%;
+  --glass: rgba(255, 255, 255, .07); --glass-hover: rgba(255, 255, 255, .11); --glass-edge: rgba(255, 255, 255, .14);
+  --glass-shine: inset 0 1px 0 rgba(255, 255, 255, .16), 0 6px 20px rgba(0, 0, 0, .2);
+}
+:root[data-surface="glass"][data-theme="neon"] { --tint1: #FF4FA3; --tint2: #6C7BFF; --glow: 26%; }
+:root[data-surface="glass"][data-theme="blue"] { --tint1: #6F9BE6; --tint2: #A9C4F2; --glow: 46%; }
+:root[data-surface="glass"][data-theme="green"] { --tint1: #5FB088; --tint2: #A8D5BC; --glow: 46%; }
+/* The glow: large soft patches, fixed to the screen so the page scrolls over them. */
+:root[data-surface="glass"] {
+  --glow-bg:
+    radial-gradient(45vmax 45vmax at 58% 34%, color-mix(in srgb, var(--tint2) calc(var(--glow) * .7), transparent), transparent 70%),
+    radial-gradient(70vmax 70vmax at -10% 12%, color-mix(in srgb, var(--tint1) var(--glow), transparent), transparent 70%),
+    radial-gradient(70vmax 70vmax at 112% 52%, color-mix(in srgb, var(--tint2) var(--glow), transparent), transparent 70%),
+    radial-gradient(75vmax 75vmax at 0% 108%, color-mix(in srgb, var(--tint1) var(--glow), transparent), transparent 70%);
+}
+:root[data-surface="glass"] body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; background: var(--glow-bg); }
+/* See-through surfaces. */
+:root[data-surface="glass"] :is(.item, .grp, .pane:not(.modal__box), .an-tile, .an-card, .asheet__pick button) { background: var(--glass); }
+:root[data-surface="glass"] :is(.item:not(.on), .grp:not(.open), .pane:not(.modal__box), .an-tile, .an-card) { border: 1px solid var(--glass-edge); box-shadow: var(--glass-shine); }
+:root[data-surface="glass"] .item:hover:not(.on) { background: var(--glass-hover); }
+:root[data-surface="glass"] :is(.rb:not(.dk), .splist__tools .icon-btn, .splist__tools .search) { background: var(--glass); box-shadow: var(--glass-shine); }
+:root[data-surface="glass"] .rb:not(.dk):hover:not(:disabled) { background: var(--glass-hover); }
+/* Frosted: the compact bar, the phone's bottom navigation, and the sheets (with a lighter shade behind them,
+   so the page shows through). */
+:root[data-surface="glass"] .cbar { background: var(--frost); -webkit-backdrop-filter: saturate(1.8) blur(24px); backdrop-filter: saturate(1.8) blur(24px); border-bottom-color: var(--glass-edge); }
+:root[data-surface="glass"] .bnav { background: color-mix(in srgb, var(--nav) 58%, transparent); -webkit-backdrop-filter: saturate(1.8) blur(24px); backdrop-filter: saturate(1.8) blur(24px); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22), 0 10px 28px rgba(0, 0, 0, .18); }
+:root[data-surface="glass"] .asheet { background: var(--frost); -webkit-backdrop-filter: saturate(1.8) blur(28px); backdrop-filter: saturate(1.8) blur(28px); box-shadow: inset 0 1px 0 var(--glass-edge), 0 -12px 40px rgba(30, 30, 28, .18); }
+/* The sheet's heading scrolls with it: a sticky strip would need its own backing, which shows as a band on glass. */
+:root[data-surface="glass"] .asheet__head { position: static; background: none; }
+:root[data-surface="glass"] :is(.asheet__shade, .srail__shade) { background: rgba(30, 30, 28, .2); }
+@media (max-width: 800px) {
+  :root[data-surface="glass"] .srail { background: var(--frost); -webkit-backdrop-filter: saturate(1.8) blur(28px); backdrop-filter: saturate(1.8) blur(28px); box-shadow: inset 0 1px 0 var(--glass-edge), 0 -12px 40px rgba(30, 30, 28, .18); }
+  /* The basket sheet's tabs stay put while its list scrolls: a strip across the sheet's whole width. */
+  :root[data-surface="glass"] .srail__head { margin: 0 -12px; padding-left: 12px; padding-right: 12px; border-radius: 28px 28px 0 0; background: color-mix(in srgb, var(--bg) 78%, transparent); }
+  /* A printer's page covers the whole screen here: it paints the same glow behind itself (fading out towards the
+     status bar, like the page), and its cards and buttons are glass. */
+  :root[data-surface="glass"] .pane.detail-pane:not(.modal__box) { background: linear-gradient(to bottom, var(--bg), transparent 26vh), var(--glow-bg), var(--bg); border: 0; box-shadow: none; }
+  :root[data-surface="glass"] :is(.icard, .d-stats, .d-levels, .d-reserve, .d-others) { background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shine); }
+  :root[data-surface="glass"] :is(.back-btn, .dhead .icon-btn, .srail__head .icon-btn) { background: var(--glass); box-shadow: var(--glass-shine); }
+}
+/* Day headings in Vēsture have no backing on glass, so they scroll with their rows instead of staying put over them. */
+:root[data-surface="glass"] .day__head { position: static; background: none; }
+/* On phones the status bar above the page is one flat colour (the theme's page colour), so the glow fades out
+   towards the top edge: the page then starts in that same colour and runs into the status bar without a seam. */
+@media (max-width: 800px) {
+  :root[data-surface="glass"] body::before { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 26vh); mask-image: linear-gradient(to bottom, transparent 0, #000 26vh); }
+}
+
+/* ----- Stikls, the rest: switches, the Analītika filters, and everything that pops up ----- */
+:root[data-surface="glass"] {
+  --well: color-mix(in srgb, var(--ink) 6%, transparent); /* the trough of a switch */
+  --seg-glass: rgba(255, 255, 255, .82);                  /* its chosen option */
+  --pop: color-mix(in srgb, var(--bg) 72%, transparent);  /* a window or menu over the page */
+}
+:root[data-surface="glass"]:is([data-theme="dark"], [data-theme="neon"]) { --well: rgba(255, 255, 255, .07); --seg-glass: rgba(255, 255, 255, .17); }
+/* Switches (company, period, tabs) and the desktop navigation: a see-through trough, the chosen option a brighter pane. */
+:root[data-surface="glass"] :is(.seg, .nv) { background: var(--well); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glass-edge) 55%, transparent); }
+:root[data-surface="glass"] :is(.seg button.on, .nv a.on) { background: var(--seg-glass); box-shadow: var(--glass-shine); }
+/* The round filter buttons in Analītika's heading, and the same kind of button in the compact bar. */
+:root[data-surface="glass"] :is(.asheet__head .icon-btn:not(.asheet__close), .cbar__start .icon-btn) { background: var(--glass); box-shadow: var(--glass-shine); }
+/* Windows (Profils, Paziņojumi, every form and confirmation) and the ⋮ menus: frosted panes with a light rim, over a
+   lighter shade, so the page shows through around and behind them. */
+:root[data-surface="glass"] .modal { background: rgba(30, 30, 28, .26); }
+:root[data-surface="glass"] :is(.modal__box, .menu) { background: var(--pop); -webkit-backdrop-filter: saturate(1.8) blur(28px); backdrop-filter: saturate(1.8) blur(28px); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shine), 0 24px 60px rgba(0, 0, 0, .2); }
+/* Inside a window: fields, plain buttons and list rows are panes of the same glass. */
+:root[data-surface="glass"] .modal__box :is(input:not([type="checkbox"], [type="radio"], [type="range"]), select, textarea, .btn:not(.primary, .ms-btn, .danger-solid), .chip:not(.on), .stp, .stepper__btn, .rrow, .dlg-note) { background: var(--glass); }
+/* A window's buttons stay at its bottom edge while a long form scrolls; the form fades out under them instead of
+   meeting a solid strip. */
+:root[data-surface="glass"] .modal__actions { border-top: 0; background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--bg) 90%, transparent) 42%); }
+/* The "Atsaukt" bar: smoked glass. (Chart tooltips and the ⓘ explanations stay solid: they sit over other text.) */
+:root[data-surface="glass"] .undo { background: color-mix(in srgb, var(--ink) 78%, transparent); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+/* ----- Stikls, the small parts: the greys that sit on a card (icon circles, bar tracks, rules, quiet buttons) are
+   opaque in the plain style; on glass they are see-through too, so they take the card's tint instead of sitting
+   on it as flat grey patches. Icon circles get a faint rim, like small glass beads. ----- */
+:root[data-surface="glass"] {
+  --tile: rgba(255, 255, 255, .5); --sel: rgba(255, 255, 255, .55); --hover: rgba(255, 255, 255, .45);
+  --track: color-mix(in srgb, var(--ink) 14%, transparent); --pillbg: color-mix(in srgb, var(--ink) 8%, transparent);
+  --line: color-mix(in srgb, var(--ink) 12%, transparent); --line2: color-mix(in srgb, var(--ink) 8%, transparent);
+  --bead: inset 0 0 0 1px rgba(255, 255, 255, .75), 0 1px 2px rgba(51, 51, 47, .07);
+}
+:root[data-surface="glass"]:is([data-theme="dark"], [data-theme="neon"]) {
+  --tile: rgba(255, 255, 255, .09); --sel: rgba(255, 255, 255, .12); --hover: rgba(255, 255, 255, .08);
+  --track: rgba(255, 255, 255, .17); --pillbg: rgba(255, 255, 255, .1);
+  --line: rgba(255, 255, 255, .14); --line2: rgba(255, 255, 255, .09);
+  --bead: inset 0 0 0 1px rgba(255, 255, 255, .12);
+}
+:root[data-surface="glass"] :is(.ic, .dot, .ev__ic, .icon-btn, .profile__ic) { box-shadow: var(--bead); }
+:root[data-surface="glass"] .sp .tr { background: var(--track); } /* the unfilled part of a level bar: as clear as on Statuss */
+
+/* Stikls on the login page: the form is a pane of glass over the page's glow, its fields and plain button too. */
+:root[data-surface="glass"] .login { background: none; }
+:root[data-surface="glass"] .login__form { background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shine); }
+:root[data-surface="glass"] .login__form :is(input, .btn:not(.primary, .ms-btn)) { background: var(--glass); }
+
+/* Analītika's printer list on glass: each printer a pane with the light rim, like the cards on Statuss. */
+:root[data-surface="glass"] .asheet__pick button { border-color: var(--glass-edge); box-shadow: var(--glass-shine); }
+:root[data-surface="glass"] .asheet__pick button:hover { background: var(--glass-hover); border-color: var(--outline); }
+/* Tumšais on glass: a neutral glow too (a warm and a cool grey), not an orange cast. */
+:root[data-surface="glass"][data-theme="dark"] { --tint1: #9A958A; --tint2: #7C879C; --glow: 24%; }

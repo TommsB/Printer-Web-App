@@ -209,33 +209,38 @@ def analytics(printer_id: int, days: int = 30, conn: sqlite3.Connection = Depend
     `supplies`: every supply the printer reported, with its level (pct) at the end of each day, None where
     there was no reading (from the daily supply_days, kept for good). What is a toner, and how much of it
     went, is worked out in the UI, which already knows how to tell the supplies apart.
+    `prev`: the same three for the period just before (as many days again), for the "pret iepr." comparison.
     """
     if days not in ANALYTICS_PERIODS:
         raise HTTPException(422, "Periods var būt 7, 30 vai 90 dienas")
     today = datetime.now().date()
-    days = [(today - timedelta(days=i)).isoformat() for i in range(days - 1, -1, -1)]
+    span = [(today - timedelta(days=i)).isoformat() for i in range(2 * days - 1, -1, -1)]  # previous period + this one
 
     counts = {r["day"]: r["page_count"] for r in conn.execute(
-        "SELECT day, page_count FROM page_counts WHERE printer_id = ? AND day >= ?", (printer_id, days[0]))}
+        "SELECT day, page_count FROM page_counts WHERE printer_id = ? AND day >= ?", (printer_id, span[0]))}
     before = conn.execute("SELECT page_count FROM page_counts WHERE printer_id = ? AND day < ? ORDER BY day DESC LIMIT 1",
-                          (printer_id, days[0])).fetchone()
-    prev = before["page_count"] if before else None
+                          (printer_id, span[0])).fetchone()
+    last = before["page_count"] if before else None
     pages: list[int | None] = []
-    for d in days:
+    for d in span:
         cur = counts.get(d)
         if cur is None:
-            pages.append(None if prev is None else 0)
+            pages.append(None if last is None else 0)
             continue
-        pages.append(None if prev is None else max(0, cur - prev))
-        prev = cur
+        pages.append(None if last is None else max(0, cur - last))
+        last = cur
 
     series: dict[tuple[str, str], dict[str, int]] = {}
     for r in conn.execute("SELECT day, idx, description, pct FROM supply_days WHERE printer_id = ? AND day >= ? ORDER BY day",
-                          (printer_id, days[0])):
+                          (printer_id, span[0])):
         series.setdefault((r["idx"], r["description"]), {})[r["day"]] = r["pct"]
-    supplies = [{"idx": idx, "description": desc, "pct": [by_day.get(d) for d in days]}
-                for (idx, desc), by_day in series.items()]
-    return {"days": days, "pages": pages, "supplies": supplies}
+
+    def part(start: int, end: int) -> dict:
+        return {"days": span[start:end], "pages": pages[start:end],
+                "supplies": [{"idx": idx, "description": desc, "pct": [by_day.get(d) for d in span[start:end]]}
+                             for (idx, desc), by_day in series.items()]}
+
+    return {**part(days, 2 * days), "prev": part(0, days)}
 
 
 @router.post("/{printer_id}/refresh")

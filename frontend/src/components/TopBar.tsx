@@ -4,7 +4,8 @@ import { useApp } from '../ctx'
 import { useNavCounts } from '../navCounts'
 import { Icon } from '../icons'
 import { ROLE_LV } from '../lib'
-import { THEMES, useTheme } from '../theme'
+import { Segmented } from './Toggle'
+import { DEFAULT_SURFACE, DEFAULT_THEME, THEMES, useSurface, useTheme, type Surface } from '../theme'
 import { useTabClick } from '../viewTransition'
 import { CompactBar } from './CompactBar'
 import { Dialog } from './Dialog'
@@ -22,6 +23,8 @@ export const NAV = [
  * Page title (two lines, second muted) + nav and round action buttons (the dark one opens the profile window).
  * Once the title scrolls away, a compact bar shows it at the top, with the page's filters (`sticky`) if given.
  */
+const SURFACES: { value: Surface; label: string }[] = [{ value: 'glass', label: 'Stikls' }, { value: 'solid', label: 'Parastais' }]
+
 export function TopBar({ title, children, sticky }: { title: [string, string]; children?: ReactNode; sticky?: ReactNode }) {
   const { user, role, logout } = useApp()
   const counts = useNavCounts()
@@ -29,6 +32,7 @@ export function TopBar({ title, children, sticky }: { title: [string, string]; c
   const [heading, setHeading] = useState<HTMLHeadingElement | null>(null)
   const [profile, setProfile] = useState(false)
   const [theme, setTheme] = useTheme()
+  const [surface, setSurface] = useSurface()
 
   return (
     <header className="top">
@@ -60,7 +64,7 @@ export function TopBar({ title, children, sticky }: { title: [string, string]; c
             <span className="profile__txt"><b>{user}</b><span>{ROLE_LV[role]}</span></span>
           </div>
           {/* Izskats: the colour theme, kept on this device. Each button previews its page, card and accent. */}
-          <p className="profile__lab" id="themes-lab">Izskats</p>
+          <p className="profile__lab" id="themes-lab">Izskats<small>noklusējums: {THEMES.find((t) => t.id === DEFAULT_THEME)!.label}</small></p>
           <div className="themes" role="radiogroup" aria-labelledby="themes-lab">
             {THEMES.map((t) => (
               <button key={t.id} type="button" role="radio" aria-checked={theme === t.id} className={theme === t.id ? 'on' : ''} onClick={() => setTheme(t.id)}>
@@ -69,6 +73,9 @@ export function TopBar({ title, children, sticky }: { title: [string, string]; c
               </button>
             ))}
           </div>
+          {/* Stils: plain surfaces, or see-through "glass" ones over a glow in the theme's colour. */}
+          <p className="profile__lab">Stils<small>noklusējums: {SURFACES.find((s) => s.value === DEFAULT_SURFACE)!.label}</small></p>
+          <Segmented label="Stils" value={surface} onChange={setSurface} options={SURFACES} />
           <PushSettings />
           <Dialog.Footer>
             <Dialog.Cancel>Aizvērt</Dialog.Cancel>

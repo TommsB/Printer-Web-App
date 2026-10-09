@@ -14,15 +14,67 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="theme-color" content="#F1F1ED" />
     <meta name="format-detection" content="telephone=no" />
-    <!-- The chosen colour theme (Profils → Izskats, see src/theme.ts) goes on before the first paint. -->
+    <!-- The chosen colour theme and surface style (Profils → Izskats, see src/theme.ts) go on before the first paint. -->
     <script>
       try {
-        var t = localStorage.getItem('theme'), bg = { dark: '#26282C', blue: '#EEF2F7', green: '#EDF1EC' }[t]
+        var t = localStorage.getItem('theme'), bg = { dark: '#26282C', blue: '#EEF2F7', green: '#EDF1EC', neon: '#14121F' }[t]
         if (bg) { document.documentElement.dataset.theme = t; document.querySelector('meta[name="theme-color"]').content = bg }
       } catch (e) {}
+      // Glass is the default style: on unless "solid" was chosen on this device (or storage can't be read).
+      var solid = false
+      try { solid = localStorage.getItem('surface') === 'solid' } catch (e) {}
+      document.documentElement.dataset.surface = solid ? 'solid' : 'glass'
     </script>
+    <!-- Opening screen: a neon printer that lights up, shown while the app loads (1 s, see the script
+         under it in <body>). All of it is inline, so it is there before any other file has arrived. -->
+    <style>
+      /* The sign takes the chosen theme's colours (set on <html data-theme> by the script above, before this is
+         drawn): --sp-a for the paper, --sp-b for the printer's body, on the theme's own page colour. */
+      #splash { --sp-bg: #F1F1ED; --sp-a: #33332F; --sp-b: #F07A22; --sp-glow: 35%;
+        position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
+        background: radial-gradient(60vmin 60vmin at 50% 50%, color-mix(in srgb, var(--sp-b) 12%, var(--sp-bg)), var(--sp-bg) 70%); transition: opacity .4s ease; }
+      [data-theme="dark"] #splash { --sp-bg: #26282C; --sp-a: #F2F2EF; --sp-b: #FF9A4D; --sp-glow: 60%; }
+      [data-theme="blue"] #splash { --sp-bg: #EEF2F7; --sp-a: #16233A; --sp-b: #6F9BE6; }
+      [data-theme="green"] #splash { --sp-bg: #EDF1EC; --sp-a: #1F2D26; --sp-b: #5FB088; }
+      [data-theme="neon"] #splash { --sp-bg: #14121F; --sp-a: #8C9BFF; --sp-b: #FF7AB8; --sp-glow: 90%; }
+      #splash.out { opacity: 0; pointer-events: none; }
+      #splash svg { width: min(46vmin, 260px); height: auto; overflow: visible; fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+      #splash svg { animation: neon-in .5s cubic-bezier(.2, .8, .2, 1) both; }
+      #splash .blue { stroke: var(--sp-a); filter: drop-shadow(0 0 3px color-mix(in srgb, var(--sp-a) var(--sp-glow), transparent)) drop-shadow(0 0 12px color-mix(in srgb, var(--sp-a) var(--sp-glow), transparent)); }
+      #splash .pink { stroke: var(--sp-b); filter: drop-shadow(0 0 3px color-mix(in srgb, var(--sp-b) var(--sp-glow), transparent)) drop-shadow(0 0 12px color-mix(in srgb, var(--sp-b) var(--sp-glow), transparent)); }
+      /* The sign comes forward and its tubes light up along their length (the paper, then the body); then it holds steady. */
+      #splash path, #splash circle { stroke-dasharray: 1; animation: neon-draw .6s cubic-bezier(.4, 0, .2, 1) .05s both; }
+      #splash .pink path, #splash .pink circle { animation-delay: .22s; }
+      @keyframes neon-in { from { opacity: 0; transform: scale(.86); } }
+      @keyframes neon-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+      @media (prefers-reduced-motion: reduce) { #splash svg, #splash path, #splash circle { animation: none; } }
+    </style>
   </head>
   <body>
+    <div id="splash" aria-hidden="true">
+      <svg viewBox="0 0 200 200">
+        <g class="blue">
+          <path pathLength="1" d="M70 78V40h48l14 14v24" /><path pathLength="1" d="M118 40v14h14" />
+          <path pathLength="1" d="M70 122v40h60v-40" />
+        </g>
+        <g class="pink">
+          <path pathLength="1" d="M70 142H50a12 12 0 0 1-12-12V90a12 12 0 0 1 12-12h100a12 12 0 0 1 12 12v40a12 12 0 0 1-12 12h-20" />
+          <circle pathLength="1" cx="138" cy="95" r="4" /><circle pathLength="1" cx="151" cy="95" r="4" />
+          <path pathLength="1" d="M56 122h88" /><path pathLength="1" d="M84 137h32" /><path pathLength="1" d="M84 149h32" />
+        </g>
+      </svg>
+    </div>
+    <script>
+      // The opening screen goes once it has had its 1 s (0.5 s when motion is reduced) and the app has drawn.
+      (function () {
+        var el = document.getElementById('splash'), root, t0 = Date.now()
+        var min = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches ? 500 : 1000
+        function done() { el.className = 'out'; setTimeout(function () { el.remove() }, 450) }
+        function check() { root = root || document.getElementById('root'); if (root && root.firstChild && Date.now() - t0 >= min) done(); else setTimeout(check, 60) }
+        check()
+        setTimeout(function () { if (el.isConnected && el.className !== 'out') done() }, 8000) // never stuck, whatever happens to the app
+      })()
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

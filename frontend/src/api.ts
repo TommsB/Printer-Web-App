@@ -42,7 +42,9 @@ export interface Printer {
 }
 /** One month of a printer's use (newest first from the API). */
 /** The chosen period (7, 30 or 90 days) for the "Analītika" charts: pages printed per day, and each reported supply's level at the end of each day. */
-export interface Analytics { days: string[]; pages: (number | null)[]; supplies: { idx: string; description: string; pct: (number | null)[] }[] }
+export interface AnalyticsPart { days: string[]; pages: (number | null)[]; supplies: { idx: string; description: string; pct: (number | null)[] }[] }
+/** `prev` = the same for the period just before (as many days again), for the "pret iepr." comparison. */
+export interface Analytics extends AnalyticsPart { prev: AnalyticsPart }
 export interface UsageMonth {
   month: string // "2026-10"
   pages: number | null // null = no page counter readings that month (e.g. a printer that isn't on the network)

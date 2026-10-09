@@ -39,6 +39,15 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: (s: Session) => void }) 
   return (
     <main className="login">
       <form className="card login__form" onSubmit={submit}>
+        {/* The sign from the opening screen, in the chosen theme's colours (index.css, .login__sign). */}
+        <svg className="login__sign" viewBox="20 24 160 152" aria-hidden="true">
+          <g className="a"><path d="M70 78V40h48l14 14v24" /><path d="M118 40v14h14" /><path d="M70 122v40h60v-40" /></g>
+          <g className="b">
+            <path d="M70 142H50a12 12 0 0 1-12-12V90a12 12 0 0 1 12-12h100a12 12 0 0 1 12 12v40a12 12 0 0 1-12 12h-20" />
+            <circle cx="138" cy="95" r="4" /><circle cx="151" cy="95" r="4" />
+            <path d="M56 122h88" /><path d="M84 137h32" /><path d="M84 149h32" />
+          </g>
+        </svg>
         <h1>Printeri</h1>
         {/* A normal link: the browser has to leave the app for Microsoft's sign-in page and come back. */}
         {offer.microsoft && (
