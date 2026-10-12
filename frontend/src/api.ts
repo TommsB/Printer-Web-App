@@ -14,7 +14,8 @@ export interface PushHistory { items: PushLogItem[]; seen: number; unread: numbe
 /** Notification hours: when on, the user is only told between start and end ("HH:MM") on these weekdays
  *  (0 = Monday). What comes up outside waits and is delivered when the hours start, if it still applies. */
 export interface PushSchedule { enabled: boolean; start: string; end: string; days: number[] }
-export interface PushStatus { public_key: string; prefs: PushPrefs; endpoints: string[]; schedule: PushSchedule }
+/** `schedules`: each of the user's devices (by endpoint) with notifications on → that device's notification hours. */
+export interface PushStatus { public_key: string; prefs: PushPrefs; endpoints: string[]; schedules: Record<string, PushSchedule> }
 export interface Snapshot {
   ts: string; reachable: boolean; hostname: string; serial: string; status: string
   uptime_hours: number | null; page_count: number | null; alerts: string; supplies?: Supply[]
@@ -45,6 +46,8 @@ export interface Printer {
 export interface AnalyticsPart { days: string[]; pages: (number | null)[]; supplies: { idx: string; description: string; pct: (number | null)[] }[] }
 /** `prev` = the same for the period just before (as many days again), for the "pret iepr." comparison. */
 export interface Analytics extends AnalyticsPart { prev: AnalyticsPart }
+/** Every active printer's Analytics for the same period: the "Visi printeri" view adds them up. */
+export interface AllAnalytics { printers: ({ id: number } & Analytics)[] }
 export interface UsageMonth {
   month: string // "2026-10"
   pages: number | null // null = no page counter readings that month (e.g. a printer that isn't on the network)
@@ -195,6 +198,7 @@ export const api = {
   refresh: () => req<{ polled: number }>('POST', '/api/printers/refresh'),
   printerUsage: (id: number) => req<UsageMonth[]>('GET', `/api/printers/${id}/usage`),
   printerAnalytics: (id: number, days: number) => req<Analytics>('GET', `/api/printers/${id}/analytics?days=${days}`),
+  allAnalytics: (days: number) => req<AllAnalytics>('GET', `/api/printers/analytics/all?days=${days}`),
   refreshOne: (id: number) => req<{ polled: number }>('POST', `/api/printers/${id}/refresh`),
   createPrinter: (b: PrinterInput) => req<Printer>('POST', '/api/printers', b),
   updatePrinter: (id: number, b: PrinterInput) => req<Printer>('PUT', `/api/printers/${id}`, b),
@@ -283,7 +287,7 @@ export const api = {
   /** Remove one entry / all entries from this user's own list (other users keep theirs). */
   pushDelete: (id: number) => req<unknown>('DELETE', `/api/push/history/${id}`),
   pushClear: () => req<unknown>('DELETE', '/api/push/history'),
-  pushSchedule: (schedule: PushSchedule) => req<PushSchedule>('PUT', '/api/push/schedule', schedule),
+  pushSchedule: (endpoint: string, schedule: PushSchedule) => req<PushSchedule>('PUT', '/api/push/schedule', { endpoint, ...schedule }),
   pushTest: (endpoint: string) => req<{ ok: boolean; status: number; reason?: string; contact?: string }>('POST', '/api/push/test', { endpoint }),
   /** Per-user settings (key → text); null = not set yet. */
   getSetting: (key: string) => req<{ value: string | null }>('GET', `/api/settings/${key}`),

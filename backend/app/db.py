@@ -66,7 +66,8 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     p256dh TEXT NOT NULL,
     auth TEXT NOT NULL,
     device TEXT NOT NULL DEFAULT '',
-    created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+    created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+    schedule TEXT NOT NULL DEFAULT ''  -- this device's notification hours (JSON, push.py); '' = never set
 );
 CREATE TABLE IF NOT EXISTS app_kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 -- The bell button's history: one row per user per notification they were told about (whether or not they
@@ -81,8 +82,8 @@ CREATE TABLE IF NOT EXISTS push_log (
     username TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS push_state (key TEXT PRIMARY KEY, since_ts TEXT NOT NULL);
--- Notifications held back because they came up outside a user's notification hours. Delivered when their
--- hours start, unless the problem (key = its push_state key) is gone by then.
+-- Notifications held back because they came up outside a device's notification hours (endpoint = the device).
+-- Delivered when its hours start, unless the problem (key = its push_state key) is gone by then.
 CREATE TABLE IF NOT EXISTS push_pending (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL,
@@ -92,7 +93,8 @@ CREATE TABLE IF NOT EXISTS push_pending (
     body TEXT NOT NULL DEFAULT '',
     url TEXT NOT NULL DEFAULT '/',
     tag TEXT NOT NULL DEFAULT '',
-    created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+    created_ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+    endpoint TEXT NOT NULL DEFAULT ''
 );
 -- Small per-user settings, e.g. the order e-mail template (settings.py).
 CREATE TABLE IF NOT EXISTS user_settings (
@@ -351,6 +353,25 @@ def _split_push_log_per_user(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM push_log WHERE username = ''")
 
 
+def _push_hours_per_device(conn: sqlite3.Connection) -> None:
+    """Notification hours used to be one setting per user, for all their devices and their bell list. Now each
+    device has its own: give every device its user's old hours, and let what was waiting for a user wait for
+    each of their devices instead (it also goes to their bell list, which no longer waits for anything)."""
+    if "schedule" not in _columns(conn, "push_subscriptions"):
+        conn.execute("ALTER TABLE push_subscriptions ADD COLUMN schedule TEXT NOT NULL DEFAULT ''")
+    if "endpoint" not in _columns(conn, "push_pending"):
+        conn.execute("ALTER TABLE push_pending ADD COLUMN endpoint TEXT NOT NULL DEFAULT ''")
+    for username, value in conn.execute("SELECT username, value FROM user_settings WHERE key = 'push_schedule'").fetchall():
+        conn.execute("UPDATE push_subscriptions SET schedule = ? WHERE username = ? AND schedule = ''", (value, username))
+    conn.execute("DELETE FROM user_settings WHERE key = 'push_schedule'")
+    for r in conn.execute("SELECT username, key, category, title, body, url, tag, created_ts FROM push_pending WHERE endpoint = ''").fetchall():
+        conn.execute("INSERT INTO push_log (username, category, title, body, url) VALUES (?,?,?,?,?)", (r[0], r[2], r[3], r[4], r[5]))
+        for (endpoint,) in conn.execute("SELECT endpoint FROM push_subscriptions WHERE username = ?", (r[0],)).fetchall():
+            conn.execute("INSERT INTO push_pending (username, endpoint, key, category, title, body, url, tag, created_ts)"
+                         " VALUES (?,?,?,?,?,?,?,?,?)", (r[0], endpoint, r[1], r[2], r[3], r[4], r[5], r[6], r[7]))
+    conn.execute("DELETE FROM push_pending WHERE endpoint = ''")
+
+
 def init_db() -> None:
     _make_ip_optional()
     with get_db() as conn:
@@ -393,6 +414,7 @@ def init_db() -> None:
             conn.execute("ALTER TABLE stock_movements ADD COLUMN to_location_id INTEGER")
 
         _split_push_log_per_user(conn)
+        _push_hours_per_device(conn)
         if "kind" not in _columns(conn, "toner_events"):  # drum replacements are detected too (replacements.py)
             conn.execute("ALTER TABLE toner_events ADD COLUMN kind TEXT NOT NULL DEFAULT 'toner'")
 

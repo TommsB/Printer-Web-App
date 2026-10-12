@@ -10,10 +10,12 @@ How it works: after every SNMP poll, `after_poll` looks at what changed and retu
 `dispatch` then delivers them in a background thread. `push_state` remembers what was already announced,
 so a problem is reported once when it starts — not again at every poll while it lasts.
 
-Notification hours: each user can limit notifications to a time of day and weekdays (`push_schedule`).
-Outside those hours nothing is sent or added to their bell list; the message waits in `push_pending` and is
-delivered when their hours start — unless the problem is over by then, in which case they never hear of it
-(a printer switched off for the night and back in the morning stays silent).
+Notification hours: each DEVICE can limit its notifications to a time of day and weekdays (the `schedule`
+of its row in `push_subscriptions`; only a device with notifications on has any). Outside those hours nothing
+is sent to that device; the message waits for it in `push_pending` and is delivered when its hours start —
+unless the problem is over by then, in which case that device never hears of it (a printer switched off for
+the night and back in the morning stays silent there). The bell list does not wait: it belongs to the user,
+not to a device, and gets every announcement at once.
 
 The bell list (`push_log`) is per user: one row per notification that user was told about, which they can
 delete one by one or all at once.
@@ -44,7 +46,6 @@ router = APIRouter(prefix="/api/push", tags=["push"])
 CATEGORIES = ("printer", "replacement", "toner")
 PREFS_KEY = "push_prefs"
 SEEN_KEY = "push_seen_id"  # per user: the newest history entry they have looked at (for the unread badge)
-SCHEDULE_KEY = "push_schedule"  # per user: notification hours, see in_hours()
 DEFAULT_SCHEDULE = {"enabled": False, "start": "08:00", "end": "17:00", "days": [0, 1, 2, 3, 4]}  # days: 0 = Monday
 HISTORY_KEEP = 300  # how many past notifications each user's history keeps
 HISTORY_SHOWN = 60
@@ -139,6 +140,7 @@ def _forget(endpoints: list[str]) -> None:
     if endpoints:
         with get_db() as conn:
             conn.executemany("DELETE FROM push_subscriptions WHERE endpoint = ?", [(e,) for e in endpoints])
+            conn.executemany("DELETE FROM push_pending WHERE endpoint = ?", [(e,) for e in endpoints])
 
 
 def _prefs(conn: sqlite3.Connection, username: str) -> dict[str, bool]:
@@ -152,19 +154,19 @@ def _prefs(conn: sqlite3.Connection, username: str) -> dict[str, bool]:
     return {c: bool(saved.get(c, True)) for c in CATEGORIES}  # everything on unless switched off
 
 
-def _schedule(conn: sqlite3.Connection, username: str) -> dict:
-    row = conn.execute("SELECT value FROM user_settings WHERE username = ? AND key = ?", (username, SCHEDULE_KEY)).fetchone()
+def _schedule(value: str) -> dict:
+    """A device's notification hours from what is stored with it ('' = never set: off, with the usual defaults)."""
     saved = {}
-    if row:
+    if value:
         try:
-            saved = json.loads(row["value"])
+            saved = json.loads(value)
         except ValueError:
             pass
     return {**DEFAULT_SCHEDULE, **{k: saved[k] for k in DEFAULT_SCHEDULE if k in saved}}
 
 
 def in_hours(schedule: dict, now: datetime) -> bool:
-    """Is `now` inside the user's notification hours? Off = always. "22:00–06:00" runs past midnight and
+    """Is `now` inside a device's notification hours? Off = always. "22:00–06:00" runs past midnight and
     belongs to the weekday it starts on; the same start and end means the whole day."""
     if not schedule["enabled"]:
         return True
@@ -177,12 +179,12 @@ def in_hours(schedule: dict, now: datetime) -> bool:
     return (weekday in days and t >= start) or ((weekday - 1) % 7 in days and t < end)
 
 
-def _waiting(conn: sqlite3.Connection, username: str, now: datetime) -> list[Message]:
-    """Take this user's held-back messages (their hours have started). Ones whose problem is over are dropped."""
-    rows = conn.execute("SELECT * FROM push_pending WHERE username = ? ORDER BY id", (username,)).fetchall()
+def _waiting(conn: sqlite3.Connection, endpoint: str, now: datetime) -> list[Message]:
+    """Take what was held back for this device (its hours have started). Ones whose problem is over are dropped."""
+    rows = conn.execute("SELECT * FROM push_pending WHERE endpoint = ? ORDER BY id", (endpoint,)).fetchall()
     if not rows:
         return []
-    conn.execute("DELETE FROM push_pending WHERE username = ?", (username,))
+    conn.execute("DELETE FROM push_pending WHERE endpoint = ?", (endpoint,))
     active = {r["key"] for r in conn.execute("SELECT key FROM push_state")}
     out = []
     for r in rows:
@@ -200,43 +202,43 @@ def _waiting(conn: sqlite3.Connection, username: str, now: datetime) -> list[Mes
 
 
 def dispatch(messages: list[Message]) -> None:
-    """Tell every user about each message: at once if it is within their notification hours, otherwise it
-    waits for them. Also delivers what was waiting for users whose hours have started — so this is called
-    after every poll, with or without new messages. Returns at once; delivery to the devices runs in the
-    background so a slow push service never holds up polling."""
+    """Tell everyone about each message. Every user's bell list gets it at once. Each device with notifications
+    on gets it at once if it is within that device's notification hours; otherwise it waits for that device.
+    Also delivers what was waiting for devices whose hours have started — so this is called after every poll,
+    with or without new messages. Returns at once; delivery to the devices runs in the background so a slow
+    push service never holds up polling."""
     now = datetime.now()
     with get_db() as conn:
-        deliver: list[tuple[str, Message]] = []
-        for username in [r["username"] for r in conn.execute("SELECT username FROM users")]:
-            if in_hours(_schedule(conn, username), now):
-                deliver += [(username, m) for m in _waiting(conn, username, now) + messages]
-            else:
-                conn.executemany(
-                    "INSERT INTO push_pending (username, key, category, title, body, url, tag) VALUES (?,?,?,?,?,?,?)",
-                    [(username, m.key, m.category, m.title, m.body, m.url, m.tag) for m in messages])
-        if not deliver:
-            return
-        # The bell list gets every announcement, also for users without push switched on.
-        conn.executemany("INSERT INTO push_log (username, category, title, body, url) VALUES (?,?,?,?,?)",
-                         [(u, m.category, m.title, m.body, m.url) for u, m in deliver])
-        for username in {u for u, _ in deliver}:
-            conn.execute("DELETE FROM push_log WHERE username = ? AND id NOT IN"
-                         " (SELECT id FROM push_log WHERE username = ? ORDER BY id DESC LIMIT ?)",
-                         (username, username, HISTORY_KEEP))
-        subs = [dict(r) for r in conn.execute("SELECT endpoint, username, p256dh, auth FROM push_subscriptions")]
+        if messages:
+            users = [r["username"] for r in conn.execute("SELECT username FROM users")]
+            conn.executemany("INSERT INTO push_log (username, category, title, body, url) VALUES (?,?,?,?,?)",
+                             [(u, m.category, m.title, m.body, m.url) for u in users for m in messages])
+            for username in users:
+                conn.execute("DELETE FROM push_log WHERE username = ? AND id NOT IN"
+                             " (SELECT id FROM push_log WHERE username = ? ORDER BY id DESC LIMIT ?)",
+                             (username, username, HISTORY_KEEP))
+        subs = [dict(r) for r in conn.execute("SELECT endpoint, username, p256dh, auth, schedule FROM push_subscriptions")]
         if not subs:
             return
-        private_key, _ = vapid_keys(conn)
         prefs = {u: _prefs(conn, u) for u in {s["username"] for s in subs}}
+        deliver: list[tuple[dict, Message]] = []
+        for s in subs:
+            wanted = [m for m in messages if prefs[s["username"]].get(m.category, True)]
+            if in_hours(_schedule(s["schedule"]), now):
+                deliver += [(s, m) for m in _waiting(conn, s["endpoint"], now) + wanted]
+            else:
+                conn.executemany(
+                    "INSERT INTO push_pending (username, endpoint, key, category, title, body, url, tag) VALUES (?,?,?,?,?,?,?,?)",
+                    [(s["username"], s["endpoint"], m.key, m.category, m.title, m.body, m.url, m.tag) for m in wanted])
+        if not deliver:
+            return
+        private_key, _ = vapid_keys(conn)
 
     def run() -> None:
         gone = []
-        for username, m in deliver:
-            payload = _payload(m)
-            for s in subs:
-                if s["username"] == username and prefs[username].get(m.category, True) and s["endpoint"] not in gone:
-                    if _send(s, payload, private_key) in (404, 410):
-                        gone.append(s["endpoint"])
+        for s, m in deliver:
+            if s["endpoint"] not in gone and _send(s, _payload(m), private_key) in (404, 410):
+                gone.append(s["endpoint"])
         _forget(gone)
 
     threading.Thread(target=run, daemon=True).start()
@@ -357,6 +359,7 @@ HHMM = r"^([01]\d|2[0-3]):[0-5]\d$"
 
 
 class ScheduleIn(BaseModel):
+    endpoint: str  # the device these hours are for
     enabled: bool
     start: str = Field(pattern=HHMM)
     end: str = Field(pattern=HHMM)
@@ -382,9 +385,9 @@ class PrefsIn(BaseModel):
 @router.get("")
 def status(conn: sqlite3.Connection = Depends(db_dep), username: str = Depends(current_username)) -> dict:
     _, public_key = vapid_keys(conn)
-    endpoints = [r["endpoint"] for r in conn.execute("SELECT endpoint FROM push_subscriptions WHERE username = ?", (username,))]
-    return {"public_key": public_key, "prefs": _prefs(conn, username), "endpoints": endpoints,
-            "schedule": _schedule(conn, username)}
+    subs = conn.execute("SELECT endpoint, schedule FROM push_subscriptions WHERE username = ?", (username,)).fetchall()
+    return {"public_key": public_key, "prefs": _prefs(conn, username), "endpoints": [r["endpoint"] for r in subs],
+            "schedules": {r["endpoint"]: _schedule(r["schedule"]) for r in subs}}  # each device's notification hours
 
 
 @router.post("/subscribe")
@@ -403,6 +406,7 @@ def subscribe(body: SubscribeIn, conn: sqlite3.Connection = Depends(db_dep), use
 @router.post("/unsubscribe")
 def unsubscribe(body: EndpointIn, conn: sqlite3.Connection = Depends(db_dep), username: str = Depends(current_username)) -> dict:
     conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ? AND username = ?", (body.endpoint, username))
+    conn.execute("DELETE FROM push_pending WHERE endpoint = ?", (body.endpoint,))  # nothing waits for a device that is off
     return {"ok": True}
 
 
@@ -416,15 +420,18 @@ def set_prefs(body: PrefsIn, conn: sqlite3.Connection = Depends(db_dep), usernam
 
 @router.put("/schedule")
 def set_schedule(body: ScheduleIn, conn: sqlite3.Connection = Depends(db_dep), username: str = Depends(current_username)) -> dict:
-    """Notification hours. Applies from the next poll on; switching it off (or widening it) delivers what was waiting."""
+    """One device's notification hours (it must have notifications on). Applies from the next poll on;
+    switching it off (or widening it) delivers what was waiting for that device."""
     days = sorted({d for d in body.days if 0 <= d <= 6})
     if len(days) != len(body.days):
         raise HTTPException(400, "Nederīga nedēļas diena")
     if body.enabled and not days:
         raise HTTPException(400, "Izvēlieties vismaz vienu dienu")
     schedule = {"enabled": body.enabled, "start": body.start, "end": body.end, "days": days}
-    conn.execute("INSERT INTO user_settings (username, key, value) VALUES (?,?,?)"
-                 " ON CONFLICT(username, key) DO UPDATE SET value = excluded.value", (username, SCHEDULE_KEY, json.dumps(schedule)))
+    done = conn.execute("UPDATE push_subscriptions SET schedule = ? WHERE endpoint = ? AND username = ?",
+                        (json.dumps(schedule), body.endpoint, username)).rowcount
+    if not done:
+        raise HTTPException(409, "Vispirms ieslēdziet paziņojumus šajā ierīcē")
     conn.commit()  # before answering, see delete_history_item
     return schedule
 

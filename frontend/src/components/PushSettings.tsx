@@ -21,12 +21,14 @@ const DAYS = [
   { short: 'Sv', name: 'Svētdiena' },
 ]
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
+/** What a device has until its hours are set: off, working hours on weekdays (the same as the server's default). */
+const NO_HOURS: PushSchedule = { enabled: false, start: '08:00', end: '17:00', days: [0, 1, 2, 3, 4] }
 
 /**
  * Profile window → Paziņojumi. "Šajā ierīcē" is per device (each phone/browser is switched on separately,
- * because the browser has to ask for permission there); the three kinds and the notification hours
- * (Paziņojumu laiks: from–to and weekdays) are per user, for all their devices and their bell list.
- * Every switch applies at once.
+ * because the browser has to ask for permission there), and so are the notification hours (Paziņojumu laiks:
+ * from–to and weekdays) — they can only be set while this device's notifications are on, and are locked
+ * otherwise. The three kinds are per user, for all their devices. Every switch applies at once.
  */
 export function PushSettings() {
   const support = pushSupport()
@@ -52,8 +54,12 @@ export function PushSettings() {
     setBusy(true)
     setNote('')
     try {
-      if (on) setEndpoint((await enablePush(status.public_key)).endpoint)
-      else { await disablePush(); setEndpoint(null) }
+      if (on) {
+        const ep = (await enablePush(status.public_key)).endpoint
+        setEndpoint(ep)
+        // a device that was just switched on starts with whatever the server has for it (nothing, the first time)
+        api.push().then(setStatus).catch(() => {})
+      } else { await disablePush(); setEndpoint(null) }
     } catch (err) {
       // Our own messages (permission refused) are already in Latvian; the browser's own errors are not.
       const detail = err instanceof Error ? err.message : ''
@@ -90,25 +96,26 @@ export function PushSettings() {
   // Notification hours apply at once, like the switches above. With no weekday chosen there is nothing valid
   // to save yet: keep it on screen (with a hint) and save as soon as a day is picked.
   const setSchedule = async (patch: Partial<PushSchedule>) => {
-    if (!status) return
-    const schedule = { ...status.schedule, ...patch }
-    setStatus({ ...status, schedule })
+    if (!status || !endpoint) return
+    const schedule = { ...(status.schedules[endpoint] ?? NO_HOURS), ...patch }
+    setStatus({ ...status, schedules: { ...status.schedules, [endpoint]: schedule } })
     setNote('')
     if (schedule.enabled && schedule.days.length === 0) return
     if (!TIME.test(schedule.start) || !TIME.test(schedule.end)) return // a time field that is being cleared/typed
-    try { await api.pushSchedule(schedule) } catch (err) {
+    try { await api.pushSchedule(endpoint, schedule) } catch (err) {
       setStatus(status)
       setNote(err instanceof Error ? err.message : 'Neizdevās saglabāt paziņojumu laiku')
     }
   }
+  const blocked = support !== 'ok'
+  // This device's hours; with its notifications off there are none, and the section below is locked.
+  const locked = endpoint === null
+  const schedule = !status ? null : locked ? NO_HOURS : status.schedules[endpoint] ?? NO_HOURS
   const toggleDay = (day: number) => {
-    if (!status) return
-    const days = status.schedule.days
+    if (!schedule) return
+    const days = schedule.days
     setSchedule({ days: days.includes(day) ? days.filter((d) => d !== day) : [...days, day].sort((a, b) => a - b) })
   }
-
-  const blocked = support !== 'ok'
-  const schedule = status?.schedule
   return (
     <>
       <div className="fsec push">
@@ -124,13 +131,14 @@ export function PushSettings() {
         {note && <p className="fnote" role="status">{note}</p>}
       </div>
 
-      {/* Hours apply to the phone notifications and to the bell list alike, so they show even with this device off. */}
+      {/* This device's hours. Locked (shown, but off and greyed) until notifications are on for this device. */}
       {schedule && (
-        <div className="fsec push">
-          <div className="lab">Paziņojumu laiks</div>
-          <Toggle label="Tikai noteiktā laikā" checked={schedule.enabled} onChange={(on) => setSchedule({ enabled: on })}
-            hint="Ārpus šī laika paziņojumi nepienāk. Ja problēma joprojām pastāv, kad laiks sākas, par to paziņo tad." />
-          {schedule.enabled && <>
+        <div className={locked ? 'fsec push push--locked' : 'fsec push'}>
+          <div className="lab">Paziņojumu laiks šajā ierīcē</div>
+          <Toggle label="Tikai noteiktā laikā" checked={!locked && schedule.enabled} disabled={locked} onChange={(on) => setSchedule({ enabled: on })}
+            hint={locked ? 'Vispirms ieslēdziet paziņojumus šajā ierīcē.'
+              : 'Ārpus šī laika šajā ierīcē paziņojumi nepienāk. Ja problēma joprojām pastāv, kad laiks sākas, par to paziņo tad.'} />
+          {!locked && schedule.enabled && <>
             <div className="frow">
               <label>No
                 <input type="time" value={schedule.start} onChange={(e) => setSchedule({ start: e.target.value })} />

@@ -1505,3 +1505,150 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
 :root[data-surface="glass"] .asheet__pick button:hover { background: var(--glass-hover); border-color: var(--outline); }
 /* Tumšais on glass: a neutral glow too (a warm and a cool grey), not an orange cast. */
 :root[data-surface="glass"][data-theme="dark"] { --tint1: #9A958A; --tint2: #7C879C; --glow: 24%; }
+
+/* ----- Analītika → "Visi printeri" ----- */
+/* In the picker: one wide card in the main colour above the companies, so it reads as "everything", not as one more printer. */
+.asheet__all { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 84px; margin: 0 0 22px; padding: 16px 22px; border: 0; border-radius: 26px;
+  background: var(--primary); color: var(--on-primary); text-align: left; cursor: pointer; box-shadow: 0 12px 30px rgba(40, 40, 36, .18); animation: pick-rise .5s var(--ease) both; transition: transform .2s var(--ease), box-shadow .2s ease; }
+.asheet__all-ic { flex: none; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--on-primary) 14%, transparent); }
+.asheet__all-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.asheet__all-txt b { font-size: 20px; font-weight: 600; letter-spacing: -.025em; }
+.asheet__all-txt span { font-size: 13.5px; opacity: .72; }
+@media (hover: hover) { .asheet__all:hover { transform: translateY(-2px); box-shadow: 0 16px 36px rgba(40, 40, 36, .24); } }
+/* The right-hand column: the companies' pie over the "runs out first" list. */
+.an-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.an-side .an-share { flex: 1 0 auto; }
+/* Pages per printer: a ranking, the busiest printer first, each bar against the busiest one's. */
+.an-rank ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.an-rank li { display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 1fr) 58px; align-items: center; gap: 14px; font-size: 14px; }
+.an-rank li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-rank li i { height: 9px; border-radius: 5px; background: var(--track); overflow: hidden; }
+.an-rank li i b { display: block; height: 100%; min-width: 3px; border-radius: 5px; background: var(--ink); transform-origin: left; animation: an-grow .7s var(--ease) both; }
+.an-rank li > b { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+@keyframes an-grow { from { transform: scaleX(0); } }
+/* Which toners run out first. */
+.an-soon { animation-delay: .35s; }
+.an-soon ul { list-style: none; margin: 0; padding: 0; }
+.an-soon li { display: flex; align-items: center; gap: 10px; min-height: 46px; border-top: 1px solid var(--line2); }
+.an-soon li i { flex: none; width: 11px; height: 11px; border-radius: 50%; }
+.an-soon li span { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.an-soon li span b { font-size: 14.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-soon li span small { font-size: 12.5px; color: var(--muted); }
+.an-soon li em { width: 44px; text-align: right; font-style: normal; font-size: 13.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.an-soon li strong { width: 74px; text-align: right; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.an-soon li strong.hot { color: var(--hot); }
+@media (max-width: 800px) {
+  .asheet__all { min-height: 68px; margin-bottom: 16px; padding: 12px 16px; gap: 12px; border-radius: 22px; }
+  .asheet__all-ic { width: 42px; height: 42px; }
+  .asheet__all-txt b { font-size: 17px; }
+  .asheet__all-txt span { font-size: 12.5px; }
+  .an-side { gap: 8px; }
+  .an-rank ol { gap: 5px; }
+  .an-rank li { grid-template-columns: minmax(0, 132px) minmax(0, 1fr) 46px; gap: 10px; font-size: 13px; }
+  .an-rank li i { height: 7px; }
+  .an-soon li { min-height: 36px; }
+  .an-soon li span b { font-size: 13.5px; }
+  .an--all { padding-bottom: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { .asheet__all, .an-rank li i b { animation: none !important; transition: none; } }
+/* Stikls: the card keeps its solid main colour (it is the one thing meant to stand out); a light rim only. */
+:root[data-surface="glass"] .asheet__all { box-shadow: inset 0 1px 0 color-mix(in srgb, var(--on-primary) 22%, transparent), 0 12px 30px rgba(0, 0, 0, .16); }
+/* Company names stay on one line beside the pie; the share column is narrower than the toner pie's "Relatīvais %". */
+.an--all .an-legend span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.an--all .an-legend b { width: 54px; }
+/* The run-out list's column names, like the pie table's. */
+.an-soon li.an-soon__head { min-height: 26px; border-top: 0; font-size: 12px; color: var(--muted); }
+.an-soon li.an-soon__head span { flex-direction: row; }
+.an-soon li.an-soon__head em, .an-soon li.an-soon__head strong { font-size: 12px; font-weight: 500; color: var(--muted); width: auto; min-width: 44px; }
+.an-soon li.an-soon__head strong { min-width: 74px; }
+@media (max-width: 800px) { .an-soon li.an-soon__head { min-height: 18px; font-size: 11px; } .an-soon li.an-soon__head em, .an-soon li.an-soon__head strong { font-size: 11px; } }
+@media (max-width: 800px) { .an--all .an-legend span { white-space: normal; } .an--all .an-legend b { width: 46px; } .an--all .an-legend small { width: 46px; } } /* beside the small pie a long company name wraps instead of being cut */
+
+/* ----- Analītika: the left column is two cards (pages per day; then levels, or the ranking), and the accent
+   colour is on the icons in the headings. ----- */
+.an-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.an-main > .an-card { flex: 1 0 auto; }
+.an-card--2 { animation-delay: .26s; }
+.an-card__head h3 > svg { flex: none; margin-right: 8px; vertical-align: -3px; color: var(--accent-line); }
+@media (max-width: 800px) {
+  .an-main { gap: 8px; flex: 1 0 auto; }
+  .an-card__head h3 > svg { width: 15px; height: 15px; margin-right: 6px; vertical-align: -2px; }
+}
+
+/* "Visi printeri" on a desktop screen: everything in view at once, no scrolling. The pages chart takes whatever
+   height is left over; the rest is drawn tighter than on one printer's page — the pie beside its table instead
+   of above it, shorter rows, lower tiles. (A window too low for even that scrolls, as before.) */
+@media (min-width: 801px) {
+  .an--all { flex: 1 1 0; min-height: 0; gap: 12px; }
+  .an--all .an-tile { min-height: 100px; padding: 12px 20px 11px; }
+  .an--all .an-cols { flex: 1 1 0; min-height: 0; gap: 12px; }
+  .an--all .an-main, .an--all .an-side { min-height: 0; gap: 12px; }
+  .an--all .an-card { padding: 15px 22px 13px; border-radius: 26px; }
+  .an--all .an-main > .an-card:first-child { flex: 1 1 0; min-height: 150px; }
+  .an--all .an-main > .an-card:first-child .an-block { flex: 1 1 0; min-height: 0; }
+  .an--all .an-bars { flex: 1 1 0; min-height: 60px; padding-top: 20px; }
+  .an--all .an-main > .an-card--2 { flex: none; }
+  .an--all .an-rank ol { gap: 4px; }
+  .an--all .an-rank li { font-size: 13.5px; line-height: 1.3; }
+  .an--all .an-rank li i { height: 8px; }
+  .an--all .an-share { flex: none; display: grid; grid-template-columns: 142px minmax(0, 1fr); column-gap: 20px; align-items: center; }
+  .an--all .an-share .an-card__head, .an--all .an-share .an-none { grid-column: 1 / -1; }
+  .an--all .an-pie { flex: none; min-height: 0; padding: 2px 0; }
+  .an--all .an-pie__sq { width: 140px; height: 140px; }
+  .an--all .an-pie__pct { font-size: 12.5px; }
+  .an--all .an-legend li { min-height: 30px; font-size: 14px; }
+  .an--all .an-legend small { width: 52px; }
+  .an--all .an-side .an-soon { flex: none; }
+  .an--all .an-soon li { min-height: 37px; }
+  .an--all .an-soon li span { line-height: 1.2; }
+  .an--all .an-note { font-size: 12.5px; }
+}
+/* …and on a low desktop window (a laptop): the sheet comes up higher, and below 720 px the footnote goes, the
+   tiles get lower and the run-out list shows four toners instead of five. */
+@media (min-width: 801px) and (max-height: 800px) {
+  .asheet:has(.an--all) { height: 96vh; height: 96dvh; }
+  .asheet:has(.an--all) .asheet__head { padding-top: 16px; }
+  .asheet:has(.an--all) .asheet__who { margin-bottom: 10px; }
+}
+@media (min-width: 801px) and (max-height: 720px) {
+  .an--all .an-note { display: none; }
+  .an--all .an-tile { min-height: 86px; padding: 9px 18px 8px; }
+  .an--all .an-soon li:nth-child(n+6) { display: none; }
+  .an--all .an-main > .an-card:first-child { min-height: 130px; }
+}
+@media (min-width: 801px) { /* room for a company's whole name beside the small pie */
+  .an--all .an-share { grid-template-columns: 130px minmax(0, 1fr); column-gap: 16px; }
+  .an--all .an-pie__sq { width: 128px; height: 128px; }
+  .an--all .an-legend b { width: 44px; } .an--all .an-legend small { width: 46px; }
+  .an--all .an-legend li { gap: 8px; }
+}
+
+/* "Visi printeri" on a desktop window that is tall enough (880 px and up): the pie is back in full — above its
+   table, as big as the room left in the column allows — and the sheet comes up a little higher to make that room.
+   Between 880 and 1000 px the run-out list shows four toners so that everything still fits without scrolling.
+   Lower windows keep the small pie beside its table (above). */
+@media (min-width: 801px) and (min-height: 880px) {
+  .asheet:has(.an--all) { height: 94vh; height: 94dvh; }
+  .an--all .an-share { display: flex; flex-direction: column; align-items: stretch; flex: 1 1 0; min-height: 0; }
+  .an--all .an-pie { flex: 1 1 120px; min-height: 120px; padding: 6px 0 10px; }
+  .an--all .an-pie__sq { width: auto; height: 100%; max-height: 300px; }
+  .an--all .an-pie__pct { font-size: 15px; }
+  .an--all .an-legend b { width: 60px; } .an--all .an-legend small { width: 56px; }
+}
+@media (min-width: 801px) and (min-height: 880px) and (max-height: 999px) { .an--all .an-soon li:nth-child(n+6) { display: none; } }
+
+/* Profils → Paziņojumu laiks, while this device's notifications are off: there to be seen, not to be used. */
+.push--locked { opacity: .55; }
+/* A window on a phone: it moves only up and down inside itself — never sideways, never the page behind it, and
+   it doesn't bounce or get dragged past its ends. */
+.modal { overscroll-behavior: contain; touch-action: none; }
+.modal__box { overflow-x: hidden; touch-action: pan-y; }
+@media (max-width: 800px) { html:has(.modal) { overflow: hidden; } } /* phones only: on desktop hiding the page's scrollbar would make the page jump sideways */
+/* "Visi printeri" in the picker: a card like the printers' (not filled with the main colour), told apart by its
+   size and by the accent-coloured ring around its icon. */
+.asheet__all { background: var(--card); color: var(--ink); border: 1px solid transparent; box-shadow: 0 1px 2px rgba(40, 40, 36, .08); }
+.asheet__all-ic { background: none; box-shadow: inset 0 0 0 2px var(--accent-line); }
+.asheet__all-txt span { opacity: 1; color: var(--faint); }
+@media (hover: hover) { .asheet__all:hover { border-color: var(--outline); box-shadow: 0 6px 18px rgba(40, 40, 36, .1); } }
+:root[data-surface="glass"] .asheet__all { background: var(--glass); border-color: var(--glass-edge); box-shadow: var(--glass-shine); }
+:root[data-surface="glass"] .asheet__all:hover { background: var(--glass-hover); border-color: var(--outline); }

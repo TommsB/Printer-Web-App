@@ -213,6 +213,20 @@ def analytics(printer_id: int, days: int = 30, conn: sqlite3.Connection = Depend
     """
     if days not in ANALYTICS_PERIODS:
         raise HTTPException(422, "Periods var būt 7, 30 vai 90 dienas")
+    return _analytics(conn, printer_id, days)
+
+
+@router.get("/analytics/all")
+def analytics_all(days: int = 30, conn: sqlite3.Connection = Depends(db_dep)) -> dict:
+    """The same as /{printer_id}/analytics for every active printer on the network at once: what the
+    "Visi printeri" view of "Analītika" adds up (pages per day, per printer and per company; replaced cartridges)."""
+    if days not in ANALYTICS_PERIODS:
+        raise HTTPException(422, "Periods var būt 7, 30 vai 90 dienas")
+    ids = [r["id"] for r in conn.execute("SELECT id FROM printers WHERE active = 1 AND ip IS NOT NULL ORDER BY id")]
+    return {"printers": [{"id": i, **_analytics(conn, i, days)} for i in ids]}
+
+
+def _analytics(conn: sqlite3.Connection, printer_id: int, days: int) -> dict:
     today = datetime.now().date()
     span = [(today - timedelta(days=i)).isoformat() for i in range(2 * days - 1, -1, -1)]  # previous period + this one
 

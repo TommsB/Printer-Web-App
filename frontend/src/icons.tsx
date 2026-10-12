@@ -25,6 +25,8 @@ export const Icon = {
   // Žurnāls entry types
   // Used = line going down, received = line going up, moved = two arrows passing each other, defect = warning sign
   trendDown: (s = 18) => svg(s, <><path d="M3 7l6 6 4-4 7.5 7.5" /><path d="M21 11v6h-6" /></>),
+  // A sheet of paper with a folded corner and lines of text: printed pages.
+  page: (s = 20) => svg(s, <><path d="M7 3h7.5L19 7.5V19a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /><path d="M14.5 3v3a1.5 1.5 0 0 0 1.5 1.5h3" /><path d="M9 11.5h3.5M9 14.75h6M9 18h6" /></>),
   stopwatch: (s = 20) => svg(s, <><circle cx="12" cy="13.5" r="7.5" /><path d="M12 9.5v4l2.5 1.5" /><path d="M10 3h4" /><path d="M12 3v3" /><path d="M5.6 6.6l1.4 1.4" /></>),
   // Analītika: four bars with a rising arrow over them; the arrow is in the theme's accent colour.
   chart: (s = 20) => (
