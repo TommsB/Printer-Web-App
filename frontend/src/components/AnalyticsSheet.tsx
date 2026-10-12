@@ -14,6 +14,10 @@ const TONERS: Record<string, { label: string; color: string; ink: string }> = {
 const dayLabel = (d: string) => `${d.slice(8)}.${d.slice(5, 7)}.`
 const sum = (list: number[]) => list.reduce((n, v) => n + v, 0)
 const PERIODS = [7, 30, 90]
+/** Pages per working day: the total over the days on which anything was printed (weekends, holidays and days
+ *  the printer was off would only pull the average down). 0 when nothing was printed at all. */
+const perWorkDay = (pages: number[]) => { const worked = pages.filter((v) => v > 0).length; return worked ? sum(pages) / worked : 0 }
+const WORKDAY_HINT = 'Vidēji tajās dienās, kad kaut kas ir drukāts. Dienas bez nevienas lapas (brīvdienas, svētki, izslēgts printeris) netiek skaitītas.'
 const COMPANY_ORDER = ['Tenax Panel', 'Tenapors', 'Tenax'] // the rows of the printer picker
 const RISE_START = 0.12, RISE_STEP = 0.035 // seconds: the picker's cards start rising while the sheet is still coming up, one after another
 
@@ -361,6 +365,14 @@ function Charts({ data: all, mono }: { data: Analytics; mono: boolean }) {
   // Days a toner level could be compared with the day before: the first day that has a reading is only the starting point.
   const tonerDaysOf = (d: AnalyticsPart) => Math.max(0, d.days.filter((_, i) => d.supplies.some((s) => s.pct[i] !== null && classifySupply(s.description, mono)?.kind === 'toner')).length - 1)
   const tonerDays = tonerDaysOf(data)
+  // The toner average is per working day too: the days with printing, from the day after the first toner reading
+  // on (that first reading is only the starting point). Not "days with a drop" — levels come in whole percent,
+  // so a light day's use often only shows a day or two later. With no page counts at all, every day counts.
+  const tonerWorkDaysOf = (d: AnalyticsPart) => {
+    const first = d.days.findIndex((_, i) => d.supplies.some((x) => x.pct[i] !== null && classifySupply(x.description, mono)?.kind === 'toner'))
+    return first < 0 ? 0 : d.pages.filter((v, i) => i > first && (v ?? 0) > 0).length || tonerDaysOf(d)
+  }
+  const tonerWorkDays = tonerWorkDaysOf(data)
   const compact = window.matchMedia('(max-width: 800px)').matches
   // Each toner's level at the end of every day (the first supply of a colour, should a printer report two).
   const levels: Series[] = ['K', 'C', 'M', 'Y'].flatMap((c) => {
@@ -375,7 +387,7 @@ function Charts({ data: all, mono }: { data: Analytics; mono: boolean }) {
   const prevPages = prev && prevCounted >= 0.8 * n ? sum(prev.pages.map((v) => v ?? 0)) : null
   const prevTonerDays = prev && tonerDaysOf(prev) >= 0.8 * (n - 1) ? tonerDaysOf(prev) : 0
   const prevUse = prev && prevTonerDays ? sum([...tonerUse(prev, mono).values()].flat()) : null
-  const pagesAvg = counted ? sum(pages) / counted : 0, tonerAvg = tonerDays ? sum(perDay) / tonerDays : 0
+  const pagesAvg = perWorkDay(pages), tonerAvg = tonerWorkDays ? sum(perDay) / tonerWorkDays : 0
   const tonerHint = (
     <Hint label="Kā skaitīts toneru % patēriņš">
       Visu krāsu kasetņu līmeņa kritums kopā, procentpunktos. Piemēram, melnais −40% un ciāns −15% dod 55%.
@@ -386,11 +398,11 @@ function Charts({ data: all, mono }: { data: Analytics; mono: boolean }) {
     <div className="an">
       <div className="an-tiles">
         <Tile label={`Lapas ${n} dienās`} value={counted ? fmtNum(sum(pages)) : '–'} delta={counted ? change(sum(pages), prevPages) : null} spark={sparkPath(pages)} color="var(--ink)" />
-        <Tile label="Lapas vidēji dienā" value={counted ? fmtNum(Math.round(pagesAvg)) : '–'} delta={counted ? change(pagesAvg, prevPages !== null ? prevPages / prevCounted : null) : null} spark={sparkPath(pages)} color="var(--ink)" />
+        <Tile label={compact ? 'Vidēji darba dienā' : 'Lapas vidēji darba dienā'} hint={<Hint label="Kā rēķināts vidējais darba dienā">{WORKDAY_HINT}</Hint>} value={counted ? fmtNum(Math.round(pagesAvg)) : '–'} delta={counted ? change(pagesAvg, prevPages !== null ? perWorkDay(prev!.pages.map((v) => v ?? 0)) : null) : null} spark={sparkPath(pages)} color="var(--ink)" />
         <Tile label={compact ? `Toneru % ${n} dienās` : `Toneru % patēriņš ${n} dienās`} hint={tonerHint} value={use.size ? String(sum(perDay)) : '–'} unit={use.size ? '%' : ''}
           delta={use.size ? change(sum(perDay), prevUse) : null} spark={use.size ? sparkPath(perDay) : null} color="var(--accent-line)" />
-        <Tile label={compact ? 'Toneru % vidēji dienā' : 'Toneru % patēriņš vidēji dienā'} value={tonerDays ? tonerAvg.toLocaleString('lv-LV', { maximumFractionDigits: 1 }) : '–'} unit={tonerDays ? '%' : ''}
-          delta={tonerDays ? change(tonerAvg, prevUse !== null ? prevUse / prevTonerDays : null) : null} spark={use.size ? sparkPath(perDay) : null} color="var(--accent-line)" />
+        <Tile label={compact ? 'Toneru % darba dienā' : 'Toneru % patēriņš vidēji darba dienā'} hint={<Hint label="Kā rēķināts toneru patēriņš darba dienā">{WORKDAY_HINT}</Hint>} value={tonerDays ? tonerAvg.toLocaleString('lv-LV', { maximumFractionDigits: 1 }) : '–'} unit={tonerDays ? '%' : ''}
+          delta={tonerDays ? change(tonerAvg, prevUse !== null && prev && tonerWorkDaysOf(prev) ? prevUse / tonerWorkDaysOf(prev) : null) : null} spark={use.size ? sparkPath(perDay) : null} color="var(--accent-line)" />
       </div>
       <div className="an-cols">
         {/* pages and levels: one card each, one over the other */}
@@ -468,7 +480,6 @@ function AllCharts({ items, printers }: { items: AllAnalytics['printers']; print
   // The period before, for "pret iepr.": only when every printer counted now was (nearly) fully counted then too —
   // otherwise the total "grew" just because more printers have readings now than before.
   const prevPagesByDay = from === 0 ? total((r) => r.data.prev) : []
-  const prevCounted = prevPagesByDay.filter((v) => v !== null).length
   const prevOk = n > 0 && from === 0 && rows.filter((r) => r.data.pages.some((v) => v !== null)).every((r) => r.data.prev.pages.filter((v) => v !== null).length >= 0.8 * n)
   const prevPages = prevOk ? sum(prevPagesByDay.map((v) => v ?? 0)) : null
   const prevReplaced = prevOk ? sum(rows.map((r) => sum(replacements(r.data.prev, r.mono)))) : null
@@ -485,12 +496,12 @@ function AllCharts({ items, printers }: { items: AllAnalytics['printers']; print
     .filter((x) => x.any).map((x, i) => ({ key: x.c || '-', label: x.c || 'Bez uzņēmuma', value: x.value, ...COMPANY_COLORS[i % COMPANY_COLORS.length] }))
   const top = Math.max(1, ...perPrinter.map((r) => r.pages))
   const ranked = compact ? perPrinter.slice(0, 6) : perPrinter
-  const pagesAvg = counted ? sum(pages) / counted : 0
+  const pagesAvg = perWorkDay(pages)
   return (
     <div className="an an--all">
       <div className="an-tiles">
         <Tile label={`Lapas ${n} dienās`} value={counted ? fmtNum(sum(pages)) : '–'} delta={counted ? change(sum(pages), prevPages) : null} spark={sparkPath(pages)} color="var(--ink)" />
-        <Tile label="Lapas vidēji dienā" value={counted ? fmtNum(Math.round(pagesAvg)) : '–'} delta={counted ? change(pagesAvg, prevPages !== null ? prevPages / prevCounted : null) : null} spark={sparkPath(pages)} color="var(--ink)" />
+        <Tile label={compact ? 'Vidēji darba dienā' : 'Lapas vidēji darba dienā'} hint={<Hint label="Kā rēķināts vidējais darba dienā">{WORKDAY_HINT}</Hint>} value={counted ? fmtNum(Math.round(pagesAvg)) : '–'} delta={counted ? change(pagesAvg, prevPages !== null ? perWorkDay(prevPagesByDay.map((v) => v ?? 0)) : null) : null} spark={sparkPath(pages)} color="var(--ink)" />
         <Tile label={compact ? 'Nomainītas kasetnes' : `Nomainītās kasetnes ${n} dienās`} value={String(replaced)} delta={change(replaced, prevReplaced)} spark={sparkPath(replacedByDay)} color="var(--accent-line)"
           hint={(
             <Hint label="Kā skaitītas nomainītās kasetnes">
