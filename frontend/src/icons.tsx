@@ -27,6 +27,16 @@ export const Icon = {
   trendDown: (s = 18) => svg(s, <><path d="M3 7l6 6 4-4 7.5 7.5" /><path d="M21 11v6h-6" /></>),
   // A sheet of paper with a folded corner and lines of text: printed pages.
   page: (s = 20) => svg(s, <><path d="M7 3h7.5L19 7.5V19a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /><path d="M14.5 3v3a1.5 1.5 0 0 0 1.5 1.5h3" /><path d="M9 11.5h3.5M9 14.75h6M9 18h6" /></>),
+  building: (s = 20) => svg(s, <><path d="M4 21V6.5L12 3l8 3.5V21" /><path d="M2.5 21h19" /><path d="M9 21v-4h6v4" /><path d="M8 9h1.5M14.5 9H16M8 13h1.5M14.5 13H16" /></>),
+  // Krājumi's action menus (⋮): one icon per action.
+  used: (s = 18) => svg(s, <><circle cx="12" cy="12" r="8" /><path d="M8.5 12h7" /></>),
+  cartPlus: (s = 18) => svg(s, <><path d="M2.5 4h2.6l2.3 10.5h10.2l1.9-7.5H6.2" /><circle cx="9.5" cy="18.8" r="1.3" /><circle cx="16.5" cy="18.8" r="1.3" /><path d="M12.6 8.3v4M10.6 10.3h4" /></>),
+  pin: (s = 18) => svg(s, <><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.2" /></>),
+  warn: (s = 18) => svg(s, <><path d="M12 4L2.8 19.5h18.4z" /><path d="M12 10v4" /><path d="M12 17h.01" /></>),
+  shield: (s = 18) => svg(s, <><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8-7.5 9.5-4.3-1.5-7.5-4.9-7.5-9.5V6z" /><path d="M8.8 12l2.2 2.2 4.2-4.4" /></>),
+  inbox: (s = 18) => svg(s, <><path d="M4 13.5l2.5-8h11l2.5 8v5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5z" /><path d="M4 13.5h4.5l1.5 2.5h4l1.5-2.5H20" /><path d="M12 6.5v5" /><path d="M9.8 9.5L12 11.7l2.2-2.2" /></>),
+  xCircle: (s = 18) => svg(s, <><circle cx="12" cy="12" r="8" /><path d="M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6" /></>),
+  layers: (s = 20) => svg(s, <><path d="M12 3.5l8.5 4.5L12 12.5 3.5 8 12 3.5z" /><path d="M3.5 12.5L12 17l8.5-4.5" /><path d="M3.5 16.5L12 21l8.5-4.5" /></>),
   stopwatch: (s = 20) => svg(s, <><circle cx="12" cy="13.5" r="7.5" /><path d="M12 9.5v4l2.5 1.5" /><path d="M10 3h4" /><path d="M12 3v3" /><path d="M5.6 6.6l1.4 1.4" /></>),
   // Analītika: four bars with a rising arrow over them; the arrow is in the theme's accent colour.
   chart: (s = 20) => (

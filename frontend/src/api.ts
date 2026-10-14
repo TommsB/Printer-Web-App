@@ -23,6 +23,8 @@ export interface Snapshot {
   blocking: string // why it can't print (" | "-joined: critical alert, jam, door open, no paper…); '' = it can
   pages_today: number | null // printed since local midnight (or since pages_since if no older reading)
   pages_since: string | null
+  offline_since: string | null // not answering: since this reading (the first failed one after the last that answered)
+  offline_long: boolean // …and no reading still kept answered, so it has been longer than that
 }
 /** How many of a printer's cartridges sit in one storage location. */
 export interface StockLoc { location_id: number; name: string; short: string; qty: number }

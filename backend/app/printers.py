@@ -74,6 +74,17 @@ def _printer_dict(conn: sqlite3.Connection, row: sqlite3.Row, with_supplies: boo
             for x in s["supplies"]:
                 x["days_left"] = left.get(x["idx"])
         s.update(_pages_today(conn, d["id"], s["page_count"]))
+        # Not answering: since when — the first failed reading after the last one that answered. If none of the
+        # readings still kept (snapshot_keep_days) answered, it is the oldest kept one, and `offline_long` says
+        # the real start may be further back.
+        s["offline_since"], s["offline_long"] = None, False
+        if not s["reachable"]:
+            last_ok = conn.execute("SELECT MAX(ts) FROM snmp_snapshots WHERE printer_id = ? AND reachable = 1",
+                                   (d["id"],)).fetchone()[0]
+            s["offline_since"] = conn.execute(
+                "SELECT MIN(ts) FROM snmp_snapshots WHERE printer_id = ? AND reachable = 0 AND ts > ?",
+                (d["id"], last_ok or "")).fetchone()[0]
+            s["offline_long"] = last_ok is None
         d["snapshot"] = s
     d["toners"] = [dict(x) for x in conn.execute(
         "SELECT t.id, t.code, t.color, t.kind, pt.qty, pt.optimal_qty, pt.qty < pt.optimal_qty AS low,"

@@ -654,7 +654,7 @@ button.flist__name { border: 0; background: none; padding: 0; font: inherit; tex
 @media (hover: hover) { .splist__filters .check:hover input:not(:checked) { border-color: var(--ink); } }
 .splist__acts { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex: 1 0 auto; } /* never squeezed under the filters */
 .splist__title { font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
-.splist__sort { border-radius: 22px; padding: 6px 14px; box-shadow: 0 1px 2px rgba(40, 40, 36, .08); }
+.splist__sort { min-width: 0; } /* no container of its own: the rows sit on the page like the printer cards */
 .plist[hidden] { display: none; }
 .srail .pane { border-radius: 22px; padding: 18px; box-shadow: 0 1px 2px rgba(40, 40, 36, .08); }
 .srail__head, .srail__shade, .cart-btn { display: none; }
@@ -689,7 +689,10 @@ button.flist__name { border: 0; background: none; padding: 0; font: inherit; tex
 .cd .dot { margin-right: 2px; }
 .t .dot { width: 30px; height: 30px; }
 .t .dot i { width: 11px; height: 11px; }
-.t .code { flex: none; white-space: nowrap; }
+/* When the row is tight the location beside the code is cut first; then a long name is cut short (…) itself,
+   down to about a normal code's width — so nothing (the cart mark, the stock count) is pushed over or out. */
+.t .code { flex: 0 1 auto; min-width: 3ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t .cd .loc { flex: 1 1 0; max-width: max-content; } /* takes only the room the code leaves over (up to its own width), so it is always cut first */
 .lab + .trow .t { border-top: 0; }
 /* Location label on the toner row: short name or "N lokācijas"; tap = Lokācija dialog. Never pushes the row wider. */
 .loc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-size: 11.5px; color: var(--muted);
@@ -1052,7 +1055,7 @@ body:has(.cbar--detail.on) .cbar:not(.cbar--detail) { opacity: 0; pointer-events
   .cols { grid-template-columns: 1fr; }
   /* Krājumi on phones: only the printers in the page. Basket / orders / defects slide up as a sheet from the
      button next to the bell; the sheet shows the one list picked in its switch and is always the same height. */
-  .scols { grid-template-columns: 1fr; }
+  .scols { grid-template-columns: minmax(0, 1fr); } /* minmax: a wide row inside never stretches the column */
   /* No "Tikai zemie" here; "Kārtot" and the search button sit at the right. The opened search field grows
      over the free width, which slides "Kārtot" to the left edge. */
   .page:has(.splist__tools) { gap: 14px; }
@@ -1652,3 +1655,76 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
 @media (hover: hover) { .asheet__all:hover { border-color: var(--outline); box-shadow: 0 6px 18px rgba(40, 40, 36, .1); } }
 :root[data-surface="glass"] .asheet__all { background: var(--glass); border-color: var(--glass-edge); box-shadow: var(--glass-shine); }
 :root[data-surface="glass"] .asheet__all:hover { background: var(--glass-hover); border-color: var(--outline); }
+/* Krājumi: an open card is exactly as wide as a closed one, whatever its rows hold. */
+.grp, .grp .t, .grp .cd { min-width: 0; max-width: 100%; }
+
+/* ----- Reorder mode (Statuss and Krājumi → sort → Pielāgota secība): each printer a card like in the normal
+   list, on the page itself; the one being dragged lifts with the open card's outline. ----- */
+.splist__sort .rlist { gap: 8px; }
+.splist__sort .rrow { gap: 14px; min-height: 64px; padding: 10px 8px 10px 16px; border: 1px solid transparent; border-radius: 22px; background: var(--card);
+  box-shadow: 0 1px 2px rgba(40, 40, 36, .08); }
+.splist__sort .rrow .ic { width: 40px; height: 40px; }
+.splist__sort .rlist.dragging .rrow.lifted { border-color: var(--outline); box-shadow: inset 0 0 0 .5px var(--outline), 0 14px 32px rgba(40, 40, 36, .16); transform-origin: center; }
+.splist__sort .rrow__handle { width: 44px; height: 44px; border-radius: 50%; background: var(--tile); color: var(--ink); }
+@media (hover: hover) { .splist__sort .rrow__handle:hover { background: var(--sel); } }
+:root[data-surface="glass"] .splist__sort .rrow { background: var(--glass); border-color: var(--glass-edge); box-shadow: var(--glass-shine); }
+:root[data-surface="glass"] .splist__sort .rlist.dragging .rrow.lifted { background: var(--glass-hover); border-color: var(--outline);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); box-shadow: inset 0 0 0 .5px var(--outline), 0 16px 36px rgba(0, 0, 0, .16); }
+:root[data-surface="glass"] .splist__sort .rrow__handle { box-shadow: var(--bead); }
+@media (max-width: 800px) { .splist__sort .rrow { min-height: 58px; padding: 8px 6px 8px 12px; } .splist__sort .rrow .ic { width: 36px; height: 36px; } }
+
+/* A menu of choices (Krājumi → Skats): the picked one in bold with a tick. */
+.menu--pick button { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.menu--pick button.on { font-weight: 600; }
+.menu--pick button svg { flex: none; color: var(--accent-line); }
+.icon-btn.on { color: var(--ink); }
+
+/* Krājumi, an open card (by printer or by storage place): column names over the rows and the rows lined up
+   under them — the code in a column of its own width, so every printer name starts at the same place. */
+.place-cols { display: flex; align-items: flex-end; padding: 8px 0 6px 40px; font-size: 10.5px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.place-cols span:first-child { width: 126px; flex: none; }
+.place-cols span:nth-child(2) { flex: 1; }
+.place-cols span:last-child { padding-right: 24px; } /* ends where the count pills end (the ⋮ is after them) */
+.grp--cols .t .code { flex: none; width: 118px; }
+.grp--cols .t .cd .loc { flex: 1 1 0; max-width: none; font-size: 13px; }
+@media (max-width: 800px) {
+  .place-cols { font-size: 10px; }
+  .place-cols span:first-child { width: 92px; }
+  .grp--cols .t .code { width: 84px; }
+  .grp--cols .t .cd .loc { font-size: 12px; }
+}
+/* A choice menu's heading (Skata režīms) and a small note beside an option (Ieteicams). */
+.menu__title { padding: 8px 12px 6px; font-size: 10.5px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); border-bottom: 1px solid var(--line2); margin-bottom: 4px; }
+.menu__lab { display: inline-flex; align-items: baseline; gap: 8px; }
+.menu__lab small { padding: 1px 7px; border-radius: 8px; background: var(--ok-bg); color: var(--ok-ink); font-size: 11px; font-weight: 500; }
+
+/* Krājumi → Skata režīms switched: the new view's cards rise into place one after another, and the view button
+   gives one ring in the accent colour — so it's clear the list itself was rebuilt, not just filtered. */
+.plist--in > .grp { animation: view-in .5s var(--ease) both; animation-delay: calc(var(--i, 0) * 45ms); }
+@keyframes view-in { from { opacity: 0; transform: translateY(18px) scale(.98); } }
+.icon-btn.view-flash { animation: view-flash 1s ease-out; color: var(--accent-line); }
+@keyframes view-flash { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-line) 55%, transparent); } 100% { box-shadow: 0 0 0 12px transparent; } }
+@media (prefers-reduced-motion: reduce) { .plist--in > .grp, .icon-btn.view-flash { animation: none; } }
+
+/* The company button (phones; desktop has the switch instead). Marked while a company is picked. */
+.co-btn { display: none; }
+@media (max-width: 800px) { .co-btn { display: inline-flex; } }
+.icon-btn.co-on { color: var(--accent-line); background: color-mix(in srgb, var(--accent-line) 14%, var(--card)); box-shadow: inset 0 0 0 1.5px var(--accent-line); }
+:root[data-surface="glass"] .icon-btn.co-on { background: color-mix(in srgb, var(--accent-line) 16%, transparent); box-shadow: inset 0 0 0 1.5px var(--accent-line), var(--glass-shine); }
+/* Phones: the opened search field takes only the room left beside the round buttons (it used to keep its own
+   width and push the row, and with it the page, past the right edge of the screen). */
+@media (max-width: 800px) {
+  .splist__acts { flex: 1 1 0; min-width: 0; gap: 10px; }
+  .splist__tools .search { flex: 1 1 0; min-width: 96px; }
+  .splist__tools .search input { width: 0; }
+}
+/* An action's icon in a ⋮ menu: before its name, a little quieter than the text. */
+.menu button:has(.menu__ic) { display: flex; align-items: center; gap: 12px; }
+.menu__ic { flex: none; display: inline-flex; opacity: .8; }
+/* Paziņojumi: days before today are folded; their heading opens them, with how many there are (and a dot for new ones). */
+.nday__fold { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; cursor: pointer; text-align: left; font: inherit; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); min-height: 32px; }
+.nday__fold:hover { color: var(--ink); }
+.nday__n { display: inline-flex; align-items: center; gap: 5px; margin-left: 2px; padding: 0 7px; border-radius: 9px; background: var(--tile); color: var(--muted); font-size: 11px; letter-spacing: 0; line-height: 18px; }
+.nday__n i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-line); }
+.nday:has(> .nday__fold[aria-expanded="false"]) { margin-bottom: -18px; } /* folded days sit close together (offsets the window's 12 px gap and the 10 px between days) */
+.nday__fold { min-height: 30px; padding: 2px; }

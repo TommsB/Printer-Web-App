@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { api, fmtTime, type Order, type Printer, type StockRow, type StoreLocation } from '../api'
+import { api, fmtTime, UNASSIGNED, type Order, type Printer, type StockRow, type StoreLocation } from '../api'
 import { useApiData } from '../cache'
 import { CDot } from '../components/ColorDot'
 import { DefectDialog, PendingFiles } from '../components/DefectFiles'
@@ -10,6 +10,8 @@ import { fmtNum, missing } from '../lib'
 import { ORDER_EMAIL, OrderEmailDialog, WARRANTY_EMAIL, type EmailFlavor, type EmailItem } from '../components/OrderEmailDialog'
 import { ReorderList } from '../components/ReorderList'
 import { matches, SearchBox } from '../components/SearchBox'
+import { CompanyMenu } from '../components/CompanyMenu'
+import { SortMenu, sortList, sortPrinters, usePrinterSort, useSortChoice } from '../components/SortMenu'
 import { Stepper } from '../components/Stepper'
 import { Segmented } from '../components/Toggle'
 import { ActionMenu, TonerRow } from '../components/TonerRow'
@@ -152,7 +154,12 @@ type SheetTab = 'basket' | 'orders' | 'defects'
 export function StockPage() {
   // Company filter (desktop; '' = all), the same choice as on Statuss. Remembered when you switch sections.
   const { companies } = useApp()
-  const [company, setCompany] = useRemembered('filter.company', '')
+  const [companyPicked, setCompany] = useRemembered('filter.company', '')
+  // How the list is laid out: by printer (the usual) or by storage place. In the place view there is no
+  // company filter (a shelf can hold several companies' toners), so everything here counts all companies.
+  // Not remembered: Krājumi always opens by printer — the recommended view, the only one showing stock against the norm.
+  const [view, setView] = useState<'printer' | 'place'>('printer')
+  const company = view === 'place' ? '' : companyPicked
   // Cached: shows the last copy instantly, refreshes in the background.
   const stock = useApiData<StockRow[]>('stock', api.stock, [])
   const ord = useApiData<Order[]>('orders', () => api.orders('ordered'), [])
@@ -176,6 +183,7 @@ export function StockPage() {
   const wanted = Number(params.get('p')) || null
   const [flash, setFlash] = useState<number | null>(null)
   if (wanted !== null && flash !== wanted) { // adjust state while rendering
+    setView('printer')
     setOpenId(wanted)
     setCompany('')
     setOnlyLow(false)
@@ -196,7 +204,9 @@ export function StockPage() {
 
   // Same order as Statuss: the user's custom order (the printers list comes back in it; cached, shared).
   const printers = useApiData<Printer[]>('printers', api.printers, [])
-  const rank = new Map(printers.data.map((p, i) => [p.id, i]))
+  // Listed A–Z, Z–A or in the user's own order (the sort menu; shared with Statuss). Rearranging works on the own order.
+  const [sortBy, setSortBy] = usePrinterSort()
+  const rank = new Map(sortPrinters(printers.data, sortBy).map((p, i) => [p.id, i]))
   const inCompany = rows.filter((r) => !company || r.company === company)
     .sort((a, b) => (rank.get(a.printer_id) ?? 1e9) - (rank.get(b.printer_id) ?? 1e9)) // stable: toners keep their order
   const openOrders = orders.filter((o) => !company || o.company === company)
@@ -208,13 +218,71 @@ export function StockPage() {
   const groups = [...byPrinter.values()].filter((list) =>
     (!onlyLow || list.some((r) => r.low)) &&
     list.some((r) => matches(query, r.location, r.model, r.code, r.ip)))
+  // By storage place: every toner kept there (one row per printer and toner), places in their usual order
+  // with "Nav norādīts" last. A place holding nothing right now isn't shown.
+  const [openPlace, setOpenPlace] = useRemembered<number | null>('stock.openPlace', null)
+  const placeOrder = new Map(locations.data.map((l) => [l.id, l.sort * 1000 + l.id]))
+  const byPlace = new Map<number, { name: string; rows: StockRow[]; qty: number }>()
+  for (const r of inCompany) for (const l of r.locations) {
+    if (l.qty <= 0) continue
+    const g = byPlace.get(l.location_id) ?? { name: l.name, rows: [], qty: 0 }
+    g.rows.push(r)
+    g.qty += l.qty
+    byPlace.set(l.location_id, g)
+  }
+  // Their order: the sort menu here has its own choice (by count most first unless picked otherwise), and its own
+  // "Pielāgota secība" — the user's, kept on the server; places not in it come after, in their usual order.
+  const [placeSort, setPlaceSort] = useSortChoice('places.sort')
+  const placeOwn = useApiData<number[]>('placeOrder', async () => {
+    try { const ids = JSON.parse((await api.getSetting('place_order')).value ?? '[]'); return Array.isArray(ids) ? ids.filter(Number.isInteger) : [] } catch { return [] }
+  }, [])
+  const ownAt = new Map(placeOwn.data.map((id, i) => [id, i]))
+  const usual = [...byPlace.entries()]
+    .sort(([a, x], [b, y]) => (placeOrder.get(a) ?? 1e12) - (placeOrder.get(b) ?? 1e12) || x.name.localeCompare(y.name, 'lv'))
+  const ownOrder = [...usual].sort(([a], [b]) => (ownAt.get(a) ?? 1e9) - (ownAt.get(b) ?? 1e9))
+  const placeGroups = (placeSort === 'custom' ? ownOrder : sortList(usual, placeSort, ([, g]) => g.name, ([, g]) => g.qty))
+    .sort(([, x], [, y]) => (x.name === UNASSIGNED ? 1 : 0) - (y.name === UNASSIGNED ? 1 : 0)) // "Nav norādīts" always last
+    .filter(([, g]) => (!onlyLow || g.rows.some((r) => r.low)) && (matches(query, g.name) || g.rows.some((r) => matches(query, r.location, r.model, r.code, r.ip))))
+  const togglePlace = (id: number) => withViewTransition(() => setOpenPlace((cur) => (cur === id ? null : id)))
+  // Switching views rebuilds the list, so it says so: the cards of the new view rise in one after another, and
+  // the view button gives one ring in the accent colour (both for ~1 s, CSS .plist--in / .view-flash).
+  const [switched, setSwitched] = useState(0)
+  useEffect(() => {
+    if (!switched) return
+    const timer = setTimeout(() => setSwitched(0), 1100)
+    return () => clearTimeout(timer)
+  }, [switched])
+  const switchView = (next: 'printer' | 'place') => {
+    if (next === view) return
+    // A new view starts with every card closed — in both views, so going back doesn't reopen the old one either.
+    setOpenId(null)
+    setOpenPlace(null)
+    setView(next)
+    setSwitched((n) => n + 1)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  // The view switch: a round button like "Kārtot", its menu offering the two views.
+  const viewMenu = (
+    <ActionMenu code="Skats" title="Skata režīms" button={{ className: switched ? 'icon-btn view-flash' : 'icon-btn', icon: Icon.layers(18), label: `Skats: ${view === 'place' ? 'pēc noliktavām' : 'pēc printeriem'}`, title: 'Skats' }}
+      items={[
+        { label: 'Pēc printeriem', note: 'Ieteicams', checked: view === 'printer', run: () => switchView('printer') },
+        { label: 'Pēc noliktavām', checked: view === 'place', run: () => switchView('place') },
+      ]} />
+  )
+
   // Opening a card closes the one that was open. Animated on desktop: the cards grow/shrink and glide into place.
   const toggle = (id: number) => withViewTransition(() => setOpenId((cur) => (cur === id ? null : id)))
 
   // "Kārtot", as on Statuss: the cards turn into a drag-to-reorder list of the printers shown here (cards
   // closed, filters cleared while sorting). The order is the user's own and is shared with Statuss.
   const [sorting, setSorting] = useState(false)
-  const startSorting = () => { setOpenId(null); setQuery(''); setOnlyLow(false); setSorting(true) }
+  const startSorting = () => { setOpenId(null); setOpenPlace(null); setQuery(''); setOnlyLow(false); setSorting(true) }
+  // Rearranging the places (the storage view's own order): saved for the user at once.
+  const reorderPlaces = (next: { id: number }[]) => {
+    const ids = next.map((p) => p.id)
+    placeOwn.setData(ids)
+    api.putSetting('place_order', JSON.stringify(ids)).catch(() => placeOwn.reload())
+  }
   const sortable = printers.data.filter((p) => byPrinter.has(p.id))
   const reorder = (next: Printer[]) => {
     // Optimistic: the new order shows at once.
@@ -355,27 +423,41 @@ export function StockPage() {
         <section className="splist">
           {sorting
             ? <div className="splist__tools">
-                <b className="splist__title">Kārtot printerus</b>
+                <b className="splist__title">{view === 'place' ? 'Kārtot noliktavas' : 'Kārtot printerus'}</b>
                 <button className="btn small primary" onClick={() => setSorting(false)}>Gatavs</button>
               </div>
             : <div className="splist__tools">
                 {/* Desktop only (CSS): company, and only the printers with something under the norm. */}
                 <div className="splist__filters">
-                  <Segmented label="Uzņēmums" value={company} onChange={setCompany}
-                    options={[{ value: '', label: 'Visi' }, ...companies.map((c) => ({ value: c, label: c }))]} />
-                  <label className="check" title="Rādīt tikai printerus, kuriem kāds toneris ir zem normas">
+                  {view === 'printer' && <Segmented label="Uzņēmums" value={company} onChange={setCompany}
+                    options={[{ value: '', label: 'Visi' }, ...companies.map((c) => ({ value: c, label: c }))]} />}
+                  <label className="check" title={view === 'place' ? 'Rādīt tikai noliktavas, kurās ir kāds toneris zem normas' : 'Rādīt tikai printerus, kuriem kāds toneris ir zem normas'}>
                     <input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} /> Tikai zemie
                   </label>
                 </div>
                 {/* Same pair as on Statuss. An opened search field takes the free width, pushing "Kārtot" to its left. */}
                 <div className="splist__acts">
-                  <button className="icon-btn" onClick={startSorting} aria-label="Kārtot printerus" title="Kārtot (pielāgota secība)">{Icon.sort(18)}</button>
-                  <SearchBox value={query} onChange={setQuery} placeholder="Meklēt pēc printera, modeļa vai toneru koda…" />
+                  {view === 'printer' && <CompanyMenu value={company} companies={companies} onChange={(c) => withViewTransition(() => setCompany(c))} />}
+                  {viewMenu}
+                  {view === 'printer'
+                    ? <SortMenu sort={sortBy} onSort={(s) => withViewTransition(() => setSortBy(s))} onRearrange={startSorting} />
+                    : <SortMenu sort={placeSort} onSort={(s) => withViewTransition(() => setPlaceSort(s))} onRearrange={startSorting} />}
+                  <SearchBox value={query} onChange={setQuery} placeholder={view === 'place' ? 'Meklēt pēc noliktavas, printera vai toneru koda…' : 'Meklēt pēc printera, modeļa vai toneru koda…'} />
                 </div>
               </div>}
-          {sorting && <>
+          {sorting && view === 'place' && <>
+            <p className="mhint">Velciet aiz ≡, lai mainītu noliktavu secību. Tā tiek saglabāta jums.</p>
+            <div className="splist__sort">
+              <ReorderList items={ownOrder.map(([id, g]) => ({ id, name: g.name, qty: g.qty }))} label={(p) => p.name} onReorder={reorderPlaces}
+                render={(p) => <>
+                  <span className="ic">{Icon.box(18)}</span>
+                  <span className="rrow__txt"><b>{p.name}</b><small>{p.qty} gab.</small></span>
+                </>} />
+            </div>
+          </>}
+          {sorting && view === 'printer' && <>
             <p className="mhint">Velciet aiz ≡, lai mainītu secību. Tā tiek saglabāta jums un tiek izmantota arī Statusā.</p>
-            <div className="pane splist__sort">
+            <div className="splist__sort">
               <ReorderList items={sortable} label={(p) => p.location} onReorder={reorder}
                 render={(p) => <>
                   <span className="ic">{Icon.printer(18)}</span>
@@ -383,15 +465,46 @@ export function StockPage() {
                 </>} />
             </div>
           </>}
-          <div className="plist" hidden={sorting}>
-            {groups.map((list) => {
+          {view === 'place' && !sorting && (
+            <div key={switched ? `in-${switched}` : 'place'} className={switched ? 'plist plist--in' : 'plist'}>
+              {placeGroups.map(([lid, g], at) => {
+                const qty = g.rows.reduce((n, r) => n + (r.locations.find((l) => l.location_id === lid)?.qty ?? 0), 0)
+                const printersHere = [...new Set(g.rows.map((r) => r.printer_id))]
+                const anyLow = g.rows.some((r) => r.low)
+                const isOpen = openPlace === lid
+                return (
+                  <article key={lid} id={`place-${lid}`} className={`grp grp--cols${isOpen ? ' open' : ''}`} style={{ ...vtName(`place-${lid}`, isOpen ? 'card-open' : 'card'), '--i': Math.min(at, 12) } as React.CSSProperties}>
+                    <button className="gh-btn" aria-expanded={isOpen} onClick={() => togglePlace(lid)}>
+                      <span className="gh-t">
+                        <b>{g.name}</b>
+                        <span>{printersHere.length === 1 ? '1 printera krājumi' : `${printersHere.length} dažādu printeru krājumi`}</span>
+                      </span>
+                      <span className={anyLow ? 'tot hot' : 'tot'} title={anyLow ? 'Te ir kāds toneris, kas kopumā ir zem normas' : 'Kasetnes šajā vietā'}>{qty}<small> gab.</small></span>
+                      <span className={isOpen ? 'fold-ic open' : 'fold-ic'}>{Icon.chevron(18)}</span>
+                    </button>
+                    {/* Column names over the rows: quiet, small capitals; the codes and printers line up under them. */}
+                    {isOpen && <div className="place-cols" aria-hidden="true"><span>Toneris</span><span>Printeris</span><span>Skaits</span></div>}
+                    {/* The same toner kept for several printers sits together: by code, then in the printers' usual order. */}
+                    {isOpen && [...g.rows].sort((x, y) => x.code.localeCompare(y.code, 'en', { numeric: true }) || (rank.get(x.printer_id) ?? 1e9) - (rank.get(y.printer_id) ?? 1e9)).map((r) => (
+                      <TonerRow key={`${r.printer_id}-${r.toner_id}`} place={lid} printerId={r.printer_id} printerName={r.location} allLocations={locations.data} emptiesDefault={r.empties_location_id}
+                        toner={{ id: r.toner_id, code: r.code, color: r.color, kind: r.kind, qty: r.qty, optimal_qty: r.optimal_qty, ordered: r.ordered, ordered_extra: r.ordered_extra, locations: r.locations }}
+                        onChange={load} />
+                    ))}
+                  </article>
+                )
+              })}
+              {placeGroups.length === 0 && <p className="muted">{query ? 'Nekas netika atrasts' : onlyLow ? 'Nevienā noliktavā nav tonera zem normas' : 'Krājumā nekā nav'}</p>}
+            </div>
+          )}
+          <div key={switched && view === 'printer' ? `in-${switched}` : 'printer'} className={switched && view === 'printer' ? 'plist plist--in' : 'plist'} hidden={sorting || view === 'place'}>
+            {groups.map((list, at) => {
               const pid = list[0].printer_id
               const qty = list.reduce((n, r) => n + r.qty, 0)
               const norm = list.reduce((n, r) => n + r.optimal_qty, 0)
               const anyLow = list.some((r) => r.low)
-              const isOpen = openId === pid || query !== '' // searching opens the matches
+              const isOpen = openId === pid
               return (
-              <article key={pid} id={`stock-${pid}`} className={`grp${isOpen ? ' open' : ''}${flash === pid ? ' flash' : ''}`} style={vtName(`stock-${pid}`, isOpen ? 'card-open' : 'card')}>
+              <article key={pid} id={`stock-${pid}`} className={`grp grp--cols${isOpen ? ' open' : ''}${flash === pid ? ' flash' : ''}`} style={{ ...vtName(`stock-${pid}`, isOpen ? 'card-open' : 'card'), '--i': Math.min(at, 12) } as React.CSSProperties}>
                 <button className="gh-btn" aria-expanded={isOpen} onClick={() => toggle(pid)}>
                   <span className="gh-t">
                     {/* A printer switched off in Pārvaldība keeps its reserve here; the tag tells it apart. */}
@@ -401,6 +514,8 @@ export function StockPage() {
                   <span className={anyLow ? 'tot hot' : 'tot'} title={anyLow ? 'Kāds toneris ir zem normas' : 'Krājumā / norma'}>{qty}<small>/{norm}</small></span>
                   <span className={isOpen ? 'fold-ic open' : 'fold-ic'}>{Icon.chevron(18)}</span>
                 </button>
+                {/* Column names over the rows, as in the storage view. */}
+                {isOpen && <div className="place-cols" aria-hidden="true"><span>Toneris</span><span>Lokācija</span><span>Skaits / norma</span></div>}
                 {isOpen && list.map((r) => (
                   <TonerRow key={r.toner_id} printerId={r.printer_id} printerName={r.location} allLocations={locations.data} emptiesDefault={r.empties_location_id}
                     toner={{ id: r.toner_id, code: r.code, color: r.color, kind: r.kind, qty: r.qty, optimal_qty: r.optimal_qty, ordered: r.ordered, ordered_extra: r.ordered_extra, locations: r.locations }}
@@ -485,9 +600,9 @@ export function StockPage() {
                     <small>{o.location} · {fmtTime(o.created_ts)} · {claimNote(o)}{o.held_at && ` · atrodas: ${o.held_at}`}{o.note && ` · ${o.note}`}</small>
                   </span>
                   <ActionMenu code={`${o.code}, ${o.location}`} items={[
-                    { label: 'Nodot garantijā', run: () => setDlg({ kind: 'send', orders: [o] }) },
-                    { label: 'Dati un faili', run: () => setDlg({ kind: 'defect', order: o }) },
-                    { label: 'Dzēst', run: () => setDlg({ kind: 'discard', order: o }), divider: true },
+                    { label: 'Nodot garantijā', icon: Icon.shield(), run: () => setDlg({ kind: 'send', orders: [o] }) },
+                    { label: 'Dati un faili', icon: Icon.clip(18), run: () => setDlg({ kind: 'defect', order: o }) },
+                    { label: 'Dzēst', icon: Icon.trash(18), run: () => setDlg({ kind: 'discard', order: o }), divider: true },
                   ]} />
                 </div>
               ))}
@@ -519,12 +634,12 @@ export function StockPage() {
                 {/* One ⋮ per order (like the toner rows) instead of two buttons on every row.
                     A warranty claim: Saņemt = the replacement arrived, Noraidīts = the claim was rejected. */}
                 <ActionMenu code={`${o.code}, ${o.location}`} items={[
-                  { label: 'Saņemt', run: () => setDlg({ kind: 'receive', order: o }) },
+                  { label: 'Saņemt', icon: Icon.inbox(), run: () => setDlg({ kind: 'receive', order: o }) },
                   ...(o.warranty ? [
-                    { label: 'Garantijas e-pasts', run: emailWarranty },
-                    { label: 'Dati un faili', run: () => setDlg({ kind: 'defect', order: o }) },
+                    { label: 'Garantijas e-pasts', icon: Icon.mail(18), run: emailWarranty },
+                    { label: 'Dati un faili', icon: Icon.clip(18), run: () => setDlg({ kind: 'defect', order: o }) },
                   ] : []),
-                  { label: o.warranty ? 'Noraidīts' : 'Atcelt', run: () => setDlg({ kind: 'cancel', order: o }), divider: true },
+                  { label: o.warranty ? 'Noraidīts' : 'Atcelt', icon: Icon.xCircle(), run: () => setDlg({ kind: 'cancel', order: o }), divider: true },
                 ]} />
               </div>
             ))}

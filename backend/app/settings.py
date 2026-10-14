@@ -10,7 +10,7 @@ from .db import db_dep
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
-KEYS = {"order_email", "warranty_email"}  # known settings; anything else is rejected
+KEYS = {"order_email", "warranty_email", "place_order"}  # place_order: Krājumi by place, the user's own order (JSON list of ids)  # known settings; anything else is rejected
 
 
 class SettingIn(BaseModel):

@@ -7,6 +7,8 @@ import { CompactBar } from '../components/CompactBar'
 import { DefectDialog } from '../components/DefectFiles'
 import { ReorderList } from '../components/ReorderList'
 import { matches, SearchBox } from '../components/SearchBox'
+import { CompanyMenu } from '../components/CompanyMenu'
+import { SortMenu, sortPrinters, usePrinterSort } from '../components/SortMenu'
 import { Segmented } from '../components/Toggle'
 import { TonerRow } from '../components/TonerRow'
 import { TopBar } from '../components/TopBar'
@@ -103,9 +105,11 @@ export function PrintersPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // The server returns printers in the user's own order ("Pielāgota secība"), rearranged with "Kārtot".
+  // The server returns printers in the user's own order ("Pielāgota secība"); the sort menu can list them by
+  // name instead. Rearranging always works on the user's own order.
+  const [sortBy, setSortBy] = usePrinterSort()
   const inScope = printers.filter((p) => p.active && (!company || p.company === company))
-  const rows = inScope.filter((p) => matches(query, p.location, p.model, p.ip, p.brand, p.company))
+  const rows = sortPrinters(inScope, sortBy).filter((p) => matches(query, p.location, p.model, p.ip, p.brand, p.company))
   const sel = inScope.find((p) => p.id === selId) ?? null
   if (sel) lastShown.current = sel
   const shown = sel ?? lastShown.current // keeps content while the panel animates out
@@ -126,6 +130,7 @@ export function PrintersPage() {
   // "Kārtot": the list turns into a drag-to-reorder list (details closed, search cleared while sorting).
   const [sorting, setSorting] = useState(false)
   const [analytics, setAnalytics] = useState(false)
+  const [analyticsFor, setAnalyticsFor] = useState<number | null>(null) // opened from a printer's page: that printer
   const startSorting = () => { select(null); setQuery(''); setSorting(true) }
   const reorder = (next: Printer[]) => {
     // Optimistic: the new order shows at once; saved per user (Krājumi follows it too).
@@ -144,7 +149,7 @@ export function PrintersPage() {
           fit beside the title: Analītika stays at the top and the refresh moves to the left of the tools row
           (CSS shows one of the two refresh buttons). */}
       <TopBar title={['Printeru', 'statuss']}>
-        <button className="rb" onClick={() => setAnalytics(true)} aria-haspopup="dialog" aria-label="Analītika" title="Analītika">{Icon.chart(22)}</button>
+        <button className="rb" onClick={() => { setAnalyticsFor(null); setAnalytics(true) }} aria-haspopup="dialog" aria-label="Analītika" title="Analītika">{Icon.chart(22)}</button>
         {refreshBtn}
       </TopBar>
       <div className={open ? 'stage open' : 'stage'}>
@@ -163,14 +168,15 @@ export function PrintersPage() {
                 </div>
                 <div className="splist__acts">
                   <button className={refreshing === 'all' ? 'icon-btn ref-btn--tools spin' : 'icon-btn ref-btn--tools'} onClick={() => refresh()} disabled={busy} aria-busy={refreshing === 'all'} aria-label="Atjaunot SNMP" title="Atjaunot SNMP">{Icon.refresh(18)}</button>
-                  <button className="icon-btn" onClick={startSorting} aria-label="Kārtot printerus" title="Kārtot (pielāgota secība)">{Icon.sort(18)}</button>
+                  <CompanyMenu value={company} companies={companies} onChange={(c) => withViewTransition(() => setCompany(c))} />
+                  <SortMenu sort={sortBy} onSort={(s) => withViewTransition(() => setSortBy(s))} onRearrange={startSorting} />
                   <SearchBox value={query} onChange={setQuery} placeholder="Meklēt pēc vietas, modeļa vai IP…" />
                 </div>
               </div>}
           {sorting && <p className="mhint">Velciet aiz ≡, lai mainītu secību. Tā tiek saglabāta jums un tiek izmantota arī Krājumos.</p>}
           {loading && <p className="muted">Ielādē…</p>}
           {sorting
-            ? <div className="pane splist__sort">
+            ? <div className="splist__sort">
                 <ReorderList items={inScope} label={(p) => p.location} onReorder={reorder}
                   render={(p) => <>
                     <span className="ic">{Icon.printer(18)}</span>
@@ -202,9 +208,9 @@ export function PrintersPage() {
         </section>
 
         {/* inert while closed: hidden from screen readers and its buttons can't be tabbed to. */}
-        {analytics && <AnalyticsSheet printers={inScope} onClose={() => setAnalytics(false)} />}
+        {analytics && <AnalyticsSheet printers={inScope} initial={analyticsFor} onClose={() => setAnalytics(false)} />}
         <section ref={detailPane} className="pane detail-pane" inert={!open}>
-          {shown && <Detail key={shown.id} p={shown} open={open} busy={busy} spinning={refreshing === shown.id} onRefresh={() => refresh(shown.id)} onClose={() => select(null)} onChange={load} allLocations={locs.data} />}
+          {shown && <Detail key={shown.id} p={shown} open={open} busy={busy} spinning={refreshing === shown.id} onRefresh={() => refresh(shown.id)} onAnalytics={() => { setAnalyticsFor(shown.id); setAnalytics(true) }} onClose={() => select(null)} onChange={load} allLocations={locs.data} />}
         </section>
       </div>
     </>
@@ -387,8 +393,8 @@ function PrinterInfo({ p, onBack, headRef }: { p: Printer; onBack: () => void; h
   )
 }
 
-function Detail({ p, open, busy, spinning, onRefresh, onClose, onChange, allLocations }: {
-  p: Printer; open: boolean; busy: boolean; spinning: boolean; onRefresh: () => void; onClose: () => void; onChange: () => void
+function Detail({ p, open, busy, spinning, onRefresh, onAnalytics, onClose, onChange, allLocations }: {
+  p: Printer; open: boolean; busy: boolean; spinning: boolean; onRefresh: () => void; onAnalytics: () => void; onClose: () => void; onChange: () => void
   allLocations: StoreLocation[]
 }) {
   const [view, setView] = useState<'main' | 'info'>('main') // Detail is keyed by printer id, so this resets per printer
@@ -405,12 +411,20 @@ function Detail({ p, open, busy, spinning, onRefresh, onClose, onChange, allLoca
   )
 
   if (view === 'info') return <>{bar}<PrinterInfo p={p} onBack={() => setView('main')} headRef={setHeading} /></>
-  return <>{bar}<DetailMain p={p} busy={busy} spinning={spinning} onRefresh={onRefresh} onClose={onClose} onChange={onChange}
+  return <>{bar}<DetailMain p={p} busy={busy} spinning={spinning} onRefresh={onRefresh} onAnalytics={onAnalytics} onClose={onClose} onChange={onChange}
     allLocations={allLocations} onInfo={() => setView('info')} headRef={setHeading} /></>
 }
 
-function DetailMain({ p, busy, spinning, onRefresh, onClose, onChange, allLocations, onInfo, headRef }: {
-  p: Printer; busy: boolean; spinning: boolean; onRefresh: () => void; onClose: () => void; onChange: () => void
+/** "Nav pieejams kopš 09:15" (today) / "… kopš 12.10.2026 14:30". When no reading still kept ever answered, the
+ *  start is further back than they go: "… vismaz kopš" the oldest one. */
+function offlineText(snap: Printer['snapshot']): string {
+  const since = snap?.offline_since
+  if (!since) return 'Nav pieejams'
+  return `Nav pieejams ${snap.offline_long ? 'vismaz ' : ''}kopš ${isToday(since) ? fmtClock(since) : fmtTime(since)}`
+}
+
+function DetailMain({ p, busy, spinning, onRefresh, onAnalytics, onClose, onChange, allLocations, onInfo, headRef }: {
+  p: Printer; busy: boolean; spinning: boolean; onRefresh: () => void; onAnalytics: () => void; onClose: () => void; onChange: () => void
   allLocations: StoreLocation[]; onInfo: () => void; headRef: (el: HTMLHeadingElement | null) => void
 }) {
   const st = printerState(p)
@@ -455,6 +469,8 @@ function DetailMain({ p, busy, spinning, onRefresh, onClose, onChange, allLocati
         <button className="icon-btn back-btn" onClick={onClose} aria-label="Atpakaļ uz sarakstu">{Icon.back(20)}</button>
         <h2 ref={headRef}>{p.location}</h2>
         <div className="dacts">
+          {/* This printer's Analītika (only printers on the network have any). */}
+          {p.ip && p.active && <button className="icon-btn" onClick={onAnalytics} aria-haspopup="dialog" aria-label={`Analītika: ${p.location}`} title="Analītika">{Icon.chart(18)}</button>}
           <button className="icon-btn" onClick={onInfo} aria-label="Printera informācija" title="Printera informācija">{Icon.info(18)}</button>
           {p.ip && <button className={spinning ? 'icon-btn spin' : 'icon-btn'} onClick={onRefresh} disabled={busy} aria-busy={spinning} aria-label="Atjaunot printeri" title="Atjaunot šo printeri">{Icon.refresh(18)}</button>}
           <button className="icon-btn close-x" onClick={onClose} aria-label="Aizvērt">{Icon.close(18)}</button>
@@ -470,7 +486,7 @@ function DetailMain({ p, busy, spinning, onRefresh, onClose, onChange, allLocati
             {!p.ip
               ? <span className="stat"><span className="tag ok">Nav tīklā</span></span>
               : st.offline
-              ? <span className="stat"><span className="tag bad">Nav pieejams</span></span>
+              ? <span className="stat"><span className="tag bad">{offlineText(snap)}</span></span>
               : <>
                   {st.blocked.length > 0 && <span className="stat"><span className="tag stop">Nevar drukāt</span></span>}
                   <span className="stat"><b>{fmtHours(snap?.uptime_hours)} h</b><small>darbībā</small></span>

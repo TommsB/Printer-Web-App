@@ -25,6 +25,9 @@ export function NotificationsButton() {
   const [open, setOpen] = useState(false)
   // What counted as unread when the list was opened — so those rows stay highlighted while it is open.
   const [seenAtOpen, setSeenAtOpen] = useState(0)
+  // Days opened by hand. Each time the window opens only today's notifications are shown; older days are folded.
+  const [openDays, setOpenDays] = useState<string[]>([])
+  const today = new Date().toLocaleDateString('sv-SE') // YYYY-MM-DD, local
   const navigate = useNavigate()
 
   // Keep the badge fresh: every minute, and when the app comes back to the foreground.
@@ -37,6 +40,7 @@ export function NotificationsButton() {
 
   const show = async () => {
     setSeenAtOpen(data.seen)
+    setOpenDays([])
     setOpen(true)
     const fresh = await reload().catch(() => data)
     const newest = fresh.items[0]?.id ?? 0
@@ -79,8 +83,17 @@ export function NotificationsButton() {
           {data.items.length === 0 && <p className="dlg-text muted">Vēl nav neviena paziņojuma. Šeit parādīsies tas, par ko lietotne ziņo: printeris nevar drukāt, nomainīts toneris, beidzas toneris bez rezerves.</p>}
           {days.map(({ day, items }) => (
             <div key={day} className="nday">
-              <div className="nday__head">{day ? dayLabel(day) : ''}</div>
-              <ul className="evlist">
+              {day === today
+                ? <div className="nday__head">{dayLabel(day)}</div>
+                : (
+                  <button type="button" className="nday__head nday__fold" aria-expanded={openDays.includes(day)}
+                    onClick={() => setOpenDays((list) => (list.includes(day) ? list.filter((d) => d !== day) : [...list, day]))}>
+                    <span className={openDays.includes(day) ? 'fold-ic open' : 'fold-ic'}>{Icon.chevron(13)}</span>
+                    {day ? dayLabel(day) : 'Bez datuma'}
+                    {!openDays.includes(day) && <span className="nday__n">{items.length}{items.some((n) => n.id > seenAtOpen) && <i aria-label="ir jauni" />}</span>}
+                  </button>
+                )}
+              {(day === today || openDays.includes(day)) && <ul className="evlist">
                 {items.map((n) => {
                   const k = KIND[n.category] ?? KIND.printer
                   return (
@@ -97,7 +110,7 @@ export function NotificationsButton() {
                     </li>
                   )
                 })}
-              </ul>
+              </ul>}
             </div>
           ))}
           <Dialog.Footer>

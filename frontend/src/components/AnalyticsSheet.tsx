@@ -562,8 +562,9 @@ function AllCharts({ items, printers }: { items: AllAnalytics['printers']; print
  * view at once). First asks which printer; then shows its last 7, 30 or 90 days — the headline numbers, pages
  * per day, each toner's level day by day, and how the use splits between the colours.
  */
-export function AnalyticsSheet({ printers, onClose }: { printers: Printer[]; onClose: () => void }) {
-  const [id, setId] = useState<number | 'all' | null>(null)
+export function AnalyticsSheet({ printers, onClose, initial = null }: { printers: Printer[]; onClose: () => void; initial?: number | null }) {
+  // `initial`: opened from a printer's page, straight on that printer (the picker is one tap away in the heading).
+  const [id, setId] = useState<number | 'all' | null>(initial)
   const [days, setDays] = useRemembered('analytics.days', 30)
   const [loaded, setLoaded] = useState<{ id: number; days: number; data: Analytics } | null>(null)
   const [loadedAll, setLoadedAll] = useState<{ days: number; items: AllAnalytics['printers'] } | null>(null)
