@@ -143,7 +143,7 @@ export function ManagePage() {
                 <span className="mrow__ic">{Icon.box(18)}</span>
                 <span className="mrow__body">
                   <span className="mrow__l1"><b>{l.name}</b>{!l.active && <span className="tag-s">Arhivēta</span>}</span>
-                  <span className="mrow__l2">{l.short ? <>Rāda kā „{l.short}”</> : 'Bez saīsinājuma'}</span>
+                  <span className="mrow__l2">{l.short ? <>Rāda kā „{l.short}”</> : 'Bez saīsinājuma'}{l.is_global && ' · globāla noliktava'}</span>
                 </span>
                 <span className="mrow__meta"><b>{l.in_stock}</b><small>gab.</small></span>
                 <span className="mrow__chev">{Icon.chevron(18)}</span>

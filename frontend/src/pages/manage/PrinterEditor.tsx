@@ -19,13 +19,13 @@ const family = (code: string) => (/^[A-Za-z]{2,}/.exec(code.trim())?.[0] ?? '').
 const commonPrefix = (a: string, b: string) => { let i = 0; while (i < a.length && i < b.length && a[i].toUpperCase() === b[i].toUpperCase()) i++; return i }
 const EMPTY: PrinterInput = {
   company: '', location: '', model: '', brand: '', ip: '', color_type: 'Krāsains',
-  snmp_enabled: true, active: true, notes: '', toner_ids: [], norms: {}, default_location_id: null, empties_location_id: null,
+  snmp_enabled: true, active: true, notes: '', toner_ids: [], norms: {}, default_location_id: null, empties_location_id: null, main_location_id: null,
 }
 
 function toForm(p: Printer): PrinterInput {
   return {
     company: p.company, location: p.location, model: p.model, brand: p.brand, ip: p.ip ?? '', color_type: p.color_type,
-    snmp_enabled: p.snmp_enabled, active: p.active, notes: p.notes, default_location_id: p.default_location_id, empties_location_id: p.empties_location_id,
+    snmp_enabled: p.snmp_enabled, active: p.active, notes: p.notes, default_location_id: p.default_location_id, empties_location_id: p.empties_location_id, main_location_id: p.main_location_id,
     toner_ids: p.toners.map((t) => t.id), norms: Object.fromEntries(p.toners.map((t) => [t.id, t.optimal_qty])),
   }
 }
@@ -316,6 +316,12 @@ export function PrinterEditor({ printer, template, onDuplicate, toners: catalogu
 
         <div className="fsec">
           <div className="lab">Krājumi</div>
+          <label>Galvenā toneru glabāšanas vieta (uz kurieni pārvietot)
+            <select value={form.main_location_id ?? ''} onChange={(e) => set('main_location_id', e.target.value ? +e.target.value : null)}>
+              <option value="">– nav –</option>
+              {locations.filter((l) => l.active).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          </label>
           <label>Noklusētā glabāšanas vieta (kur novietot saņemtās kasetnes)
             <select value={form.default_location_id ?? ''} onChange={(e) => set('default_location_id', e.target.value ? +e.target.value : null)}>
               <option value="">– nav –</option>
@@ -328,7 +334,7 @@ export function PrinterEditor({ printer, template, onDuplicate, toners: catalogu
               {locations.filter((l) => l.active).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
           </label>
-          <p className="fnote">Atzīmējot toneri vai drumu kā izlietotu, šī vieta jau būs izvēlēta; tukšos uzskaita Vēsture → Tukšie.</p>
+          <p className="fnote">Mainot tonera lokāciju, galvenā vieta jau būs izvēlēta kā „Uz”. Atzīmējot toneri vai drumu kā izlietotu, vieta tukšajiem jau būs izvēlēta; tukšos uzskaita Vēsture → Tukšie.</p>
         </div>
 
         <div className="fsec">

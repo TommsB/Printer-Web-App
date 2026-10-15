@@ -456,7 +456,7 @@ function DetailMain({ p, busy, spinning, onRefresh, onAnalytics, onClose, onChan
   const resToners = beside(toners, 'toner')
   const resDrums = beside(drums, 'drum')
   const row = (t: Item | null, i: number) => (t
-    ? <TonerRow key={t.id} printerId={p.id} printerName={p.location} toner={t} allLocations={allLocations} emptiesDefault={p.empties_location_id} onChange={onChange} />
+    ? <TonerRow key={t.id} printerId={p.id} printerName={p.location} toner={t} allLocations={allLocations} emptiesDefault={p.empties_location_id} mainLocation={p.main_location_id} onChange={onChange} />
     : <div key={`gap-${i}`} className="t-gap" aria-hidden="true" />)
   const alerts = snap?.reachable && snap.alerts ? snap.alerts.split(' | ').filter((a) => a.trim()) : [] // blank = a printer sent an empty alert
   // Reasons it can't print first (from error flags / critical alerts), then the other important messages.

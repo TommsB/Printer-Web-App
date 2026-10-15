@@ -79,7 +79,7 @@ export function NotificationsButton() {
         {data.unread > 0 && <span className="badge-n">{data.unread > 99 ? '99+' : data.unread}</span>}
       </button>
       {open && (
-        <Dialog.Frame title="Paziņojumi" onClose={() => setOpen(false)} confirmDiscard={false}>
+        <Dialog.Frame sheet title="Paziņojumi" onClose={() => setOpen(false)} confirmDiscard={false}>
           {data.items.length === 0 && <p className="dlg-text muted">Vēl nav neviena paziņojuma. Šeit parādīsies tas, par ko lietotne ziņo: printeris nevar drukāt, nomainīts toneris, beidzas toneris bez rezerves.</p>}
           {days.map(({ day, items }) => (
             <div key={day} className="nday">

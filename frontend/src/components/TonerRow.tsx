@@ -17,6 +17,8 @@ interface Props {
   /** Krājumi by storage place: the place this row is shown under. The row then names the printer instead of the
    *  place, shows how many are kept here (not stock/norm), and its dialogs start from this place. */
   place?: number
+  /** The printer's main storage place: "Lokācija" moves cartridges there by default, from wherever else they are. */
+  mainLocation?: number | null
 }
 
 /** Which action dialog is open; each one is its own component (see TonerDialogs.tsx). */
@@ -31,11 +33,14 @@ const plural = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'lokācija' : 'l
  * One cartridge of one printer, on a single line: colour · code · where it is · qty/norm · ⋮.
  * The ⋮ menu opens the deliberate actions (each confirms in a dialog and is logged).
  */
-export function TonerRow({ printerId, printerName, toner, allLocations, emptiesDefault, onChange, place }: Props) {
+export function TonerRow({ printerId, printerName, toner, allLocations, emptiesDefault, onChange, place, mainLocation }: Props) {
   const [dialog, setDialog] = useState<OpenDialog>(null)
   // Seen from a place: that place first, so "Izlietots" and "Lokācija" start from it.
-  const t = place === undefined ? toner
-    : { ...toner, locations: [...toner.locations].sort((a, b) => (a.location_id === place ? -1 : b.location_id === place ? 1 : 0)) }
+  // Otherwise the places away from the main one come first, so a move starts from where there is something to move.
+  const t = place !== undefined
+    ? { ...toner, locations: [...toner.locations].sort((a, b) => (a.location_id === place ? -1 : b.location_id === place ? 1 : 0)) }
+    : mainLocation ? { ...toner, locations: [...toner.locations].sort((a, b) => (a.location_id === mainLocation ? 1 : 0) - (b.location_id === mainLocation ? 1 : 0)) }
+    : toner
   const places = t.locations
   const here = place === undefined ? null : places.find((l) => l.location_id === place)?.qty ?? 0
   const common = { printerId, printerName, toner: t, onDone: onChange, onClose: () => setDialog(null) }
@@ -80,7 +85,7 @@ export function TonerRow({ printerId, printerName, toner, allLocations, emptiesD
 
       {dialog === 'use' && <UseDialog {...common} locations={allLocations} emptiesDefault={emptiesDefault} />}
       {dialog === 'order' && <OrderDialog {...common} />}
-      {dialog === 'location' && <LocationDialog {...common} locations={allLocations} />}
+      {dialog === 'location' && <LocationDialog {...common} locations={allLocations} mainLocation={mainLocation} />}
       {dialog === 'correct' && <CorrectDialog {...common} locations={allLocations} />}
       {dialog === 'warranty' && <WarrantyDialog {...common} />}
     </div>

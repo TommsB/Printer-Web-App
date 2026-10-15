@@ -15,6 +15,7 @@ export function LocationEditor({ location, onClose, onSaved }: Props) {
   const [name, setName] = useState(location?.name ?? '')
   const [short, setShort] = useState(location?.short ?? '')
   const [active, setActive] = useState(location?.active ?? true)
+  const [global, setGlobal] = useState(location?.is_global ?? false)
   const inStock = location?.in_stock ?? 0
   const locked = !!location && location.active && inStock > 0 // can't archive while cartridges are there
 
@@ -22,13 +23,15 @@ export function LocationEditor({ location, onClose, onSaved }: Props) {
     <ConfirmDialog title={location ? name || 'Glabāšanas vieta' : 'Jauna glabāšanas vieta'} confirmLabel="Saglabāt"
       disabled={!name.trim()} onClose={onClose}
       onConfirm={async () => {
-        if (location) await api.updateLocation(location.id, name.trim(), short.trim(), active)
-        else await api.createLocation(name.trim(), short.trim())
+        if (location) await api.updateLocation(location.id, name.trim(), short.trim(), active, global)
+        else await api.createLocation(name.trim(), short.trim(), global)
         await onSaved()
       }}>
       <label>Nosaukums<input name="name" autoFocus={!location && canAutoFocus()} autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} placeholder="piem. SP Noliktava…" /></label>
       <label>Saīsinājums<input name="short" autoComplete="off" maxLength={20} value={short} onChange={(e) => setShort(e.target.value)} placeholder="piem. SP Nol.…" /></label>
       <p className="fnote">Tonera rindā Krājumos rādīs: <b>{short.trim() || name.trim() || '–'}</b></p>
+      <Toggle label="Globāla noliktava" checked={global} onChange={setGlobal}
+        hint="Pārvietojot jebkura printera toneri, šī vieta jau ir redzama pie „Uz” (pārējās paslēptas zem „Citas”)" />
       {location && (
         <Toggle label="Aktīva" checked={active} onChange={setActive} disabled={locked}
           hint={locked ? `Vietā ir ${inStock} gab. — lai arhivētu, vispirms pārvietojiet tos` : 'Arhivētu vietu nepiedāvā jaunām kasetnēm'} />

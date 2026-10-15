@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { api, UNASSIGNED, type Order, type StockLoc, type StoreLocation } from '../api'
 import { invalidate, useApiData } from '../cache'
 import { prepareFiles } from '../files'
+import { Icon } from '../icons'
 import { missing } from '../lib'
 import { offerUndo } from '../undo'
 import { PendingFiles } from './DefectFiles'
@@ -178,7 +179,7 @@ function WhereList({ places }: { places: StockLoc[] }) {
  * Lokācija: shows where the cartridges are. When moving is possible it's a form with "Pārvietot";
  * otherwise (no stock, or only one location exists) it's information only.
  */
-export function LocationDialog(props: Common & { locations: StoreLocation[] }) {
+export function LocationDialog(props: Common & { locations: StoreLocation[]; mainLocation?: number | null }) {
   const active = props.locations.filter((l) => l.active)
   const title = `Lokācija: ${props.toner.code}`
   if (props.toner.qty > 0 && active.length >= 2) return <MoveForm {...props} title={title} active={active} />
@@ -190,88 +191,170 @@ export function LocationDialog(props: Common & { locations: StoreLocation[] }) {
   )
 }
 
-function MoveForm({ printerId, toner: t, onDone, onClose, title, active }: Common & { title: string; active: StoreLocation[] }) {
-  const places = t.locations
+/** The top of the move and correction windows: what is being done, then the toner — its colour and code. */
+function TonerHeading({ action, toner }: { action: string; toner: TonerRowData }) {
+  return (
+    <span className="theading">
+      <span className="theading__k">{action}</span>
+      <span className="theading__t"><CDot color={toner.color} kind={toner.kind} big />{toner.code}</span>
+    </span>
+  )
+}
+
+/** − count + (move and correction windows): a sign that can't be used (at the lowest or highest allowed) is greyed out. */
+function Count({ value, max, onChange, min = 1, label = 'Skaits' }: { value: number; max: number; onChange: (n: number) => void; min?: number; label?: string }) {
+  return (
+    <span className="count" role="group" aria-label={label}>
+      <button type="button" className="count__b" aria-label="Mazāk" disabled={value <= min} onClick={() => onChange(value - 1)}>{Icon.minus(16)}</button>
+      <b aria-live="polite">{value}</b>
+      <button type="button" className="count__b" aria-label="Vairāk" disabled={value >= max} onClick={() => onChange(value + 1)}>{Icon.plus(16)}</button>
+    </span>
+  )
+}
+
+/** One column of the move window: a list of places, one picked (a real radio group, drawn as round dots). */
+function PlaceList<T>({ name, label, items, picked, onPick, keyOf, text, note }: {
+  name: string; label: string; items: T[]; picked: number; onPick: (id: number) => void
+  keyOf: (t: T) => number; text: (t: T) => string; note: (t: T) => ReactNode
+}) {
+  return (
+    <fieldset className="mlist">
+      <legend className="mlist__lab">{label}</legend>
+      {items.map((it) => (
+        <label key={keyOf(it)} className={keyOf(it) === picked ? 'mlist__row on' : 'mlist__row'}>
+          <input type="radio" name={name} checked={keyOf(it) === picked} onChange={() => onPick(keyOf(it))} />
+          <span className="mlist__name">{text(it)}</span>
+          <span className="mlist__note">{note(it)}</span>
+        </label>
+      ))}
+    </fieldset>
+  )
+}
+
+/**
+ * Lokācija → move: two lists side by side — from where (the places holding this toner, with their counts) and
+ * to where (every other place; the printer's main one first, marked and chosen) — then how many, and what that
+ * leaves in each.
+ */
+function MoveForm({ printerId, printerName, toner: t, onDone, onClose, active, mainLocation }: Common & { title: string; active: StoreLocation[]; mainLocation?: number | null }) {
+  const places = t.locations.filter((p) => p.qty > 0)
   const [fromId, setFromId] = useState(places[0]?.location_id ?? 0)
-  const [toId, setToId] = useState(active.find((l) => l.id !== (places[0]?.location_id ?? 0))?.id ?? 0)
-  const [qtyText, setQtyText] = useState('1')
+  // "Uz": the printer's main storage place (when the cartridges are elsewhere), else the first other place.
+  const startFrom = places[0]?.location_id ?? 0
+  const [toId, setToId] = useState(mainLocation && mainLocation !== startFrom && active.some((l) => l.id === mainLocation)
+    ? mainLocation : active.find((l) => l.id !== startFrom)?.id ?? 0)
+  const [qty, setQty] = useState(1)
 
   const from = places.find((p) => p.location_id === fromId)
   const fromQty = from?.qty ?? 0
-  const toQty = places.find((p) => p.location_id === toId)?.qty ?? 0
+  const n = Math.min(qty, Math.max(1, fromQty)) // never more than the chosen place holds
+  const toQty = t.locations.find((p) => p.location_id === toId)?.qty ?? 0
   const toName = active.find((l) => l.id === toId)?.name ?? ''
-  const valid = fromId > 0 && toId > 0 && fromId !== toId && isInt(qtyText, 1, fromQty)
+  const valid = fromId > 0 && toId > 0 && fromId !== toId && n >= 1 && n <= fromQty
+  const pickFrom = (id: number) => {
+    setFromId(id)
+    if (id === toId) setToId(active.find((l) => l.id !== id)?.id ?? 0) // can't move a place onto itself
+  }
+  const targets = active.filter((l) => l.id !== fromId).sort((a, b) => (b.id === mainLocation ? 1 : 0) - (a.id === mainLocation ? 1 : 0))
+  // Shown at once: the printer's main place and the global stores (and the place chosen when the window opened);
+  // the rest under "Citas", which opens and closes, and scrolls on its own when it is long.
+  const [pinned] = useState(() => new Set(active.filter((l) => l.id === mainLocation || l.is_global || l.id === toId).map((l) => l.id)))
+  const [showRest, setShowRest] = useState(false)
+  const shortList = targets.filter((l) => pinned.has(l.id))
+  const rest = shortList.length ? targets.filter((l) => !pinned.has(l.id)) : []
+  const shown = shortList.length ? shortList : targets
+  const restPicked = rest.find((l) => l.id === toId)
 
   return (
-    <ConfirmDialog title={title} confirmLabel="Pārvietot" disabled={!valid} onClose={onClose}
-      onConfirm={async () => { await api.moveStock(printerId, t.id, fromId, toId, +qtyText); onDone() }}>
-      <WhereList places={places} />
-      <div className="lab" style={{ margin: '6px 0 0' }}>Pārvietot</div>
-      <label>No
-        <select value={fromId} onChange={(e) => setFromId(+e.target.value)}>
-          {places.map((p) => <option key={p.location_id} value={p.location_id}>{p.name} ({p.qty})</option>)}
-        </select>
-      </label>
-      <label>Uz
-        <select value={toId} onChange={(e) => setToId(+e.target.value)}>
-          {active.filter((l) => l.id !== fromId).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-        </select>
-      </label>
-      <div className="field"><span>Skaits</span><Stepper label="Skaits" value={qtyText} onChange={setQtyText} min={1} max={Math.max(1, fromQty)} /></div>
-      {valid && <p className="dlg-text muted">{from?.name} {fromQty} → {fromQty - +qtyText} · {toName} {toQty} → {toQty + +qtyText}</p>}
+    <ConfirmDialog title={`Pārvietot ${t.code}`} heading={<TonerHeading action="Pārvietot" toner={t} />} confirmLabel={valid ? `Pārvietot ${n} gab.` : 'Pārvietot'} disabled={!valid} onClose={onClose}
+      onConfirm={async () => { await api.moveStock(printerId, t.id, fromId, toId, n); onDone() }}>
+      <p className="move__sub">{printerName} · kopā {t.qty} gab.</p>
+      <div className="move__cols">
+        <PlaceList name="move-from" label="No" items={places} picked={fromId} onPick={pickFrom}
+          keyOf={(p) => p.location_id} text={(p) => p.name} note={(p) => `${p.qty} gab.`} />
+        {/* "Uz": the short list; "Citas" adds the rest to it (the window grows), and closes them again. */}
+        <fieldset className="mlist">
+          <legend className="mlist__lab">Uz</legend>
+          {(showRest ? [...shown, ...rest] : shown).map((l) => (
+              <label key={l.id} className={l.id === toId ? 'mlist__row on' : 'mlist__row'}>
+                <input type="radio" name="move-to" checked={l.id === toId} onChange={() => setToId(l.id)} />
+                <span className="mlist__name">{l.name}</span>
+                <span className="mlist__note">{l.id === mainLocation ? 'galvenā' : l.is_global ? 'globāla' : ''}</span>
+              </label>
+          ))}
+          {rest.length > 0 && (
+            <button type="button" className="mlist__more" aria-expanded={showRest} onClick={() => setShowRest((v) => !v)}>
+              <span className={showRest ? 'fold-ic open' : 'fold-ic'}>{Icon.chevron(14)}</span>
+              {showRest ? 'Paslēpt citas' : <>Citas ({rest.length}){restPicked && <span className="mlist__picked"> · {restPicked.name}</span>}</>}
+            </button>
+          )}
+        </fieldset>
+      </div>
+      <div className="move__row">
+        <span className="move__lab">Skaits</span>
+        <Count value={n} max={fromQty} onChange={setQty} />
+      </div>
+      {valid && <p className="move__res">{from?.name} <b>{fromQty} → {fromQty - n}</b> · {toName} <b>{toQty} → {toQty + n}</b></p>}
     </ConfirmDialog>
   )
 }
 
-/** Labot daudzumu: type the actual count per location (stock-take); needs a reason. */
+/**
+ * Labot daudzumu (a stock-take): how many there really are in each place — the places this toner is in, one row
+ * each with − count +, a place can be added — then why, an optional note, and the new total.
+ */
 export function CorrectDialog({ printerId, printerName, toner: t, onDone, onClose, locations }: Common & { locations: StoreLocation[] }) {
   const active = locations.filter((l) => l.active)
-  const [counts, setCounts] = useState(() =>
-    t.locations.map((p) => ({ location_id: p.location_id, name: p.name, current: p.qty, value: String(p.qty) })))
+  const [counts, setCounts] = useState(() => t.locations.map((p) => ({ location_id: p.location_id, name: p.name, current: p.qty, value: p.qty })))
   const [reason, setReason] = useState(REASONS[0])
   const [note, setNote] = useState('')
-  const [addLoc, setAddLoc] = useState(0)
 
-  const newTotal = counts.reduce((n, c) => n + (isInt(c.value, 0, 1000) ? +c.value : c.current), 0)
-  const valid = counts.every((c) => isInt(c.value, 0, 1000))
-  const changed = counts.some((c) => isInt(c.value, 0, 1000) && +c.value !== c.current)
+  const newTotal = counts.reduce((n, c) => n + c.value, 0)
+  const changed = counts.some((c) => c.value !== c.current)
   const addable = active.filter((l) => !counts.some((c) => c.location_id === l.id))
+  const add = (id: number) => {
+    const l = active.find((x) => x.id === id)
+    // Starts at 1: a place is added because something is there (0 would have to be changed every time).
+    if (l) setCounts([...counts, { location_id: l.id, name: l.name, current: 0, value: 1 }])
+  }
 
   return (
-    <ConfirmDialog title={`Labot daudzumu: ${t.code}`} confirmLabel="Saglabāt" disabled={!valid || !changed} onClose={onClose}
+    <ConfirmDialog title={`Labot daudzumu ${t.code}`} heading={<TonerHeading action="Labot daudzumu" toner={t} />} confirmLabel="Saglabāt" disabled={!changed} onClose={onClose}
       onConfirm={async () => {
-        await api.correctStock(printerId, t.id, Object.fromEntries(counts.map((c) => [c.location_id, +c.value])), reason, note)
+        await api.correctStock(printerId, t.id, Object.fromEntries(counts.map((c) => [c.location_id, c.value])), reason, note)
         onDone()
       }}>
-      <p className="dlg-text muted">Ierakstiet, cik tur ir patiesībā. {printerName}.</p>
-      <div className="counts">
+      <p className="move__sub">{printerName} · kopā {t.qty} gab. Ierakstiet, cik katrā vietā ir patiesībā.</p>
+      <div className="mlist">
+        <div className="mlist__lab mlist__head"><span>Vieta</span><span>Skaits</span></div>
         {counts.map((c, i) => (
-          <div key={c.location_id} className="counts__row">
-            <span>{c.name}</span>
-            <Stepper label={c.name} value={c.value} min={0} max={1000}
-              onChange={(v) => setCounts(counts.map((x, j) => (j === i ? { ...x, value: v } : x)))} />
+          <div key={c.location_id} className={c.value !== c.current ? 'mlist__row on' : 'mlist__row'}>
+            <span className="mlist__name">{c.name}</span>
+            {c.value !== c.current && <span className="mlist__note">bija {c.current}</span>}
+            <Count label={c.name} value={c.value} min={0} max={1000} onChange={(v) => setCounts(counts.map((x, j) => (j === i ? { ...x, value: v } : x)))} />
           </div>
         ))}
         {addable.length > 0 && (
-          <div className="counts__add">
-            <select value={addLoc} onChange={(e) => setAddLoc(+e.target.value)} aria-label="Pievienot vietu">
+          <div className="mlist__row mlist__addrow">
+            {/* choosing a place adds it at once */}
+            <select className="mlist__add" value={0} onChange={(e) => add(+e.target.value)} aria-label="Pievienot vietu">
               <option value={0}>+ Pievienot vietu…</option>
               {addable.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
-            <button type="button" className="btn small" disabled={!addLoc} onClick={() => {
-              const l = active.find((x) => x.id === addLoc)
-              // Starts at 1: a place is added because something is there (0 would have to be changed every time).
-              if (l) setCounts([...counts, { location_id: l.id, name: l.name, current: 0, value: '1' }])
-              setAddLoc(0)
-            }}>Pievienot</button>
           </div>
         )}
       </div>
-      <label>Iemesls
-        <select value={reason} onChange={(e) => setReason(e.target.value)}>{REASONS.map((r) => <option key={r}>{r}</option>)}</select>
-      </label>
+      <fieldset className="mlist">
+        <legend className="mlist__lab">Iemesls</legend>
+        {REASONS.map((r) => (
+          <label key={r} className={r === reason ? 'mlist__row on' : 'mlist__row'}>
+            <input type="radio" name="correct-reason" checked={r === reason} onChange={() => setReason(r)} />
+            <span className="mlist__name">{r}</span>
+          </label>
+        ))}
+      </fieldset>
       <label>Piezīme (nav obligāta)<input value={note} onChange={(e) => setNote(e.target.value)} /></label>
-      <p className="dlg-text">Kopā: {t.qty} → <b>{newTotal}</b>{newTotal !== t.qty && <span className="muted"> ({newTotal > t.qty ? '+' : ''}{newTotal - t.qty})</span>}</p>
+      <p className="move__res">Kopā <b>{t.qty} → {newTotal}</b>{newTotal !== t.qty && <> ({newTotal > t.qty ? '+' : ''}{newTotal - t.qty})</>}</p>
     </ConfirmDialog>
   )
 }

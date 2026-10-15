@@ -1728,3 +1728,76 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
 .nday__n i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-line); }
 .nday:has(> .nday__fold[aria-expanded="false"]) { margin-bottom: -18px; } /* folded days sit close together (offsets the window's 12 px gap and the 10 px between days) */
 .nday__fold { min-height: 30px; padding: 2px; }
+
+/* ----- A window as a sheet from the bottom (Profils, Paziņojumi): like Analītika — slides up, takes most of the
+   screen, rounded top corners, its heading with a close button stays at the top and its buttons at the bottom. */
+.modal--sheet { align-items: flex-end; padding: 0; }
+.modal--sheet .modal__box { max-width: min(760px, 100%); height: 85vh; height: 85dvh; max-height: none; padding: 0 28px 24px;
+  border-radius: 28px 28px 0 0; clip-path: inset(0 round 28px 28px 0 0); animation: sheet-up .38s var(--ease) both; box-shadow: 0 -12px 40px rgba(30, 30, 28, .22); }
+.modal--sheet .modal__actions { margin: auto -28px -24px; padding: 12px 28px calc(24px + env(safe-area-inset-bottom, 0px)); bottom: -24px; }
+.msheet__head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 0 -28px; padding: 22px 28px 8px; background: var(--card); }
+.msheet__head h3 { font-size: 30px; }
+.msheet__close.icon-btn { width: 46px; height: 46px; background: var(--ink); color: var(--on-ink); }
+:root[data-surface="glass"] .msheet__head { background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 94%, transparent) 70%, transparent); } /* what scrolls under the heading fades out */
+@media (max-width: 800px) {
+  .modal--sheet .modal__box { height: 90vh; height: 90dvh; padding: 0 16px 18px; }
+  .modal--sheet .modal__actions { margin: auto -16px -18px; padding: 12px 16px calc(18px + env(safe-area-inset-bottom, 0px)); bottom: -18px; }
+  .msheet__head { margin: 0 -16px; padding: 16px 16px 6px; }
+  .msheet__head h3 { font-size: 24px; }
+  .msheet__close.icon-btn { width: 44px; height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .modal--sheet .modal__box { animation: none; } }
+/* Stikls: a sheet's pinned heading and button row add no colour of their own (a lighter strip looked like a white
+   band over the glass); they only blur what scrolls under them, so they read as part of the same pane. */
+/* A sheet is three parts (Dialog.tsx): heading, the middle that scrolls, the button row. The heading and buttons
+   sit on the sheet itself — no strip of their own, nothing scrolls under them. */
+.modal--sheet .modal__box { overflow: hidden; gap: 0; }
+.modal--sheet .msheet__head, :root[data-surface="glass"] .modal--sheet .msheet__head { position: static; flex: none; margin: 0; padding: 22px 0 12px; background: none; }
+.msheet__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 12px; margin: 0 -28px; padding: 2px 28px 12px; touch-action: pan-y; }
+.msheet__foot { flex: none; }
+.msheet__foot:empty { display: none; }
+.modal--sheet .modal__actions, :root[data-surface="glass"] .modal--sheet .modal__actions { position: static; margin: 0; padding: 14px 0 env(safe-area-inset-bottom, 0px); background: none; border-top: 1px solid var(--line2); }
+@media (max-width: 800px) {
+  .modal--sheet .msheet__head, :root[data-surface="glass"] .modal--sheet .msheet__head { padding: 16px 0 10px; }
+  .msheet__body { margin: 0 -16px; padding: 2px 16px 12px; }
+}
+
+/* ----- Moving a toner (Lokācija): "No" and "Uz" side by side, each a plain list with a round dot per place;
+   then the count, then what it leaves where (in a soft box). ----- */
+.move__sub { margin: -6px 0 2px; font-size: 13.5px; color: var(--muted); }
+.move__cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 420px) { .move__cols { grid-template-columns: minmax(0, 1fr); } } /* a narrow phone: one under the other */
+.mlist { margin: 0; padding: 0; border: 0; min-width: 0; display: flex; flex-direction: column; }
+.mlist__lab { padding: 0 0 6px; font-size: 10.5px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.modal__box .mlist__row { display: flex; flex-direction: row; align-items: center; gap: 10px; min-height: 42px; border-top: 1px solid var(--line2); font-size: 14px; color: var(--ink); cursor: pointer; }
+.mlist__row input { appearance: none; -webkit-appearance: none; flex: none; width: 16px; height: 16px; min-height: 0; margin: 0; padding: 0; border: 1.5px solid var(--line3); border-radius: 50%; background: none; cursor: pointer; }
+.mlist__row input:checked { border-color: var(--ink); box-shadow: inset 0 0 0 3.5px var(--card), inset 0 0 0 8px var(--ink); }
+.mlist__row input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.mlist__row.on .mlist__name { font-weight: 500; }
+.mlist__name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.mlist__note { flex: none; font-size: 12.5px; color: var(--muted); }
+.move__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.move__lab { font-size: 12.5px; color: var(--muted); }
+.count { display: inline-flex; align-items: center; height: 40px; padding: 0 2px; border-radius: 20px; background: var(--tile); }
+.count__b { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 50%; background: none; color: var(--ink); cursor: pointer; }
+.count__b:disabled { color: var(--line3); cursor: default; }
+@media (hover: hover) { .count__b:hover:not(:disabled) { background: var(--sel); } }
+.count b { min-width: 26px; text-align: center; font-size: 15px; font-variant-numeric: tabular-nums; }
+.move__res { margin: 0; padding: 10px 14px; border-radius: 14px; background: var(--tile); font-size: 14px; color: var(--muted); }
+.move__res b { color: var(--ink); font-weight: 600; }
+/* Labot daudzumu: the same lists — a heading row with the column names, each place with its count. */
+.mlist__head { display: flex; justify-content: space-between; }
+.modal__box .mlist__row .count { margin-left: auto; height: 36px; }
+.modal__box .mlist__row .count .count__b { width: 32px; height: 32px; }
+.mlist__row:has(.count) { min-height: 50px; }
+.mlist__addrow { padding: 6px 0; }
+.modal__box select.mlist__add { width: auto; min-height: 36px; padding: 0 12px; border: 0; border-radius: 18px; background: var(--tile); color: var(--muted); font-size: 13.5px; cursor: pointer; }
+/* The move / correction window's top: a small label for the action, then the toner's colour dot and code. */
+.theading { display: flex; flex-direction: column; gap: 2px; }
+.theading__k { font-size: 11.5px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.theading__t { display: inline-flex; align-items: center; gap: 10px; }
+/* "Citas (n)": the rest of the places, folded until asked for. */
+.mlist__more { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; min-height: 40px; padding: 0; border: 0; border-top: 1px solid var(--line2); width: 100%; background: none; color: var(--muted); font: inherit; font-size: 13.5px; cursor: pointer; }
+.mlist__more:hover { color: var(--ink); }
+.mlist__picked { color: var(--ink); font-weight: 500; }

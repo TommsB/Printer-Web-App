@@ -1,5 +1,6 @@
 import { createContext, use, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { Icon } from '../icons'
 
 /**
  * Dialogs are composed from small parts instead of one component with mode flags:
@@ -16,7 +17,7 @@ import { createPortal } from 'react-dom'
  * The common shapes are ready-made below: ConfirmDialog, DestructiveDialog, InfoDialog.
  */
 
-interface FrameState { onClose: () => void; busy: boolean; error: string }
+interface FrameState { onClose: () => void; busy: boolean; error: string; footer: HTMLElement | null }
 const FrameContext = createContext<FrameState | null>(null)
 
 function useFrame(): FrameState {
@@ -35,8 +36,12 @@ function snapshot(f: HTMLFormElement): string {
 }
 
 /** The sheet itself. Submitting runs onSubmit (shows busy/errors) and closes on success. */
-function Frame({ title, onClose, onSubmit, className, confirmDiscard = true, children }: {
+function Frame({ title, heading, onClose, onSubmit, className, confirmDiscard = true, sheet = false, children }: {
   title: string
+  heading?: ReactNode // shown instead of the title text (the title still names the window for screen readers)
+  /** Comes up from the bottom and takes most of the screen, like Analītika (Profils, Paziņojumi), with a close
+   *  button in its heading; otherwise a window in the middle of the screen. */
+  sheet?: boolean
   onClose: () => void
   onSubmit?: () => Promise<unknown> | void
   className?: string // e.g. 'wide' for long editor forms
@@ -46,6 +51,8 @@ function Frame({ title, onClose, onSubmit, className, confirmDiscard = true, chi
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [askDiscard, setAskDiscard] = useState(false)
+  // A sheet's button row lives outside its scrolling middle (see Footer): this is where it goes.
+  const [footer, setFooter] = useState<HTMLDivElement | null>(null)
   const form = useRef<HTMLFormElement>(null)
   const initial = useRef('')
   // Whatever had focus when the dialog opened (read on first render: an autoFocus field takes it before effects run).
@@ -83,13 +90,19 @@ function Frame({ title, onClose, onSubmit, className, confirmDiscard = true, chi
   }
 
   return createPortal(
-    <FrameContext value={{ onClose, busy, error }}>
-      <div className="modal" onClick={requestClose} role="presentation">
+    <FrameContext value={{ onClose, busy, error, footer: sheet ? footer : null }}>
+      <div className={sheet ? 'modal modal--sheet' : 'modal'} onClick={requestClose} role="presentation">
         <form ref={form} className={`modal__box pane dialog${className ? ` ${className}` : ''}`} onClick={(e) => e.stopPropagation()}
           onSubmit={submit} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); requestClose() } }}
           role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
-          <h3>{title}</h3>
-          {children}
+          {sheet
+            ? <>
+                {/* Heading, scrolling middle, button row: only the middle scrolls, so nothing passes under the other two. */}
+                <div className="msheet__head"><h3>{heading ?? title}</h3><button type="button" className="icon-btn msheet__close" onClick={requestClose} aria-label="Aizvērt">{Icon.close(18)}</button></div>
+                <div className="msheet__body">{children}</div>
+                <div className="msheet__foot" ref={setFooter} />
+              </>
+            : <><h3>{heading ?? title}</h3>{children}</>}
         </form>
       </div>
       {/* Sibling of the backdrop, not inside it: its clicks and keys must not reach this dialog. */}
@@ -105,13 +118,14 @@ function Frame({ title, onClose, onSubmit, className, confirmDiscard = true, chi
 
 /** Error line + the action row (stays visible at the bottom of long dialogs). */
 function Footer({ children }: { children: ReactNode }) {
-  const { error } = useFrame()
-  return (
+  const { error, footer } = useFrame()
+  const row = (
     <>
       {error && <div className="error" role="alert">{error}</div>}
       <div className="modal__actions">{children}</div>
     </>
   )
+  return footer ? createPortal(row, footer) : row // in a sheet: below its scrolling middle
 }
 
 /** Left side of the footer, e.g. a "Dzēst" button in an editor. */
@@ -141,6 +155,7 @@ export const Dialog = { Frame, Footer, Start, Cancel, Confirm, Destructive }
 
 interface ActionDialogProps {
   title: string
+  heading?: ReactNode
   confirmLabel: string
   onConfirm: () => Promise<unknown> | void
   onClose: () => void
@@ -149,9 +164,9 @@ interface ActionDialogProps {
 }
 
 /** Question with Atcelt + a normal confirm button. */
-export function ConfirmDialog({ title, confirmLabel, onConfirm, onClose, disabled, children }: ActionDialogProps) {
+export function ConfirmDialog({ title, heading, confirmLabel, onConfirm, onClose, disabled, children }: ActionDialogProps) {
   return (
-    <Dialog.Frame title={title} onClose={onClose} onSubmit={onConfirm}>
+    <Dialog.Frame title={title} heading={heading} onClose={onClose} onSubmit={onConfirm}>
       {children}
       <Dialog.Footer>
         <Dialog.Cancel />

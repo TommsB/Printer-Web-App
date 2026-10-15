@@ -486,7 +486,7 @@ export function StockPage() {
                     {isOpen && <div className="place-cols" aria-hidden="true"><span>Toneris</span><span>Printeris</span><span>Skaits</span></div>}
                     {/* The same toner kept for several printers sits together: by code, then in the printers' usual order. */}
                     {isOpen && [...g.rows].sort((x, y) => x.code.localeCompare(y.code, 'en', { numeric: true }) || (rank.get(x.printer_id) ?? 1e9) - (rank.get(y.printer_id) ?? 1e9)).map((r) => (
-                      <TonerRow key={`${r.printer_id}-${r.toner_id}`} place={lid} printerId={r.printer_id} printerName={r.location} allLocations={locations.data} emptiesDefault={r.empties_location_id}
+                      <TonerRow key={`${r.printer_id}-${r.toner_id}`} place={lid} mainLocation={r.main_location_id} printerId={r.printer_id} printerName={r.location} allLocations={locations.data} emptiesDefault={r.empties_location_id}
                         toner={{ id: r.toner_id, code: r.code, color: r.color, kind: r.kind, qty: r.qty, optimal_qty: r.optimal_qty, ordered: r.ordered, ordered_extra: r.ordered_extra, locations: r.locations }}
                         onChange={load} />
                     ))}
@@ -517,7 +517,7 @@ export function StockPage() {
                 {/* Column names over the rows, as in the storage view. */}
                 {isOpen && <div className="place-cols" aria-hidden="true"><span>Toneris</span><span>Lokācija</span><span>Skaits / norma</span></div>}
                 {isOpen && list.map((r) => (
-                  <TonerRow key={r.toner_id} printerId={r.printer_id} printerName={r.location} allLocations={locations.data} emptiesDefault={r.empties_location_id}
+                  <TonerRow key={r.toner_id} mainLocation={r.main_location_id} printerId={r.printer_id} printerName={r.location} allLocations={locations.data} emptiesDefault={r.empties_location_id}
                     toner={{ id: r.toner_id, code: r.code, color: r.color, kind: r.kind, qty: r.qty, optimal_qty: r.optimal_qty, ordered: r.ordered, ordered_extra: r.ordered_extra, locations: r.locations }}
                     onChange={load} />
                 ))}

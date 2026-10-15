@@ -384,6 +384,11 @@ def init_db() -> None:
         if "empties_location_id" not in _columns(conn, "printers"):  # where this printer's empty cartridges go by default
             conn.execute("ALTER TABLE printers ADD COLUMN empties_location_id INTEGER"
                          " REFERENCES locations(id) ON DELETE SET NULL")
+        if "main_location_id" not in _columns(conn, "printers"):  # where this printer's toners are kept (moves go there)
+            conn.execute("ALTER TABLE printers ADD COLUMN main_location_id INTEGER"
+                         " REFERENCES locations(id) ON DELETE SET NULL")
+        if "is_global" not in _columns(conn, "locations"):  # a shared store every printer moves cartridges to (SP, LI)
+            conn.execute("ALTER TABLE locations ADD COLUMN is_global INTEGER NOT NULL DEFAULT 0")
         if "short" not in _columns(conn, "locations"):  # short display name for tight spaces (toner rows)
             conn.execute("ALTER TABLE locations ADD COLUMN short TEXT NOT NULL DEFAULT ''")
         scols = _columns(conn, "snmp_snapshots")

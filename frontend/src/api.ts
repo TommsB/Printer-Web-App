@@ -29,7 +29,10 @@ export interface Snapshot {
 /** How many of a printer's cartridges sit in one storage location. */
 export interface StockLoc { location_id: number; name: string; short: string; qty: number }
 /** short = "Saīsinājums": optional short display name used where space is tight. */
-export interface StoreLocation { id: number; name: string; short: string; active: boolean; sort: number; in_stock: number }
+export interface StoreLocation {
+  id: number; name: string; short: string; active: boolean; sort: number; in_stock: number
+  is_global: boolean // "Globāla noliktava": offered first as a place to move to, for every printer
+}
 export const UNASSIGNED = 'Nav norādīts'
 export interface PrinterToner {
   id: number; code: string; color: string; kind: string; qty: number; optimal_qty: number; low: boolean; ordered: number
@@ -41,6 +44,7 @@ export interface Printer {
   ip: string | null // null = not on the network: reserve only, never polled
   color_type: string; snmp_enabled: boolean; active: boolean; notes: string; default_location_id: number | null
   empties_location_id: number | null // where this printer's empty cartridges go by default (Tukšie)
+  main_location_id: number | null // where its toners are kept: a move goes there by default
   snapshot: Snapshot | null; toners: PrinterToner[]
 }
 /** One month of a printer's use (newest first from the API). */
@@ -62,6 +66,7 @@ export interface PrinterInput {
   color_type: string; snmp_enabled: boolean; active: boolean; notes: string; toner_ids: number[]
   default_location_id: number | null
   empties_location_id: number | null
+  main_location_id: number | null
   norms: Record<number, number> // toner_id -> norm (optimal stock)
 }
 export interface Toner { id: number; code: string; color: string; kind: string }
@@ -73,6 +78,7 @@ export interface StockRow {
   active: boolean // false = the printer is switched off in Pārvaldība (its reserve is still kept)
   empties_location_id: number | null // the printer's default place for empty cartridges
   default_location_id: number | null
+  main_location_id: number | null // the printer's main storage place (default target of a move)
   locations: StockLoc[]
 }
 export interface Order {
@@ -222,9 +228,9 @@ export const api = {
   confirmEvent: (id: number, locationId?: number, emptyLocationId: number | null = null) =>
     req<TonerEvent>('POST', `/api/events/${id}/confirm`, { location_id: locationId ?? null, empty_location_id: emptyLocationId }),
   dismissEvent: (id: number) => req<TonerEvent>('POST', `/api/events/${id}/dismiss`),
-  createLocation: (name: string, short: string) => req<StoreLocation>('POST', '/api/locations', { name, short }),
-  updateLocation: (id: number, name: string, short: string, active: boolean) =>
-    req<StoreLocation>('PUT', `/api/locations/${id}`, { name, short, active }),
+  createLocation: (name: string, short: string, is_global: boolean) => req<StoreLocation>('POST', '/api/locations', { name, short, is_global }),
+  updateLocation: (id: number, name: string, short: string, active: boolean, is_global: boolean) =>
+    req<StoreLocation>('PUT', `/api/locations/${id}`, { name, short, active, is_global }),
   orders: (status: Order['status'] | 'all' = 'ordered') => req<Order[]>('GET', `/api/orders?status=${status}`),
   /** Places an order. `extra` = it is the basket's "papildus" part for those toners: that part is used up and
    *  the order doesn't count towards the norm. Without it: the part missing to the norm. */

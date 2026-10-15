@@ -58,7 +58,7 @@ export function TopBar({ title, children, sticky }: { title: [string, string]; c
       <span id="content" className="sr" tabIndex={-1} />
       <CompactBar target={heading} title={`${title[0]} ${title[1]}`}>{sticky}</CompactBar>
       {profile && (
-        <Dialog.Frame title="Profils" onClose={() => setProfile(false)} confirmDiscard={false}>
+        <Dialog.Frame sheet title="Profils" onClose={() => setProfile(false)} confirmDiscard={false}>
           <div className="profile">
             <span className="profile__ic">{Icon.user(24)}</span>
             <span className="profile__txt"><b>{user}</b><span>{ROLE_LV[role]}</span></span>

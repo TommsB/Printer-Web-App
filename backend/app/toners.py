@@ -67,6 +67,7 @@ class LocationIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     short: str = Field(default="", max_length=20)  # "Saīsinājums": short display name for toner rows
     active: bool = True
+    is_global: bool = False  # "Globāla noliktava": offered first as a place to move to, for every printer
 
 
 # ---- toner catalogue ---------------------------------------------------------------------
@@ -114,6 +115,7 @@ def delete_toner(toner_id: int, conn: sqlite3.Connection = Depends(db_dep)) -> d
 def _location_dict(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
     d = dict(row)
     d["active"] = bool(d["active"])
+    d["is_global"] = bool(d["is_global"])
     d["in_stock"] = conn.execute("SELECT COALESCE(SUM(qty), 0) FROM stock_locations WHERE location_id = ?",
                                  (row["id"],)).fetchone()[0]
     return d
@@ -128,8 +130,8 @@ def list_locations(conn: sqlite3.Connection = Depends(db_dep)) -> list[dict]:
 @router.post("/locations", status_code=201)
 def create_location(body: LocationIn, conn: sqlite3.Connection = Depends(db_dep)) -> dict:
     try:
-        cur = conn.execute("INSERT INTO locations (name, short, sort) VALUES (?, ?, (SELECT COALESCE(MAX(sort), 0) + 1"
-                           " FROM locations WHERE name <> 'Nav norādīts'))", (body.name.strip(), body.short.strip()))
+        cur = conn.execute("INSERT INTO locations (name, short, is_global, sort) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1"
+                           " FROM locations WHERE name <> 'Nav norādīts'))", (body.name.strip(), body.short.strip(), int(body.is_global)))
     except sqlite3.IntegrityError:
         raise HTTPException(409, "Šāda vieta jau eksistē")
     return _location_dict(conn, conn.execute("SELECT * FROM locations WHERE id = ?", (cur.lastrowid,)).fetchone())
@@ -147,20 +149,21 @@ def update_location(location_id: int, body: LocationIn, conn: sqlite3.Connection
         if empty:
             raise HTTPException(409, f"Vietā vēl ir {empty} tukšie — vispirms atdodiet vai pārvietojiet tos (Vēsture → Tukšie)")
     try:
-        conn.execute("UPDATE locations SET name = ?, short = ?, active = ? WHERE id = ?",
-                     (body.name.strip(), body.short.strip(), int(body.active), location_id))
+        conn.execute("UPDATE locations SET name = ?, short = ?, active = ?, is_global = ? WHERE id = ?",
+                     (body.name.strip(), body.short.strip(), int(body.active), int(body.is_global), location_id))
     except sqlite3.IntegrityError:
         raise HTTPException(409, "Šāda vieta jau eksistē")
     if not body.active:
         conn.execute("UPDATE printers SET default_location_id = NULL WHERE default_location_id = ?", (location_id,))
         conn.execute("UPDATE printers SET empties_location_id = NULL WHERE empties_location_id = ?", (location_id,))
+        conn.execute("UPDATE printers SET main_location_id = NULL WHERE main_location_id = ?", (location_id,))
     return _location_dict(conn, conn.execute("SELECT * FROM locations WHERE id = ?", (location_id,)).fetchone())
 
 
 # ---- stock -------------------------------------------------------------------------------
 
 _STOCK_SQL = """
-SELECT pt.printer_id, p.company, p.location, p.model, p.ip, p.default_location_id, p.empties_location_id, p.active,
+SELECT pt.printer_id, p.company, p.location, p.model, p.ip, p.default_location_id, p.empties_location_id, p.main_location_id, p.active,
        pt.toner_id, t.code, t.color, t.kind, pt.qty, pt.optimal_qty,
        pt.qty < pt.optimal_qty AS low,
        (SELECT COALESCE(SUM(o.qty), 0) FROM orders o WHERE o.status = 'ordered'

@@ -25,6 +25,7 @@ class PrinterIn(BaseModel):
     notes: str = ""
     default_location_id: int | None = None  # where received cartridges go by default
     empties_location_id: int | None = None  # where this printer's empty cartridges go by default (Tukšie)
+    main_location_id: int | None = None  # where its toners are kept: the place a move goes to by default
     toner_ids: list[int] = []
     norms: dict[int, int] = {}  # toner_id -> optimal stock ("norma"); only set via the Pārvaldība form
 
@@ -290,9 +291,10 @@ def create_printer(body: PrinterIn, conn: sqlite3.Connection = Depends(db_dep)) 
     try:
         cur = conn.execute(
             "INSERT INTO printers (company, location, model, brand, ip, color_type, snmp_enabled, active, notes,"
-            " default_location_id, empties_location_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            " default_location_id, empties_location_id, main_location_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (body.company, body.location, body.model, body.brand, ip, body.color_type,
-             int(body.snmp_enabled), int(body.active), body.notes, body.default_location_id, body.empties_location_id))
+             int(body.snmp_enabled), int(body.active), body.notes, body.default_location_id, body.empties_location_id,
+             body.main_location_id))
     except sqlite3.IntegrityError:
         raise HTTPException(409, "Printeris ar šādu IP jau eksistē")
     _set_toners(conn, cur.lastrowid, body.toner_ids, body.norms)
@@ -305,9 +307,10 @@ def update_printer(printer_id: int, body: PrinterIn, conn: sqlite3.Connection = 
     try:
         cur = conn.execute(
             "UPDATE printers SET company=?, location=?, model=?, brand=?, ip=?, color_type=?,"
-            " snmp_enabled=?, active=?, notes=?, default_location_id=?, empties_location_id=? WHERE id=?",
+            " snmp_enabled=?, active=?, notes=?, default_location_id=?, empties_location_id=?, main_location_id=? WHERE id=?",
             (body.company, body.location, body.model, body.brand, ip, body.color_type,
-             int(body.snmp_enabled), int(body.active), body.notes, body.default_location_id, body.empties_location_id, printer_id))
+             int(body.snmp_enabled), int(body.active), body.notes, body.default_location_id, body.empties_location_id,
+             body.main_location_id, printer_id))
     except sqlite3.IntegrityError:
         raise HTTPException(409, "Printeris ar šādu IP jau eksistē")
     if cur.rowcount == 0:
