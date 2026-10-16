@@ -1076,7 +1076,7 @@ body:has(.cbar--detail.on) .cbar:not(.cbar--detail) { opacity: 0; pointer-events
   .srail__head .icon-btn { flex: none; background: var(--card); }
   .srail .pane { display: none; }
   .srail[data-tab="basket"] .t-basket, .srail[data-tab="orders"] .t-orders, .srail[data-tab="defects"] .t-defects { display: block; }
-  .srail__shade { display: block; position: fixed; inset: 0; z-index: 34; background: rgba(30, 30, 28, .45); animation: page-in .2s ease-out; }
+  .srail__shade { display: block; position: fixed; inset: 0; z-index: 34; background: rgba(30, 30, 28, .45); animation: page-in .32s ease-out both; }
   .grid { grid-template-columns: 1fr; }
   .num { font-size: 64px; }
 
@@ -1181,7 +1181,7 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
 
 /* ---------- Analītika (components/AnalyticsSheet.tsx): a sheet from the bottom, most of the screen ---------- */
 .ref-btn--tools { display: none; }
-.asheet__shade { position: fixed; inset: 0; z-index: 36; background: rgba(30, 30, 28, .45); animation: page-in .2s ease-out; }
+.asheet__shade { position: fixed; inset: 0; z-index: 36; background: rgba(30, 30, 28, .45); animation: page-in .32s ease-out both; }
 .asheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 37; width: min(1240px, 100%); height: 90vh; height: 90dvh; margin: 0 auto; padding: 0 28px 26px; overflow-y: auto; overscroll-behavior: contain;
   border-radius: 28px 28px 0 0; background: var(--bg); box-shadow: 0 -12px 40px rgba(30, 30, 28, .22); animation: sheet-up .38s var(--ease) both;
   display: flex; flex-direction: column; }
@@ -1582,48 +1582,48 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
    height is left over; the rest is drawn tighter than on one printer's page — the pie beside its table instead
    of above it, shorter rows, lower tiles. (A window too low for even that scrolls, as before.) */
 @media (min-width: 801px) {
-  .an--all { flex: 1 1 0; min-height: 0; gap: 12px; }
-  .an--all .an-tile { min-height: 100px; padding: 12px 20px 11px; }
-  .an--all .an-cols { flex: 1 1 0; min-height: 0; gap: 12px; }
-  .an--all .an-main, .an--all .an-side { min-height: 0; gap: 12px; }
-  .an--all .an-card { padding: 15px 22px 13px; border-radius: 26px; }
-  .an--all .an-main > .an-card:first-child { flex: 1 1 0; min-height: 150px; }
-  .an--all .an-main > .an-card:first-child .an-block { flex: 1 1 0; min-height: 0; }
-  .an--all .an-bars { flex: 1 1 0; min-height: 60px; padding-top: 20px; }
-  .an--all .an-main > .an-card--2 { flex: none; }
+  :is(.an--all, .an--one) { flex: 1 1 0; min-height: 0; gap: 12px; }
+  :is(.an--all, .an--one) .an-tile { min-height: 100px; padding: 12px 20px 11px; }
+  :is(.an--all, .an--one) .an-cols { flex: 1 1 0; min-height: 0; gap: 12px; }
+  :is(.an--all, .an--one) .an-main, :is(.an--all, .an--one) .an-side { min-height: 0; gap: 12px; }
+  :is(.an--all, .an--one) .an-card { padding: 15px 22px 13px; border-radius: 26px; }
+  :is(.an--all, .an--one) .an-main > .an-card:first-child { flex: 1 1 0; min-height: 150px; }
+  :is(.an--all, .an--one) .an-main > .an-card:first-child .an-block { flex: 1 1 0; min-height: 0; }
+  :is(.an--all, .an--one) .an-bars { flex: 1 1 0; min-height: 60px; padding-top: 20px; }
+  :is(.an--all, .an--one) .an-main > .an-card--2 { flex: none; }
   .an--all .an-rank ol { gap: 4px; }
   .an--all .an-rank li { font-size: 13.5px; line-height: 1.3; }
   .an--all .an-rank li i { height: 8px; }
-  .an--all .an-share { flex: none; display: grid; grid-template-columns: 142px minmax(0, 1fr); column-gap: 20px; align-items: center; }
-  .an--all .an-share .an-card__head, .an--all .an-share .an-none { grid-column: 1 / -1; }
-  .an--all .an-pie { flex: none; min-height: 0; padding: 2px 0; }
-  .an--all .an-pie__sq { width: 140px; height: 140px; }
-  .an--all .an-pie__pct { font-size: 12.5px; }
-  .an--all .an-legend li { min-height: 30px; font-size: 14px; }
-  .an--all .an-legend small { width: 52px; }
-  .an--all .an-side .an-soon { flex: none; }
-  .an--all .an-soon li { min-height: 37px; }
-  .an--all .an-soon li span { line-height: 1.2; }
-  .an--all .an-note { font-size: 12.5px; }
+  :is(.an--all, .an--one) .an-share { flex: none; display: grid; grid-template-columns: 142px minmax(0, 1fr); column-gap: 20px; align-items: center; }
+  :is(.an--all, .an--one) .an-share .an-card__head, :is(.an--all, .an--one) .an-share .an-none { grid-column: 1 / -1; }
+  :is(.an--all, .an--one) .an-pie { flex: none; min-height: 0; padding: 2px 0; }
+  :is(.an--all, .an--one) .an-pie__sq { width: 140px; height: 140px; }
+  :is(.an--all, .an--one) .an-pie__pct { font-size: 12.5px; }
+  :is(.an--all, .an--one) .an-legend li { min-height: 30px; font-size: 14px; }
+  :is(.an--all, .an--one) .an-legend small { width: 52px; }
+  :is(.an--all, .an--one) .an-side .an-soon { flex: none; }
+  :is(.an--all, .an--one) .an-soon li { min-height: 37px; }
+  :is(.an--all, .an--one) .an-soon li span { line-height: 1.2; }
+  :is(.an--all, .an--one) .an-note { font-size: 12.5px; }
 }
 /* …and on a low desktop window (a laptop): the sheet comes up higher, and below 720 px the footnote goes, the
    tiles get lower and the run-out list shows four toners instead of five. */
 @media (min-width: 801px) and (max-height: 800px) {
-  .asheet:has(.an--all) { height: 96vh; height: 96dvh; }
-  .asheet:has(.an--all) .asheet__head { padding-top: 16px; }
-  .asheet:has(.an--all) .asheet__who { margin-bottom: 10px; }
+  .asheet:has(:is(.an--all, .an--one)) { height: 96vh; height: 96dvh; }
+  .asheet:has(:is(.an--all, .an--one)) .asheet__head { padding-top: 16px; }
+  .asheet:has(:is(.an--all, .an--one)) .asheet__who { margin-bottom: 10px; }
 }
 @media (min-width: 801px) and (max-height: 720px) {
-  .an--all .an-note { display: none; }
-  .an--all .an-tile { min-height: 86px; padding: 9px 18px 8px; }
-  .an--all .an-soon li:nth-child(n+6) { display: none; }
-  .an--all .an-main > .an-card:first-child { min-height: 130px; }
+  :is(.an--all, .an--one) .an-note { display: none; }
+  :is(.an--all, .an--one) .an-tile { min-height: 86px; padding: 9px 18px 8px; }
+  :is(.an--all, .an--one) .an-soon li:nth-child(n+6) { display: none; }
+  :is(.an--all, .an--one) .an-main > .an-card:first-child { min-height: 130px; }
 }
 @media (min-width: 801px) { /* room for a company's whole name beside the small pie */
-  .an--all .an-share { grid-template-columns: 130px minmax(0, 1fr); column-gap: 16px; }
-  .an--all .an-pie__sq { width: 128px; height: 128px; }
+  :is(.an--all, .an--one) .an-share { grid-template-columns: 130px minmax(0, 1fr); column-gap: 16px; }
+  :is(.an--all, .an--one) .an-pie__sq { width: 128px; height: 128px; }
   .an--all .an-legend b { width: 44px; } .an--all .an-legend small { width: 46px; }
-  .an--all .an-legend li { gap: 8px; }
+  :is(.an--all, .an--one) .an-legend li { gap: 8px; }
 }
 
 /* "Visi printeri" on a desktop window that is tall enough (880 px and up): the pie is back in full — above its
@@ -1631,14 +1631,14 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
    Between 880 and 1000 px the run-out list shows four toners so that everything still fits without scrolling.
    Lower windows keep the small pie beside its table (above). */
 @media (min-width: 801px) and (min-height: 880px) {
-  .asheet:has(.an--all) { height: 94vh; height: 94dvh; }
-  .an--all .an-share { display: flex; flex-direction: column; align-items: stretch; flex: 1 1 0; min-height: 0; }
-  .an--all .an-pie { flex: 1 1 120px; min-height: 120px; padding: 6px 0 10px; }
-  .an--all .an-pie__sq { width: auto; height: 100%; max-height: 300px; }
-  .an--all .an-pie__pct { font-size: 15px; }
+  .asheet:has(:is(.an--all, .an--one)) { height: 94vh; height: 94dvh; }
+  :is(.an--all, .an--one) .an-share { display: flex; flex-direction: column; align-items: stretch; flex: 1 1 0; min-height: 0; }
+  :is(.an--all, .an--one) .an-pie { flex: 1 1 120px; min-height: 120px; padding: 6px 0 10px; }
+  :is(.an--all, .an--one) .an-pie__sq { width: auto; height: 100%; max-height: 300px; }
+  :is(.an--all, .an--one) .an-pie__pct { font-size: 15px; }
   .an--all .an-legend b { width: 60px; } .an--all .an-legend small { width: 56px; }
 }
-@media (min-width: 801px) and (min-height: 880px) and (max-height: 999px) { .an--all .an-soon li:nth-child(n+6) { display: none; } }
+@media (min-width: 801px) and (min-height: 880px) and (max-height: 999px) { :is(.an--all, .an--one) .an-soon li:nth-child(n+6) { display: none; } }
 
 /* Profils → Paziņojumu laiks, while this device's notifications are off: there to be seen, not to be used. */
 .push--locked { opacity: .55; }
@@ -1801,3 +1801,91 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
 .mlist__more { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; min-height: 40px; padding: 0; border: 0; border-top: 1px solid var(--line2); width: 100%; background: none; color: var(--muted); font: inherit; font-size: 13.5px; cursor: pointer; }
 .mlist__more:hover { color: var(--ink); }
 .mlist__picked { color: var(--ink); font-weight: 500; }
+/* One printer, on a desktop screen: the two charts on the left share the height; the right column (the pie and
+   "Komponentu prognoze") doesn't stretch the page; the footnote goes — so it fits without scrolling, like "Visi". */
+@media (min-width: 801px) {
+  .an--one .an-main > .an-card { flex: 1 1 0; min-height: 0; }
+  .an--one .an-main > .an-card .an-block { flex: 1 1 0; min-height: 0; }
+  .an--one .an-plot { flex: 1 1 0; min-height: 80px; }
+  .an--one .an-note { display: none; }
+  .an--one .an-soon li:nth-child(n+6) { display: none; }
+}
+/* …and its pie always sits small beside its table (the right column holds the forecast too), so nothing is cut. */
+@media (min-width: 801px) {
+  .an--one .an-share { flex: none; display: grid; grid-template-columns: 130px minmax(0, 1fr); column-gap: 16px; align-items: center; }
+  .an--one .an-share .an-card__head, .an--one .an-share .an-none { grid-column: 1 / -1; }
+  .an--one .an-pie { flex: none; min-height: 0; padding: 2px 0; }
+  .an--one .an-pie__sq { width: 128px; height: 128px; max-height: none; }
+  .an--one .an-pie__pct { font-size: 12.5px; }
+  .an--one .an-legend b { width: 76px; } .an--one .an-legend small { width: 52px; }
+  .an--one .an-side .an-soon { flex: 1 0 auto; }
+}
+/* Nothing ever moves sideways: the page and every panel that scrolls (a printer's page on the phone, the sheets,
+   windows) are clipped at their width, and long printer texts (alerts, supply names) wrap instead of pushing out. */
+html, body { overflow-x: clip; }
+:is(.detail-pane, .asheet, .modal__box, .msheet__body) { overflow-x: clip; }
+@media (max-width: 800px) { .srail { overflow-x: clip; } } /* on desktop it is a column whose panels' edges must show */
+.msg { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.sp .n, .sp .n .left, .d-others, .icard { overflow-wrap: anywhere; min-width: 0; }
+/* Level chart, a day pointed at: its levels in pills beside the cursor, its date under it in the date row. */
+.an-hotlab text { font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+@media (max-width: 800px) { .an-hotlab text { font-size: 10.5px; } }
+.an-axis span { transition: opacity .15s ease; }
+.an-axis.has-hot span { opacity: .25; }
+.an-axis__hot { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; padding: 0 6px; border-radius: 8px; background: var(--ink); color: var(--on-ink); font-weight: 600; }
+/* Profils → Paziņojumu laiks on a phone: "No" and "Līdz" side by side, each half the width, the times centred. */
+@media (max-width: 800px) {
+  .push .frow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .push .frow label { min-width: 0; }
+  .push .frow input[type="time"] { -webkit-appearance: none; appearance: none; display: block; min-width: 0; width: 100%; max-width: 100%; box-sizing: border-box; text-align: center; }
+  .push .frow input[type="time"]::-webkit-date-and-time-value { text-align: center; }
+}
+/* Analītika charts: pointing, dragging or long-pressing never selects their text (labels, dates, percentages). */
+:is(.an-plot, .an-axis, .an-bars, .an-pie, .an-legend) { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+/* Desktop: the round buttons beside the section switch always take the room of the most any page has (four, on
+   Statuss), right-aligned in it — so the switch stays in the same place when moving between sections. */
+
+/* The four round buttons every page has (TopBar). On Krājumi on a phone the page's own basket button replaces ours. */
+@media (max-width: 800px) { .acts:has(.cart-btn) .desk-cart { display: none; } }
+/* Statuss: "Atjaunot SNMP" above the printer list, on desktop as on phones. */
+@media (min-width: 801px) { .ref-btn--tools { display: inline-flex; } .ref-btn--top { display: none; } }
+/* Phones: the four round buttons sit on the title's row, at its top right, laid over the title where it is long;
+   they are just slightly see-through, so it shows that the title runs on underneath. */
+@media (max-width: 800px) {
+  .top { position: relative; }
+  .top .acts { position: absolute; top: 0; right: 0; z-index: 2; margin: 0; gap: 10px; }
+  .top .acts .rb { width: 48px; height: 48px; }
+  .top .acts .rb:not(.dk), :root[data-surface="glass"] .top .acts .rb:not(.dk) { background: color-mix(in srgb, var(--card) 82%, transparent); -webkit-backdrop-filter: blur(1.5px); backdrop-filter: blur(1.5px); }
+  .top .acts .rb.dk { background: color-mix(in srgb, var(--ink) 86%, transparent); -webkit-backdrop-filter: blur(1.5px); backdrop-filter: blur(1.5px); }
+}
+/* Krājumi on desktop, the top bar's basket button pressed: the basket and order panels give one ring (as the view button does). */
+/* The common "look here" pulse (a beacon, as in Tailwind's ping or a map's location dot): the panel lifts a hair
+   and a soft ring of the accent colour spread out from its edge and fade, while its face warms with a faint
+   tint of the same colour and cools back. Drawn on a layer of its own, so the panel's own shadow is untouched. */
+.srail.ring :is(.t-basket, .t-orders) { position: relative; animation: pane-lift 1.8s var(--ease); }
+.srail.ring :is(.t-basket, .t-orders)::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  animation: pane-beacon 1.8s cubic-bezier(.2, .6, .3, 1); }
+.srail.ring :is(.t-basket, .t-orders)::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: var(--accent-line); opacity: 0; animation: pane-tint 1.8s ease-out; }
+@keyframes pane-beacon {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-line) 42%, transparent); }
+  100% { box-shadow: 0 0 0 16px color-mix(in srgb, var(--accent-line) 0%, transparent); }
+}
+@keyframes pane-tint { 0% { opacity: 0; } 18% { opacity: .07; } 100% { opacity: 0; } }
+@keyframes pane-lift { 0% { transform: none; } 22% { transform: scale(1.012); } 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .srail.ring :is(.t-basket, .t-orders), .srail.ring :is(.t-basket, .t-orders)::after, .srail.ring :is(.t-basket, .t-orders)::before { animation: none; } }
+/* Opening a window: the screen behind darkens gradually, together with the sheet sliding up, instead of all at once
+   in the first frame (that sudden dim read as a flicker). The dim is a layer of its own (.modal__shade, like
+   .asheet__shade) whose opacity fades — its colour stays put, because Safari tints the strip above the page from
+   the colour of what covers the top of the screen, and a colour that starts transparent left that strip plain.
+   The sheets get their own layer up front, so the frosted glass isn't redrawn on the first frame of the slide. */
+/* The wrapper is only as tall as the window (centred, or at the bottom for a sheet), so the only thing covering the
+   top of the screen is the shade. */
+.modal, :root[data-surface="glass"] .modal { background: none; margin: auto 0; height: fit-content; max-height: 100%; }
+.modal--sheet { top: auto; margin: 0; }
+.modal__shade { position: fixed; inset: 0; z-index: 40; background: rgba(30, 30, 28, .45); animation: page-in .32s ease-out both; }
+:root[data-surface="glass"] .modal__shade { background: rgba(30, 30, 28, .26); }
+.modal > .modal__box { position: relative; }
+:is(.asheet, .modal--sheet .modal__box, .srail) { will-change: transform; }
+@media (min-width: 801px) { .srail { will-change: auto; } }
+@media (prefers-reduced-motion: reduce) { .modal__shade, .asheet__shade, .srail__shade { animation: none; } }

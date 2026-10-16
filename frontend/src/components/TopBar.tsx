@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { useApp } from '../ctx'
 import { useNavCounts } from '../navCounts'
 import { Icon } from '../icons'
@@ -10,6 +10,10 @@ import { useTabClick } from '../viewTransition'
 import { CompactBar } from './CompactBar'
 import { Dialog } from './Dialog'
 import { NotificationsButton } from './NotificationsButton'
+import { AnalyticsSheet } from './AnalyticsSheet'
+import { api, type Order, type Printer } from '../api'
+import { useApiData } from '../cache'
+import { needUnits } from '../lib'
 import { PushSettings } from './PushSettings'
 
 export const NAV = [
@@ -24,6 +28,44 @@ export const NAV = [
  * Once the title scrolls away, a compact bar shows it at the top, with the page's filters (`sticky`) if given.
  */
 const SURFACES: { value: Surface; label: string }[] = [{ value: 'glass', label: 'Stikls' }, { value: 'solid', label: 'Parastais' }]
+
+/**
+ * The same four round buttons on every page — Analītika, the basket, the bell and the profile — so the section
+ * switch beside them never moves. On Krājumi on a phone the page's own basket button (it opens the basket sheet)
+ * stands in for this one.
+ */
+function DeskAnalytics() {
+  const [open, setOpen] = useState(false)
+  const printers = useApiData<Printer[]>('printers', api.printers, [])
+  return (
+    <>
+      <button className="rb desk-btn" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-label="Analītika" title="Analītika">{Icon.chart(22)}</button>
+      {open && <AnalyticsSheet printers={printers.data} onClose={() => setOpen(false)} />}
+    </>
+  )
+}
+
+/** The basket: how many cartridges are in it, a small truck while something is on order. Goes to Krājumi and
+ *  points at the basket there (/stock?cart=…): on a phone it opens the basket sheet, on desktop the basket and
+ *  order panels give a ring. */
+function DeskCart() {
+  const { company } = useApp()
+  const navigate = useNavigate()
+  const stock = useApiData('stock', api.stock, [])
+  const basket = useApiData<Order[]>('basket', () => api.orders('planned'), [])
+  const ordered = useApiData<Order[]>('orders', () => api.orders('ordered'), [])
+  const mine = (o: Order) => !company || o.company === company
+  const n = needUnits(stock.data, company) + basket.data.filter((o) => o.status === 'planned' && mine(o)).reduce((s, o) => s + o.qty, 0)
+  const onOrder = ordered.data.filter(mine).reduce((s, o) => s + o.qty, 0)
+  return (
+    <button className="rb bell desk-btn desk-cart" onClick={() => { navigate(`/stock?cart=${Date.now()}`); window.scrollTo({ top: 0, behavior: 'smooth' }) }} title="Grozs un pasūtījumi"
+      aria-label={`Grozs un pasūtījumi (grozā ${n}, pasūtīts ${onOrder})`}>
+      {Icon.cart(22)}
+      {n > 0 && <span className="badge-n">{n > 99 ? '99+' : n}</span>}
+      {onOrder > 0 && <span className="cart-btn__truck" aria-hidden="true">{Icon.truck(13)}</span>}
+    </button>
+  )
+}
 
 export function TopBar({ title, children, sticky }: { title: [string, string]; children?: ReactNode; sticky?: ReactNode }) {
   const { user, role, logout } = useApp()
@@ -48,6 +90,8 @@ export function TopBar({ title, children, sticky }: { title: [string, string]; c
         </nav>
         {/* Company filter pills are hidden for now to keep the phone view simple; ctx.company stays '' (all). */}
         <div className="acts">
+          <DeskAnalytics />
+          <DeskCart />
           {children}
           <NotificationsButton />
           {/* Opens the profile window (who is logged in, role, Iziet) — it does not log out by itself. */}

@@ -190,6 +190,35 @@ export function StockPage() {
     setQuery('')
     setFlash(wanted)
   }
+  // The basket button in the top bar (/stock?cart=…): on a phone open the basket sheet; on desktop, where the basket
+  // and orders are always in the right column, give those two panels one ring so the eye finds them.
+  const cartAsk = params.get('cart')
+  const [cartRing, setCartRing] = useState(0)
+  const [cartPending, setCartPending] = useState<string | null>(null)
+  useEffect(() => {
+    if (!cartAsk) return
+    setCartPending(cartAsk)
+    setParams({}, { replace: true })
+  }, [cartAsk, setParams])
+  // First the page settles (it fades in), then the sheet slides up / the panels ring — not all in one frame.
+  // (Desktop rings at once; only the phone's sheet waits for the page.)
+  useEffect(() => {
+    if (!cartPending) return
+    if (!window.matchMedia('(max-width: 800px)').matches) {
+      setCartPending(null)
+      // pressed again while it still glows: start the pulse over (the class is already on, so it wouldn't by itself)
+      if (rail.current?.classList.contains('ring')) rail.current.getAnimations({ subtree: true }).forEach((a) => { a.cancel(); a.play() })
+      setCartRing(Date.now())
+      return
+    }
+    const timer = setTimeout(() => { setCartPending(null); setTab('basket'); setSheet(true) }, 320)
+    return () => clearTimeout(timer)
+  }, [cartPending])
+  useEffect(() => {
+    if (!cartRing) return
+    const timer = setTimeout(() => setCartRing(0), 2000)
+    return () => clearTimeout(timer)
+  }, [cartRing])
   // One-time: the address goes back to plain /stock, so coming back to Krājumi later doesn't jump again.
   useEffect(() => { if (wanted !== null) setParams({}, { replace: true }) }, [wanted, setParams])
   const flashShown = flash !== null && rows.some((r) => r.printer_id === flash)
@@ -263,7 +292,7 @@ export function StockPage() {
   }
   // The view switch: a round button like "Kārtot", its menu offering the two views.
   const viewMenu = (
-    <ActionMenu code="Skats" title="Skata režīms" button={{ className: switched ? 'icon-btn view-flash' : 'icon-btn', icon: Icon.layers(18), label: `Skats: ${view === 'place' ? 'pēc noliktavām' : 'pēc printeriem'}`, title: 'Skats' }}
+    <ActionMenu code="Skats" title="Skata režīms" button={{ className: `icon-btn${view === 'place' ? ' co-on' : ''}${switched ? ' view-flash' : ''}`, icon: Icon.layers(18), label: `Skats: ${view === 'place' ? 'pēc noliktavām' : 'pēc printeriem'}`, title: 'Skats' }}
       items={[
         { label: 'Pēc printeriem', note: 'Ieteicams', checked: view === 'printer', run: () => switchView('printer') },
         { label: 'Pēc noliktavām', checked: view === 'place', run: () => switchView('place') },
@@ -528,7 +557,7 @@ export function StockPage() {
           </div>
         </section>
 
-        <aside ref={rail} className={sheet ? 'left srail open' : 'left srail'} data-tab={shownTab} aria-label="Grozs un pasūtījumi">
+        <aside ref={rail} className={`left srail${sheet ? ' open' : ''}${cartRing ? ' ring' : ''}`} data-tab={shownTab} aria-label="Grozs un pasūtījumi">
           <div className="srail__head">
             <Segmented label="Saraksts" value={shownTab} onChange={setTab} options={sheetTabs} />
             <button className="icon-btn" onClick={() => setSheet(false)} aria-label="Aizvērt">{Icon.close(18)}</button>

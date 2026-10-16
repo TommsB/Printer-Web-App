@@ -139,9 +139,6 @@ export function PrintersPage() {
     api.setOrder(ids).catch(() => load())
   }
 
-  const refreshBtn = (
-    <button className={refreshing === 'all' ? 'rb ref-btn--top spin' : 'rb ref-btn--top'} onClick={() => refresh()} disabled={busy} aria-busy={refreshing === 'all'} aria-label="Atjaunot SNMP" title="Atjaunot SNMP">{Icon.refresh()}</button>
-  )
 
   return (
     <>
@@ -149,8 +146,6 @@ export function PrintersPage() {
           fit beside the title: Analītika stays at the top and the refresh moves to the left of the tools row
           (CSS shows one of the two refresh buttons). */}
       <TopBar title={['Printeru', 'statuss']}>
-        <button className="rb" onClick={() => { setAnalyticsFor(null); setAnalytics(true) }} aria-haspopup="dialog" aria-label="Analītika" title="Analītika">{Icon.chart(22)}</button>
-        {refreshBtn}
       </TopBar>
       <div className={open ? 'stage open' : 'stage'}>
         {/* The printers are white cards straight on the page (as on Krājumi), under a row of tools. */}

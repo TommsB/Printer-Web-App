@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { api, type AllAnalytics, type Analytics, type AnalyticsPart, type Printer } from '../api'
 import { Icon } from '../icons'
 import { classifySupply, fmtDaysLeft, fmtNum, SOON_DAYS, splitSupplies } from '../lib'
@@ -120,14 +121,18 @@ function Tile({ label, hint, value, unit, delta, spark, color }: {
 }
 
 /** Date labels under a chart: every so many days counted back from today, each under its own day. */
-function Axis({ days, compact, inset = 0, insetRight = 0 }: { days: string[]; compact: boolean; inset?: number; insetRight?: number }) {
+function Axis({ days, compact, inset = 0, insetRight = 0, hot = null }: { days: string[]; compact: boolean; inset?: number; insetRight?: number; hot?: number | null }) {
   const n = days.length
   const step = Math.max(1, Math.ceil(n / (compact ? 3 : 5)))
   return (
-    <div className="an-axis" style={{ marginLeft: inset, marginRight: insetRight }}>
+    <div className={hot === null ? 'an-axis' : 'an-axis has-hot'} style={{ marginLeft: inset, marginRight: insetRight }}>
       {days.map((d, i) => ((n - 1 - i) % step === 0) && (
         <span key={d} style={i === n - 1 ? { right: 0 } : { left: `${((i + 0.5) / n) * 100}%`, transform: 'translateX(-50%)' }}>{dayLabel(d)}</span>
       ))}
+      {/* the day pointed at, right under the cursor (kept inside the row at both ends) */}
+      {hot !== null && (
+        <b className="an-axis__hot" style={{ left: `clamp(18px, ${(n > 1 ? hot / (n - 1) : 0) * 100}%, calc(100% - 18px))` }}>{dayLabel(days[hot])}</b>
+      )}
     </div>
   )
 }
@@ -204,11 +209,23 @@ function Levels({ days, series, compact }: { days: string[]; series: Series[]; c
   const PILL = compact ? 16 : 18
   const labels = (pick: (idx: number[]) => number, min: number) => {
     const list = series.flatMap((s) => { const idx = known(s.values); return idx.length >= min ? [{ s, i: pick(idx), v: s.values[pick(idx)]!, at: y(s.values[pick(idx)]!), spot: 0 }] : [] }).sort((a, b) => a.at - b.at)
-    list.forEach((e, k) => { e.spot = k ? Math.max(e.at, list[k - 1].spot + PILL + 1) : e.at })
+    list.forEach((e, k) => { e.spot = k ? Math.max(e.at, list[k - 1].spot + PILL + 1) : Math.max(e.at, PILL / 2 + 1) })
     for (let k = list.length - 1; k >= 0; k--) list[k].spot = Math.min(list[k].spot, k === list.length - 1 ? H - B - PILL / 2 + 4 : list[k + 1].spot - PILL - 1)
+    // A low chart (phones) may not have room for every pill one under another: then they share the height evenly,
+    // touching rather than running off the top.
+    const top = PILL / 2 + 1, bottom = H - PILL / 2 - 1
+    if (list.length && list[0].spot < top) {
+      const gap = list.length > 1 ? Math.min(PILL + 1, (bottom - top) / (list.length - 1)) : 0
+      list.forEach((e, k) => { e.spot = top + k * gap })
+    }
     return list
   }
   const starts = labels((idx) => idx[0], 2), ends = labels((idx) => idx.at(-1)!, 1)
+  // The day pointed at: each colour's level there, in the same pills, beside the cursor (on its left near the right
+  // edge), spread like the end labels so they never overlap.
+  const picked = hover === null ? [] : labels(() => hover, 1).filter((e) => e.s.values[hover] !== null)
+  const PW = R - 12
+  const px = hover === null ? 0 : x(hover) + 8 + PW <= w - 2 ? x(hover) + 8 : x(hover) - 8 - PW
   return (
     <div className="an-block">
       <div className="an-card__head">
@@ -220,14 +237,6 @@ function Levels({ days, series, compact }: { days: string[]; series: Series[]; c
             <b>Līdzens posms</b> – tajās dienās nav drukāts vai printeris nav bijis sasniedzams.
           </Hint>
         </h3>
-        {/* Only while a day is picked: that day's level per colour. (The letter beside each dot names the
-            toner, so it is never told apart by colour alone.) */}
-        {hover !== null && (
-          <span className="an-card__val on">
-            <span className="an-card__day">{dayLabel(days[hover])}</span>
-            {series.map((s) => <span key={s.key} className="an-card__s" title={s.label}><i style={{ background: s.color }} /><small>{s.key}</small><b>{show(s.values[hover])}</b></span>)}
-          </span>
-        )}
       </div>
       <div ref={box} className="an-plot" style={{ minHeight: MIN }}>
         {w > 0 && (
@@ -258,12 +267,18 @@ function Levels({ days, series, compact }: { days: string[]; series: Series[]; c
                 {series.map((s) => s.values[hover] !== null && (
                   <circle key={s.key} cx={x(hover)} cy={y(s.values[hover]!)} r="4.5" style={{ fill: s.color }} stroke="var(--card)" strokeWidth="2" />
                 ))}
+                {picked.map((e) => (
+                  <g key={'hot' + e.s.key} className="an-hotlab">
+                    <rect x={px} y={e.spot - PILL / 2} width={PW} height={PILL} rx={PILL / 2} style={{ fill: e.s.color }} />
+                    <text x={px + PW / 2} y={e.spot + 4} textAnchor="middle" style={{ fill: e.s.ink }}>{show(e.v)}</text>
+                  </g>
+                ))}
               </g>
             )}
           </svg>
         )}
       </div>
-      <Axis days={days} compact={compact} inset={L} insetRight={R} />
+      <Axis days={days} compact={compact} inset={L} insetRight={R} hot={hover} />
     </div>
   )
 }
@@ -353,7 +368,7 @@ function Pie({ parts, title, hint, head, totalText, fact, none }: {
   )
 }
 
-function Charts({ data: all, mono }: { data: Analytics; mono: boolean }) {
+function Charts({ data: all, mono, printer }: { data: Analytics; mono: boolean; printer: Printer }) {
   const from = dataStart(all)
   const data: AnalyticsPart = { days: all.days.slice(from), pages: all.pages.slice(from), supplies: all.supplies.map((s) => ({ ...s, pct: s.pct.slice(from) })) }
   const n = data.days.length
@@ -395,7 +410,7 @@ function Charts({ data: all, mono }: { data: Analytics; mono: boolean }) {
     </Hint>
   )
   return (
-    <div className="an">
+    <div className="an an--one">
       <div className="an-tiles">
         <Tile label={`Lapas ${n} dienās`} value={counted ? fmtNum(sum(pages)) : '–'} delta={counted ? change(sum(pages), prevPages) : null} spark={sparkPath(pages)} color="var(--ink)" />
         <Tile label={compact ? 'Vidēji darba dienā' : 'Lapas vidēji darba dienā'} hint={<Hint label="Kā rēķināts vidējais darba dienā">{WORKDAY_HINT}</Hint>} value={counted ? fmtNum(Math.round(pagesAvg)) : '–'} delta={counted ? change(pagesAvg, prevPages !== null ? perWorkDay(prev!.pages.map((v) => v ?? 0)) : null) : null} spark={sparkPath(pages)} color="var(--ink)" />
@@ -414,6 +429,7 @@ function Charts({ data: all, mono }: { data: Analytics; mono: boolean }) {
             : <div className="an-block"><div className="an-card__head"><h3>Toneru līmeņu % kritums laika gaitā</h3></div><p className="muted an-none">Šis printeris pēdējās dienās nav ziņojis toneru līmeni.</p></div>}
           </section>
         </div>
+        <div className="an-side">
         {use.size > 0 && (
           <Pie parts={parts} title="Toneru % patēriņa sadalījums" head={['Krāsa', 'Relatīvais %', 'Fakts %']} totalText={(t) => `${t}%`}
             fact={(v) => (v ? `−${v}%` : '0%')} none="Šajās dienās toneru līmenis nav mainījies."
@@ -424,6 +440,8 @@ function Charts({ data: all, mono }: { data: Analytics; mono: boolean }) {
               </Hint>
             )} />
         )}
+          <ComponentForecast printer={printer} />
+        </div>
       </div>
       <p className="mhint an-note">Līmenis ir katras dienas pēdējais nolasījums; lēciens uz augšu ir kasetnes nomaiņa. Patēriņš ir līmeņa kritums procentpunktos, nomaiņas diena netiek skaitīta. „Pret iepr.” salīdzina ar tikpat garu periodu pirms šī.</p>
     </div>
@@ -457,6 +475,41 @@ const COMPANY_COLORS = [
  * toner percentages of different cartridges don't, so in their place are counts — cartridges replaced in the
  * period, and toners about to run out (from the current readings and their forecasts).
  */
+/**
+ * One printer's toners and drums that run out first (at most four): what is left now and the forecast — the same
+ * list as "Drīzumā beigsies" in "Visi printeri", for one printer. Ones without a forecast yet come last, lowest first.
+ */
+function ComponentForecast({ printer }: { printer: Printer }) {
+  const { toners, drums } = splitSupplies(printer)
+  const all = [
+    ...toners.map((t) => ({ key: `t-${t.col}`, col: t.col as string, name: t.name, kind: 'Toneris', pct: t.pct, days: t.days })),
+    ...drums.map((d) => ({ key: `d-${d.idx}`, col: d.col as string, name: d.name, kind: 'Drums', pct: d.pct, days: d.days })),
+  ]
+  const first = all.sort((a, b) => (a.days ?? 1e9) - (b.days ?? 1e9) || (a.pct ?? 101) - (b.pct ?? 101)).slice(0, 4)
+  return (
+    <section className="an-card an-soon">
+      <div className="an-card__head">
+        <h3>{Icon.stopwatch(18)}Komponentu prognoze
+          <Hint label="Kā rēķināta komponentu prognoze">Šī printera toneri un drumi, kas beigsies pirmie (līdz četriem), pēc to pašreizējā patēriņa. Rēķināts no šī brīža līmeņiem, nevis izvēlētā perioda.</Hint>
+        </h3>
+      </div>
+      {first.length === 0
+        ? <p className="muted an-none">Printeris pašlaik neziņo toneru un drumu līmeņus.</p>
+        : <ul>
+          <li className="an-soon__head" aria-hidden="true"><span>Komponents</span><em>Atlikums</em><strong>Prognoze</strong></li>
+          {first.map((c) => (
+            <li key={c.key}>
+              <i className={c.col || 'g'} />
+              <span><b>{c.name || c.kind}</b><small>{c.kind}</small></span>
+              <em aria-label={`atlikums ${c.pct === null ? 'nav zināms' : `${c.pct}%`}`}>{c.pct === null ? '–' : `${c.pct}%`}</em>
+              <strong className={c.days !== null && c.days <= SOON_DAYS ? 'hot' : ''} aria-label={`prognoze ${c.days === null ? 'nav' : fmtDaysLeft(c.days)}`}>{c.days === null ? '–' : fmtDaysLeft(c.days)}</strong>
+            </li>
+          ))}
+        </ul>}
+    </section>
+  )
+}
+
 function AllCharts({ items, printers }: { items: AllAnalytics['printers']; printers: Printer[] }) {
   const compact = window.matchMedia('(max-width: 800px)').matches
   const byId = new Map(printers.map((p) => [p.id, p]))
@@ -605,7 +658,9 @@ export function AnalyticsSheet({ printers, onClose, initial = null }: { printers
   const pick = (next: number | 'all' | null) => { setError(''); setId(next) }
   const period = (d: number) => { setError(''); setDays(d) }
 
-  return (
+  // Straight into <body>, not inside the button that opened it: the dim layer is then a plain full-screen layer of
+  // the page, which is what Safari reads to tint the strip above the page along with it.
+  return createPortal(
     <>
       <div className="asheet__shade" onClick={onClose} />
       <section className="asheet" role="dialog" aria-modal="true" aria-label="Analītika">
@@ -674,8 +729,9 @@ export function AnalyticsSheet({ printers, onClose, initial = null }: { printers
         {picked && error && <p className="alert">{error}</p>}
         {picked && !error && !(all ? freshAll : fresh) && <p className="muted asheet__wait">Ielādē…</p>}
         {all && !error && freshAll && <AllCharts key={`all-${days}`} items={loadedAll!.items} printers={printers} />}
-        {printer && !error && fresh && <Charts key={`${printer.id}-${days}`} data={loaded!.data} mono={printer.color_type === 'Melnbalts'} />}
+        {printer && !error && fresh && <Charts key={`${printer.id}-${days}`} data={loaded!.data} mono={printer.color_type === 'Melnbalts'} printer={printer} />}
       </section>
-    </>
+    </>,
+    document.body,
   )
 }

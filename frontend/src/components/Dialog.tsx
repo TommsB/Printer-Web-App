@@ -91,6 +91,9 @@ function Frame({ title, heading, onClose, onSubmit, className, confirmDiscard = 
 
   return createPortal(
     <FrameContext value={{ onClose, busy, error, footer: sheet ? footer : null }}>
+      {/* The dimmed page behind: a full-screen layer of its own (the window's wrapper only wraps the window), so it
+          can fade in without the window fading with it, and Safari tints the strip above the page from it. */}
+      <div className="modal__shade" onClick={requestClose} aria-hidden="true" />
       <div className={sheet ? 'modal modal--sheet' : 'modal'} onClick={requestClose} role="presentation">
         <form ref={form} className={`modal__box pane dialog${className ? ` ${className}` : ''}`} onClick={(e) => e.stopPropagation()}
           onSubmit={submit} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); requestClose() } }}
