@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api, type Printer, type PrinterInput, type SnmpTest, type StoreLocation, type Toner } from '../../api'
+import { api, type Printer, type PrinterInput, type SnmpTest, type SnmpVersion, type StoreLocation, type Toner } from '../../api'
 import { classifySupply, fmtNum, supplyCode } from '../../lib'
 import { Dialog, DestructiveDialog } from '../../components/Dialog'
 import { Stepper } from '../../components/Stepper'
@@ -19,13 +19,13 @@ const family = (code: string) => (/^[A-Za-z]{2,}/.exec(code.trim())?.[0] ?? '').
 const commonPrefix = (a: string, b: string) => { let i = 0; while (i < a.length && i < b.length && a[i].toUpperCase() === b[i].toUpperCase()) i++; return i }
 const EMPTY: PrinterInput = {
   company: '', location: '', model: '', brand: '', ip: '', color_type: 'Krāsains',
-  snmp_enabled: true, active: true, notes: '', toner_ids: [], norms: {}, default_location_id: null, empties_location_id: null, main_location_id: null,
+  snmp_enabled: true, snmp_version: '2c', can_sleep: false, active: true, notes: '', toner_ids: [], norms: {}, default_location_id: null, empties_location_id: null, main_location_id: null,
 }
 
 function toForm(p: Printer): PrinterInput {
   return {
     company: p.company, location: p.location, model: p.model, brand: p.brand, ip: p.ip ?? '', color_type: p.color_type,
-    snmp_enabled: p.snmp_enabled, active: p.active, notes: p.notes, default_location_id: p.default_location_id, empties_location_id: p.empties_location_id, main_location_id: p.main_location_id,
+    snmp_enabled: p.snmp_enabled, snmp_version: p.snmp_version, can_sleep: p.can_sleep, active: p.active, notes: p.notes, default_location_id: p.default_location_id, empties_location_id: p.empties_location_id, main_location_id: p.main_location_id,
     toner_ids: p.toners.map((t) => t.id), norms: Object.fromEntries(p.toners.map((t) => [t.id, t.optimal_qty])),
   }
 }
@@ -43,7 +43,7 @@ function SnmpTestResult({ test }: { test: TestState }) {
   if (!r.reachable) {
     return (
       <p className="snmp-test bad" role="status">
-        <b>{test.ip} neatbild uz SNMP.</b> Pārbaudiet IP adresi, vai printeris ir ieslēgts un vai tajā ir atļauts SNMP (v2c).
+        <b>{test.ip} neatbild uz SNMP.</b> Pārbaudiet IP adresi, vai printeris ir ieslēgts un vai tajā ir atļauts SNMP (v2c vai v1).
       </p>
     )
   }
@@ -143,13 +143,24 @@ export function PrinterEditor({ printer, template, onDuplicate, toners: catalogu
   )
 
   const [test, setTest] = useState<TestState>({ state: 'idle' })
+  // The printer answered only with the other SNMP version (e.g. it has no v2c): switch the form to it and say so.
+  const [versionNote, setVersionNote] = useState('')
+  const adoptVersion = (r: SnmpTest) => {
+    if (!r.reachable || r.version === form.snmp_version) return
+    set('snmp_version', r.version)
+    setVersionNote(`Printeris atbild tikai uz SNMP v${r.version}, tāpēc iestatīta v${r.version}. Saglabājiet, lai to izmantotu.`)
+  }
   // "Atrast automātiski (SNMP)": ask the printer now what it has in it, and offer the toners and drums it
   // names with a code that aren't linked here yet. Only on that button — nothing is suggested by itself.
   const [scan, setScan] = useState<{ state: 'idle' | 'running' } | { state: 'done'; result: SnmpTest } | { state: 'error'; message: string }>({ state: 'idle' })
   const runScan = async () => {
     setScan({ state: 'running' })
     setAdoptError('')
-    try { setScan({ state: 'done', result: await api.testSnmp(form.ip.trim()) }) }
+    try {
+      const result = await api.testSnmp(form.ip.trim(), form.snmp_version)
+      setScan({ state: 'done', result })
+      adoptVersion(result)
+    }
     catch (err) { setScan({ state: 'error', message: err instanceof Error ? err.message : 'Kļūda' }) }
   }
   const supplies = scan.state === 'done' && scan.result.reachable ? scan.result.supplies : []
@@ -182,9 +193,10 @@ export function PrinterEditor({ printer, template, onDuplicate, toners: catalogu
     const ip = form.ip.trim()
     setTest({ state: 'running' })
     try {
-      const result = await api.testSnmp(ip)
+      const result = await api.testSnmp(ip, form.snmp_version)
       // Ignore a late answer if the IP was edited meanwhile.
       setTest((t) => (t.state === 'running' ? { state: 'done', ip, result } : t))
+      adoptVersion(result)
     } catch (err) {
       setTest({ state: 'error', message: err instanceof Error ? err.message : 'Kļūda' })
     }
@@ -224,7 +236,7 @@ export function PrinterEditor({ printer, template, onDuplicate, toners: catalogu
           <div className="lab">Tīkls</div>
           <div className="ip-row">
             <label>IP adrese (nav obligāta)<input name="ip" autoComplete="off" spellCheck={false} value={form.ip} inputMode="decimal"
-              onChange={(e) => { set('ip', e.target.value); setTest({ state: 'idle' }) }} placeholder="piem. 192.168.0.10…" /></label>
+              onChange={(e) => { set('ip', e.target.value); setTest({ state: 'idle' }); setVersionNote('') }} placeholder="piem. 192.168.0.10…" /></label>
             <button type="button" className={test.state === 'running' ? 'btn small test-btn spin' : 'btn small test-btn'}
               disabled={!ipOk || test.state === 'running'} onClick={runTest}>
               {Icon.refresh(15)}{test.state === 'running' ? 'Pārbauda…' : 'Pārbaudīt savienojumu'}
@@ -235,6 +247,18 @@ export function PrinterEditor({ printer, template, onDuplicate, toners: catalogu
           <SnmpTestResult test={test} />
           <Toggle label="SNMP aptauja" hint={noIp ? 'Nav iespējama bez IP adreses' : 'Nolasīt statusu un toneru līmeņus ik pēc 15 min'}
             checked={!noIp && form.snmp_enabled} disabled={noIp} onChange={(v) => set('snmp_enabled', v)} />
+          {!noIp && form.snmp_enabled && (
+            <div className="field"><span>SNMP versija</span>
+              <Segmented<SnmpVersion> label="SNMP versija" value={form.snmp_version}
+                onChange={(v) => { set('snmp_version', v); setVersionNote('') }}
+                options={[{ value: '2c', label: 'v2c' }, { value: '1', label: 'v1' }]} />
+            </div>
+          )}
+          {versionNote && <p className="fnote" role="status">{versionNote}</p>}
+          {!noIp && form.snmp_enabled && (
+            <Toggle label="Printeris var aizmigt" checked={form.can_sleep} onChange={(v) => set('can_sleep', v)}
+              hint="Kamēr printeris guļ, netiek sūtīts paziņojums „Nav pieejams”." />
+          )}
         </div>
 
         <div className="fsec">

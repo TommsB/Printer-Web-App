@@ -1,4 +1,6 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import ShinyText from './ShinyText'
+import { lightness } from '../color'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useApp } from '../ctx'
 import { useNavCounts } from '../navCounts'
@@ -67,7 +69,35 @@ function DeskCart() {
   )
 }
 
+/**
+ * The page title's colours as real values (ShinyText can't take `var(--ink)`): the theme's ink and grey, read
+ * again whenever the theme or style on <html> changes. The shine is a light sweep on light themes and a darker
+ * one on dark themes, so it shows on either: on the dark first line the grey passes over it; on the grey
+ * second line, whichever of white (the card) and ink is further from the grey.
+ */
+function useTitleColors() {
+  const read = () => {
+    const css = getComputedStyle(document.documentElement)
+    const v = (name: string) => css.getPropertyValue(name).trim()
+    const ink = v('--ink') || '#33332F', faint = v('--faint') || '#A3A39B', card = v('--card') || '#ffffff'
+    const far = Math.abs(lightness(card) - lightness(faint)) > Math.abs(lightness(ink) - lightness(faint)) ? card : ink
+    return { ink, faint, shine1: faint, shine2: far }
+  }
+  const [colors, setColors] = useState(read)
+  useEffect(() => {
+    const observer = new MutationObserver(() => setColors(read()))
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-surface'] })
+    return () => observer.disconnect()
+  }, [])
+  return colors
+}
+
+/** One line of a page title with a slow band of light passing over it every few seconds — never right as a
+ *  page opens: the first sweep waits as long as the pause between sweeps. */
+const SHINE = { speed: 3, delay: 5, initialDelay: 5, shineWidth: 35, softness: 0.9, angle: 120 } as const
+
 export function TopBar({ title, children, sticky }: { title: [string, string]; children?: ReactNode; sticky?: ReactNode }) {
+  const colors = useTitleColors()
   const { user, role, logout } = useApp()
   const counts = useNavCounts()
   const tabClick = useTabClick()
@@ -78,7 +108,10 @@ export function TopBar({ title, children, sticky }: { title: [string, string]; c
 
   return (
     <header className="top">
-      <h1 ref={setHeading}>{title[0]}<span>{title[1]}</span></h1>
+      <h1 ref={setHeading}>
+        <ShinyText text={title[0]} color={colors.ink} shineColor={colors.shine1} {...SHINE} className="top__t1" />
+        <ShinyText text={title[1]} color={colors.faint} shineColor={colors.shine2} {...SHINE} className="top__t2" />
+      </h1>
       <div className="tools">
         <nav className="nv" aria-label="Sadaļas">
           {NAV.map((n) => (

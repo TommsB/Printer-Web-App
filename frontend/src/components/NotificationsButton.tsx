@@ -7,9 +7,9 @@ import { dayLabel } from '../lib'
 import { DestructiveDialog, Dialog } from './Dialog'
 
 const KIND: Record<PushLogItem['category'], { icon: () => ReactNode; cls: string }> = {
-  printer: { icon: () => Icon.printer(18), cls: 'k-out' },
-  replacement: { icon: () => Icon.swap(), cls: 'k-move' },
-  toner: { icon: () => Icon.box(18), cls: 'k-wait' },
+  printer: { icon: () => Icon.printer(16), cls: 'k-out' },
+  replacement: { icon: () => Icon.swap(16), cls: 'k-move' },
+  toner: { icon: () => Icon.box(16), cls: 'k-wait' },
 }
 const EMPTY: PushHistory = { items: [], seen: 0, unread: 0 }
 const REFRESH_MS = 60_000
@@ -80,6 +80,9 @@ export function NotificationsButton() {
       </button>
       {open && (
         <Dialog.Frame sheet title="Paziņojumi" onClose={() => setOpen(false)} confirmDiscard={false}>
+          {data.items.length > 0 && (
+            <div className="nbar"><button type="button" className="nclear" onClick={() => setAskClear(true)}>Notīrīt visus</button></div>
+          )}
           {data.items.length === 0 && <p className="dlg-text muted">Vēl nav neviena paziņojuma. Šeit parādīsies tas, par ko lietotne ziņo: printeris nevar drukāt, nomainīts toneris, beidzas toneris bez rezerves.</p>}
           {days.map(({ day, items }) => (
             <div key={day} className="nday">
@@ -93,32 +96,28 @@ export function NotificationsButton() {
                     {!openDays.includes(day) && <span className="nday__n">{items.length}{items.some((n) => n.id > seenAtOpen) && <i aria-label="ir jauni" />}</span>}
                   </button>
                 )}
-              {(day === today || openDays.includes(day)) && <ul className="evlist">
+              {/* One card per day; a dot in front marks what is new since the window was opened. */}
+              {(day === today || openDays.includes(day)) && <ul className="evlist ncard">
                 {items.map((n) => {
                   const k = KIND[n.category] ?? KIND.printer
+                  const unread = n.id > seenAtOpen
                   return (
-                    <li key={n.id} className={n.id > seenAtOpen ? 'ev unread' : 'ev'}>
+                    <li key={n.id} className={unread ? 'ev unread' : 'ev'}>
                       <button type="button" className="ev__main" onClick={() => go(n)} title={fmtTime(n.ts)}>
+                        <i className="ndot" aria-hidden="true" />
                         <span className={`ev__ic ${k.cls}`}>{k.icon()}</span>
                         <span className="ev__body">
-                          <span className="ev__l1"><b className="nt">{n.title}</b></span>
-                          <span className="nbody">{n.body}</span>
+                          <span className="ev__l1"><b className="nt">{unread && <span className="sr-only">Jauns: </span>}{n.title}</b><span className="ntime">{fmtClock(n.ts)}</span></span>
+                          {n.body && <span className="nbody">{n.body}</span>}
                         </span>
-                        <span className="ntime">{fmtClock(n.ts)}</span>
                       </button>
-                      <button type="button" className="ev__del" onClick={() => remove(n)} aria-label={`Dzēst paziņojumu: ${n.title}`} title="Dzēst">{Icon.close(16)}</button>
+                      <button type="button" className="ev__del" onClick={() => remove(n)} aria-label={`Dzēst paziņojumu: ${n.title}`} title="Dzēst">{Icon.close(14)}</button>
                     </li>
                   )
                 })}
               </ul>}
             </div>
           ))}
-          <Dialog.Footer>
-            {data.items.length > 0 && (
-              <Dialog.Start><button type="button" className="btn danger" onClick={() => setAskClear(true)}>Notīrīt visus</button></Dialog.Start>
-            )}
-            <Dialog.Cancel>Aizvērt</Dialog.Cancel>
-          </Dialog.Footer>
         </Dialog.Frame>
       )}
       {open && askClear && (

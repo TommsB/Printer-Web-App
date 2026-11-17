@@ -79,7 +79,8 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .page { max-width: 1360px; margin: 0 auto; padding: 36px 48px 48px; display: flex; flex-direction: column; gap: 28px; min-height: 100vh; }
 .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px 24px; flex-wrap: wrap; }
 .top h1 { font-weight: 600; font-size: 52px; line-height: .96; letter-spacing: -.04em; }
-.top h1 span { color: var(--faint); display: block; }
+/* The two title lines (ShinyText: the colour comes from its own gradient, so no `color` here). */
+.top h1 .shiny-text { display: block; width: fit-content; }
 .tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .nv { display: flex; gap: 4px; height: 48px; padding: 4px; border-radius: 24px; background: var(--pillbg); margin-right: 8px; }
 .nv a { display: flex; align-items: center; padding: 0 18px; border-radius: 20px; font-size: 15px; font-weight: 500; color: var(--muted); text-decoration: none; }
@@ -141,6 +142,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .conn.ok { background: #2E9E5B; }
 .conn.bad { background: var(--bad); }
 .conn.stop { background: var(--hot); }
+.conn.sleep { background: var(--muted); }
 .item:hover .conn { box-shadow: 0 0 0 2px var(--hover); }
 .item.on .conn { box-shadow: 0 0 0 2px var(--card); }
 .nm { grid-area: nm; font-size: 16px; font-weight: 600; letter-spacing: -.02em; align-self: end; }
@@ -284,21 +286,45 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 /* Bell button (top bar) with the unread count, and its history list */
 .rb.bell { position: relative; }
 .rb.bell .badge-n { position: absolute; top: 2px; right: 0; margin: 0; box-shadow: 0 0 0 2px var(--bg); }
+/* Read out, not shown (e.g. "Jauns:" before a new notification). */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* "Notīrīt visus": a quiet link above the list, not a red button in a footer. */
+.nbar { display: flex; justify-content: flex-end; margin: -6px 0 -10px; }
+.nclear { border: 0; background: none; padding: 4px 2px; font: inherit; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; }
+.nclear:hover { color: var(--bad); }
 .nday + .nday { margin-top: 10px; }
-.nday__head { padding: 2px 2px 4px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
-.nday .ev__main { padding: 10px 8px; align-items: flex-start; }
-/* Titles here are sentences, not short codes: let them wrap (the log rows keep theirs on one line). */
-.nday .ev__l1 { display: block; }
-.nday .ev__l1 .nt { white-space: normal; overflow-wrap: anywhere; }
-.nbody { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
-.ntime { flex: none; align-self: flex-start; padding-top: 2px; font-size: 12.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
-/* Each entry: the row itself (opens it) and a small × to delete it from your own list. */
-.nday .ev { display: flex; align-items: flex-start; gap: 2px; }
-.nday .ev__main { flex: 1; min-width: 0; }
-.ev__del { flex: none; width: 36px; height: 36px; margin-top: 6px; border: 0; border-radius: 50%; background: none; color: var(--faint); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.nday__head { padding: 2px 2px 6px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+/* One card per day (like the Analītika and printer cards), compact rows inside, divided by a hairline that starts
+   under the text, not under the icon. */
+.ncard { padding: 4px; border-radius: 22px; background: var(--card); box-shadow: 0 1px 2px rgba(40, 40, 36, .06); }
+.nday .ev { position: relative; display: flex; align-items: flex-start; gap: 0; border-top: 0; }
+.nday .ev + .ev::before { content: ''; position: absolute; top: 0; left: 58px; right: 14px; border-top: 1px solid var(--line2); }
+.nday .ev__main { flex: 1; min-width: 0; align-items: flex-start; gap: 10px; padding: 10px 6px 10px 8px; border-radius: 18px; }
+/* Pointing at an entry lights up the whole row, × included (not just the part that opens it); the lines above and
+   below it step aside meanwhile. */
+.nday .ev { border-radius: 18px; transition: background-color .12s; }
+.nday .ev__main:hover { background: none; }
+@media (hover: hover) {
+  .nday .ev:hover { background: var(--hover); }
+  .nday .ev:hover::before, .nday .ev:hover + .ev::before { opacity: 0; }
+}
+.nday .ev__ic { width: 30px; height: 30px; margin-top: 1px; }
+/* New since the window was opened: an accent dot in front and a bolder title, nothing more. */
+.ndot { flex: none; width: 6px; height: 6px; margin: 13px -4px 0 0; border-radius: 50%; }
+.ev.unread .ndot { background: var(--accent-line); }
+/* Title and time on one line; titles are sentences, so they may wrap. The text under it: at most two lines. */
+.nday .ev__l1 { display: flex; align-items: baseline; gap: 10px; }
+.nday .ev__l1 .nt { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; white-space: normal; overflow-wrap: anywhere; }
+.nday .ev.unread .nt { font-weight: 600; }
+.ntime { flex: none; font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.nbody { font-size: 13px; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* × deletes an entry from your own list: small, and with a mouse only there while pointing at the row. */
+.ev__del { flex: none; width: 30px; height: 30px; margin: 10px 6px 0 -2px; border: 0; border-radius: 50%; background: none; color: var(--faint); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .ev__del:hover { color: var(--ink); background: var(--tile); }
-.ev.unread .ev__main { background: var(--alert-bg); }
-.ev.unread .nt::after { content: ''; display: inline-block; width: 7px; height: 7px; margin-left: 7px; border-radius: 50%; background: var(--accent-line); vertical-align: middle; }
+@media (hover: hover) {
+  .nday .ev__del { opacity: 0; transition: opacity .15s; }
+  .nday .ev:hover .ev__del, .nday .ev__del:focus-visible { opacity: 1; }
+}
 /* Profile window → Paziņojumi */
 .push { gap: 12px; }
 .push__test { align-self: flex-start; }
@@ -1426,8 +1452,8 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
 }
 :root[data-surface="glass"] body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; background: var(--glow-bg); }
 /* See-through surfaces. */
-:root[data-surface="glass"] :is(.item, .grp, .pane:not(.modal__box), .an-tile, .an-card, .asheet__pick button) { background: var(--glass); }
-:root[data-surface="glass"] :is(.item:not(.on), .grp:not(.open), .pane:not(.modal__box), .an-tile, .an-card) { border: 1px solid var(--glass-edge); box-shadow: var(--glass-shine); }
+:root[data-surface="glass"] :is(.item, .grp, .pane:not(.modal__box), .an-tile, .an-card, .asheet__pick button, .ncard) { background: var(--glass); }
+:root[data-surface="glass"] :is(.item:not(.on), .grp:not(.open), .pane:not(.modal__box), .an-tile, .an-card, .ncard) { border: 1px solid var(--glass-edge); box-shadow: var(--glass-shine); }
 :root[data-surface="glass"] .item:hover:not(.on) { background: var(--glass-hover); }
 :root[data-surface="glass"] :is(.rb:not(.dk), .splist__tools .icon-btn, .splist__tools .search) { background: var(--glass); box-shadow: var(--glass-shine); }
 :root[data-surface="glass"] .rb:not(.dk):hover:not(:disabled) { background: var(--glass-hover); }
@@ -1502,6 +1528,10 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
 :root[data-surface="glass"] .login { background: none; }
 :root[data-surface="glass"] .login__form { background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shine); }
 :root[data-surface="glass"] .login__form :is(input, .btn:not(.primary, .ms-btn)) { background: var(--glass); }
+/* Vēsture → Jāpārbauda: each detected replacement is a pane of glass inside the glass panel, not a white card;
+   its Defekts / Ignorēt buttons are glass too (the main action keeps its colour). */
+:root[data-surface="glass"] .rv { background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shine); }
+:root[data-surface="glass"] .rv .btn:not(.primary) { background: var(--glass); border-color: var(--glass-edge); }
 
 /* Analītika's printer list on glass: each printer a pane with the light rim, like the cards on Statuss. */
 :root[data-surface="glass"] .asheet__pick button { border-color: var(--glass-edge); box-shadow: var(--glass-shine); }
@@ -1709,6 +1739,12 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
 /* The company button (phones; desktop has the switch instead). Marked while a company is picked. */
 .co-btn { display: none; }
 @media (max-width: 800px) { .co-btn { display: inline-flex; } }
+/* Desktop Statuss with a printer open: the list is only 400px wide, so the switch and the round buttons don't fit
+   on one row. The switch gives way to the company button, as on phones. */
+@media (min-width: 801px) {
+  .stage.open .splist__filters { display: none; }
+  .stage.open .co-btn { display: inline-flex; }
+}
 .icon-btn.co-on { color: var(--accent-line); background: color-mix(in srgb, var(--accent-line) 14%, var(--card)); box-shadow: inset 0 0 0 1.5px var(--accent-line); }
 :root[data-surface="glass"] .icon-btn.co-on { background: color-mix(in srgb, var(--accent-line) 16%, transparent); box-shadow: inset 0 0 0 1.5px var(--accent-line), var(--glass-shine); }
 /* Phones: the opened search field takes only the room left beside the round buttons (it used to keep its own

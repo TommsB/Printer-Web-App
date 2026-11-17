@@ -44,11 +44,12 @@ function Bars({ p, emptyText }: { p: Printer; emptyText: string }) {
 }
 
 /** Status badge on the printer icon: green ✓ = answers and can print, orange ! = answers but can't print
- *  (jam, door open, no paper… — see snmp.blocking_reasons), red × = no SNMP answer. Nothing when SNMP is off / no reading yet. */
+ *  (jam, door open, no paper… — see snmp.blocking_reasons), red × = no SNMP answer, grey moon = asleep. Nothing when SNMP is off / no reading yet. */
 function ConnBadge({ p }: { p: Printer }) {
   if (!p.snmp_enabled || !p.snapshot) return null
   const st = printerState(p)
-  const [cls, text, icon] = st.offline ? ['bad', 'Nav SNMP savienojuma', Icon.close(9)]
+  const [cls, text, icon] = st.asleep ? ['sleep', 'Miega režīmā: printeris guļ un neatbild', Icon.moon(10)]
+    : st.offline ? ['bad', 'Nav SNMP savienojuma', Icon.close(9)]
     : st.blocked.length ? ['stop', `Nevar drukāt: ${st.blocked.join(', ')}`, Icon.alert(11)]
     : ['ok', 'SNMP savienojums ir, var drukāt', Icon.check(10)]
   return <span className={`conn ${cls}`} role="img" aria-label={text} title={text}>{icon}</span>
@@ -365,7 +366,7 @@ function PrinterInfo({ p, onBack, headRef }: { p: Printer; onBack: () => void; h
               ? <>
                   <Row k="IP adrese"><a href={`http://${p.ip}`} target="_blank" rel="noreferrer">{p.ip}</a></Row>
                   <Row k="Hostname">{snap?.hostname || '–'}</Row>
-                  <Row k="SNMP">{p.snmp_enabled ? (st.offline ? 'Nav atbildes' : 'Ieslēgts') : 'Izslēgts'}</Row>
+                  <Row k="SNMP">{p.snmp_enabled ? `${st.asleep ? 'Miega režīmā' : st.offline ? 'Nav atbildes' : 'Ieslēgts'}${p.snmp_version === '1' ? ' (v1)' : ''}` : 'Izslēgts'}</Row>
                   <Row k="Tīmekļa saskarne"><a href={`http://${p.ip}`} target="_blank" rel="noreferrer">Atvērt ↗</a></Row>
                 </>
               : <Row k="IP adrese">Nav tīklā</Row>}
@@ -413,9 +414,10 @@ function Detail({ p, open, busy, spinning, onRefresh, onAnalytics, onClose, onCh
 /** "Nav pieejams kopš 09:15" (today) / "… kopš 12.10.2026 14:30". When no reading still kept ever answered, the
  *  start is further back than they go: "… vismaz kopš" the oldest one. */
 function offlineText(snap: Printer['snapshot']): string {
+  const what = snap?.asleep ? 'Miega režīmā' : 'Nav pieejams'
   const since = snap?.offline_since
-  if (!since) return 'Nav pieejams'
-  return `Nav pieejams ${snap.offline_long ? 'vismaz ' : ''}kopš ${isToday(since) ? fmtClock(since) : fmtTime(since)}`
+  if (!since) return what
+  return `${what} ${snap.offline_long ? 'vismaz ' : ''}kopš ${isToday(since) ? fmtClock(since) : fmtTime(since)}`
 }
 
 function DetailMain({ p, busy, spinning, onRefresh, onAnalytics, onClose, onChange, allLocations, onInfo, headRef }: {
@@ -481,7 +483,7 @@ function DetailMain({ p, busy, spinning, onRefresh, onAnalytics, onClose, onChan
             {!p.ip
               ? <span className="stat"><span className="tag ok">Nav tīklā</span></span>
               : st.offline
-              ? <span className="stat"><span className="tag bad">{offlineText(snap)}</span></span>
+              ? <span className="stat"><span className={st.asleep ? 'tag ok' : 'tag bad'}>{offlineText(snap)}</span></span>
               : <>
                   {st.blocked.length > 0 && <span className="stat"><span className="tag stop">Nevar drukāt</span></span>}
                   <span className="stat"><b>{fmtHours(snap?.uptime_hours)} h</b><small>darbībā</small></span>
@@ -509,7 +511,7 @@ function DetailMain({ p, busy, spinning, onRefresh, onAnalytics, onClose, onChan
           <div className="lab d-th">Toneri printerī</div>
           <div className="d-tl">
           {toners.length === 0 && (
-            <p className="muted pad">{!p.ip ? 'Printeris nav tīklā, tāpēc toneru līmeņi netiek nolasīti. Zemāk ir tā rezerve.' : st.offline ? `Nav SNMP datu. Pēdējais mēģinājums ${snap ? fmtTime(snap.ts) : ''}.` : 'Nav SNMP datu par toneriem.'}</p>
+            <p className="muted pad">{!p.ip ? 'Printeris nav tīklā, tāpēc toneru līmeņi netiek nolasīti. Zemāk ir tā rezerve.' : st.asleep ? 'Printeris guļ. Līmeņi tiks nolasīti, kad tas pamodīsies.' : st.offline ? `Nav SNMP datu. Pēdējais mēģinājums ${snap ? fmtTime(snap.ts) : ''}.` : 'Nav SNMP datu par toneriem.'}</p>
           )}
           {toners.map((t) => (
             <div key={t.col} className="sp">

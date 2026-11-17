@@ -17,6 +17,14 @@ docker compose down                 # data survives (named volume printer-data)
   - Locked out (no admin can log in): `docker compose exec printers python scripts/set_user.py <user> <pass> admin`
     creates the user or resets the password directly in the database.
 - Settings via env vars in `docker-compose.yml`: `SNMP_COMMUNITY`, `POLL_INTERVAL_MINUTES`, `SNAPSHOT_KEEP_DAYS`.
+- SNMP version per printer: v2c (default) or v1 for printers without v2c (Pārvaldība → printer → Tīkls → SNMP versija).
+  Both use `SNMP_COMMUNITY`. "Pārbaudīt savienojumu" tries the chosen version, then the other, and switches the form
+  to the one that answered. SNMP v3 is not supported.
+- **Printeris var aizmigt** (per printer, Pārvaldība → printer → Tīkls): for printers that go into deep sleep when idle
+  (HP "Auto Off") and stop answering SNMP. While asleep the printer is grey "Miega režīmā", with no "nav pieejams"
+  notification. It counts as unreachable only on a weekday from 8:00 if it hasn't answered once since midnight
+  (its wake schedule should have woken it). Such printers also get a longer retry (5 s × 3) before a poll gives up.
+  See `backend/app/sleep.py`.
 - The container must be able to route to the printer subnets (192.168.88/90/91.x, 10.0.2.x).
 
 ### Sign in with Microsoft (Entra ID)

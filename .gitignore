@@ -12,3 +12,6 @@ auth_users.json
 *.tgz
 *.zip
 .env
+
+# Claude Code personal settings
+.claude/settings.local.json

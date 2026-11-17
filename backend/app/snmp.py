@@ -42,20 +42,30 @@ def _run(cmd: list[str]) -> str:
         return ""
 
 
-def _base(ip: str) -> list[str]:
-    return ["-v2c", "-c", config["snmp_community"], "-r", "1", "-t", "2", "-On", "-Oa", "-Le", ip]
+# SNMP versions a printer can be polled with (printers.snmp_version). Both use the community string; v1 is for
+# printers without v2c. v1 has no GETBULK, so its walks are a little slower, and a missing OID comes back as an
+# error (stderr) instead of "No Such Object": either way the value is None.
+VERSIONS = ("2c", "1")
+DEFAULT_VERSION = "2c"
 
 
-def snmp_get(ip: str, oid: str) -> str | None:
-    out = _run([_bin("snmpget"), *_base(ip), oid]).strip()
+def _base(ip: str, version: str, timeout: int = 2, retries: int = 1) -> list[str]:
+    if version not in VERSIONS:  # only known values ever reach the command line
+        version = DEFAULT_VERSION
+    return [f"-v{version}", "-c", config["snmp_community"], "-r", str(retries), "-t", str(timeout),
+            "-On", "-Oa", "-Le", ip]
+
+
+def snmp_get(ip: str, oid: str, version: str = DEFAULT_VERSION, timeout: int = 2, retries: int = 1) -> str | None:
+    out = _run([_bin("snmpget"), *_base(ip, version, timeout, retries), oid]).strip()
     m = LINE_RE.match(out.splitlines()[-1].strip()) if out else None
     if not m or m.group(2).startswith(_NO_VALUE):
         return None
     return m.group(2).strip('"')
 
 
-def snmp_walk_table(ip: str, base_oid: str) -> dict[str, str]:
-    out = _run([_bin("snmpwalk"), *_base(ip), base_oid])
+def snmp_walk_table(ip: str, base_oid: str, version: str = DEFAULT_VERSION) -> dict[str, str]:
+    out = _run([_bin("snmpwalk"), *_base(ip, version), base_oid])
     result: dict[str, str] = {}
     for line in out.strip().splitlines():
         m = LINE_RE.match(line.strip())
@@ -112,9 +122,9 @@ def attention_reasons(flags: bytes, alert_descs: dict[str, str]) -> list[str]:
     return list(dict.fromkeys(reasons))
 
 
-def _hex_bytes(ip: str, oid: str) -> bytes:
+def _hex_bytes(ip: str, oid: str, version: str) -> bytes:
     """An OCTET STRING as raw bytes (-Ox: always hex, even when the bytes happen to be printable)."""
-    out = _run([_bin("snmpget"), *_base(ip), "-Ox", oid]).strip()
+    out = _run([_bin("snmpget"), *_base(ip, version), "-Ox", oid]).strip()
     m = LINE_RE.match(out.splitlines()[-1].strip()) if out else None
     if not m:
         return b""
@@ -122,16 +132,16 @@ def _hex_bytes(ip: str, oid: str) -> bytes:
     return bytes(int(h, 16) for h in hexes)
 
 
-def blocking_reasons(ip: str, alert_descs: dict[str, str], flags: bytes) -> list[str]:
+def blocking_reasons(ip: str, alert_descs: dict[str, str], flags: bytes, version: str) -> list[str]:
     """Why the printer can't print right now (empty = it can): critical alerts, error flags, device 'down'."""
     reasons: list[str] = []
-    for idx, sev in snmp_walk_table(ip, OID_ALERT_SEVERITY).items():
+    for idx, sev in snmp_walk_table(ip, OID_ALERT_SEVERITY, version).items():
         if _to_int(sev) == 3:  # critical
             reasons.append(alert_descs.get(idx, "").strip() or "Kritiska kļūda")
     for byte, bit, text in BLOCKING_FLAGS:
         if len(flags) > byte and flags[byte] & bit:
             reasons.append(text)
-    if not reasons and _to_int(snmp_get(ip, OID_HR_DEVICE_STATUS)) == 5:
+    if not reasons and _to_int(snmp_get(ip, OID_HR_DEVICE_STATUS, version)) == 5:
         reasons.append("Printeris ziņo, ka nedarbojas")
     return list(dict.fromkeys(reasons))  # no duplicates, keep order
 
@@ -150,29 +160,31 @@ class PollResult:
     supplies: list[dict] = field(default_factory=list)
 
 
-def poll_printer(ip: str) -> PollResult:
+def poll_printer(ip: str, version: str = DEFAULT_VERSION, patient: bool = False) -> PollResult:
     # sysUpTime is mandatory on every SNMP agent (sysName may legitimately be empty),
     # so no answer to it means the printer is offline.
-    ticks = _to_int(snmp_get(ip, OID_UPTIME))
+    ticks = _to_int(snmp_get(ip, OID_UPTIME, version))
+    if ticks is None and patient:  # a printer that may sleep: give it time to wake up before giving up
+        ticks = _to_int(snmp_get(ip, OID_UPTIME, version, timeout=5, retries=2))
     if ticks is None:
         return PollResult(reachable=False)
 
-    res = PollResult(reachable=True, hostname=snmp_get(ip, OID_SYSNAME) or "")
-    res.serial = snmp_get(ip, OID_SERIAL) or ""
-    res.page_count = _to_int(snmp_get(ip, OID_PAGECOUNT))
+    res = PollResult(reachable=True, hostname=snmp_get(ip, OID_SYSNAME, version) or "")
+    res.serial = snmp_get(ip, OID_SERIAL, version) or ""
+    res.page_count = _to_int(snmp_get(ip, OID_PAGECOUNT, version))
     res.uptime_hours = round(ticks / 100 / 3600, 1)
-    raw_status = (snmp_get(ip, OID_DEVICE_STATUS) or "").strip()
+    raw_status = (snmp_get(ip, OID_DEVICE_STATUS, version) or "").strip()
     res.status = DEVICE_STATUS_MAP.get(raw_status, raw_status)
-    alert_descs = snmp_walk_table(ip, OID_ALERT_DESC)
+    alert_descs = snmp_walk_table(ip, OID_ALERT_DESC, version)
     res.alerts = " | ".join(d.strip() for d in alert_descs.values() if d.strip())  # some Kyoceras send blank alerts
-    flags = _hex_bytes(ip, OID_ERROR_STATE)
-    blocking = blocking_reasons(ip, alert_descs, flags)  # alert tables are keyed by alert index
+    flags = _hex_bytes(ip, OID_ERROR_STATE, version)
+    blocking = blocking_reasons(ip, alert_descs, flags, version)  # alert tables are keyed by alert index
     res.blocking = " | ".join(blocking)
     res.attention = "" if blocking else " | ".join(attention_reasons(flags, alert_descs))
 
-    descs = snmp_walk_table(ip, OID_SUPPLY_DESC)
-    levels = snmp_walk_table(ip, OID_SUPPLY_LEVEL)
-    maxes = snmp_walk_table(ip, OID_SUPPLY_MAX)
+    descs = snmp_walk_table(ip, OID_SUPPLY_DESC, version)
+    levels = snmp_walk_table(ip, OID_SUPPLY_LEVEL, version)
+    maxes = snmp_walk_table(ip, OID_SUPPLY_MAX, version)
     for idx, desc in descs.items():
         level, mx = _to_int(levels.get(idx)), _to_int(maxes.get(idx))
         # Printer-MIB: level -1 = unrestricted, -2 = unknown, -3 = some remaining.
@@ -189,23 +201,29 @@ def poll_printer(ip: str) -> PollResult:
 OID_SYSDESCR = "1.3.6.1.2.1.1.1.0"
 
 
-def test_printer(ip: str) -> dict:
-    """One-off check for the printer editor: does this IP answer SNMP, and what does it report? Nothing is saved."""
-    res = poll_printer(ip)
-    if not res.reachable:
+def test_printer(ip: str, version: str = DEFAULT_VERSION) -> dict:
+    """One-off check for the printer editor: does this IP answer SNMP, and what does it report? Nothing is saved.
+    The chosen version is tried first, then the other one; `version` in the answer is the one that worked,
+    so the editor can switch a printer that only speaks v1 to v1 by itself."""
+    for v in (version, *(x for x in VERSIONS if x != version)):
+        res = poll_printer(ip, v)
+        if res.reachable:
+            break
+    else:
         return {"reachable": False}
     return {
         "reachable": True,
+        "version": v,
         "hostname": res.hostname,
-        "description": (snmp_get(ip, OID_SYSDESCR) or "").strip(),
+        "description": (snmp_get(ip, OID_SYSDESCR, v) or "").strip(),
         "serial": res.serial,
         "page_count": res.page_count,
         "supplies": [{"description": s["description"], "pct": s["pct"]} for s in res.supplies],
     }
 
 
-def poll_many(printers: list[tuple[int, str]]) -> dict[int, PollResult]:
-    """Poll [(printer_id, ip)] concurrently so offline printers don't block the rest."""
+def poll_many(printers: list[tuple[int, str, str, bool]]) -> dict[int, PollResult]:
+    """Poll [(printer_id, ip, snmp_version, can_sleep)] concurrently so offline printers don't block the rest."""
     with ThreadPoolExecutor(max_workers=8) as pool:
-        futures = {pid: pool.submit(poll_printer, ip) for pid, ip in printers}
+        futures = {pid: pool.submit(poll_printer, ip, version, can_sleep) for pid, ip, version, can_sleep in printers}
         return {pid: f.result() for pid, f in futures.items()}

@@ -11,12 +11,12 @@ _lock = asyncio.Lock()
 
 def poll_all_sync(printer_id: int | None = None) -> int:
     with get_db() as conn:
-        sql = "SELECT id, ip FROM printers WHERE active = 1 AND snmp_enabled = 1 AND ip IS NOT NULL"
+        sql = "SELECT id, ip, snmp_version, can_sleep FROM printers WHERE active = 1 AND snmp_enabled = 1 AND ip IS NOT NULL"
         args: tuple = ()
         if printer_id is not None:
             sql += " AND id = ?"
             args = (printer_id,)
-        targets = [(r["id"], r["ip"]) for r in conn.execute(sql, args)]
+        targets = [(r["id"], r["ip"], r["snmp_version"], bool(r["can_sleep"])) for r in conn.execute(sql, args)]
 
     results = poll_many(targets)
     ts = datetime.now().isoformat(timespec="seconds")

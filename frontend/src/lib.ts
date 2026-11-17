@@ -129,14 +129,16 @@ export function isImportantAlert(text: string): boolean {
 }
 
 /** hot = needs attention (orange dot); lineHot = status text shown in red (unreachable, or can't print).
- *  blocked = reasons it can't print right now (critical alert / jam / door open / no paper…), from SNMP. */
-export interface PrinterState { offline: boolean; noData: boolean; hot: boolean; lineHot: boolean; line: string; tag: string; blocked: string[] }
+ *  blocked = reasons it can't print right now (critical alert / jam / door open / no paper…), from SNMP.
+ *  asleep = not answering because it sleeps ("Printeris var aizmigt"); offline is true then too (no readings). */
+export interface PrinterState { offline: boolean; asleep?: boolean; noData: boolean; hot: boolean; lineHot: boolean; line: string; tag: string; blocked: string[] }
 
 export function printerState(p: Printer): PrinterState {
   const snap = p.snapshot
   if (!p.ip) return { offline: false, noData: true, hot: false, lineHot: false, line: 'Nav tīklā', tag: 'Nav tīklā', blocked: [] }
   if (!p.snmp_enabled) return { offline: false, noData: true, hot: false, lineHot: false, line: 'SNMP izslēgts', tag: 'SNMP izslēgts', blocked: [] }
   if (!snap) return { offline: false, noData: true, hot: false, lineHot: false, line: 'Nav datu', tag: 'Nav datu', blocked: [] }
+  if (!snap.reachable && snap.asleep) return { offline: true, asleep: true, noData: false, hot: false, lineHot: false, line: 'Miega režīmā', tag: 'Miega režīmā', blocked: [] }
   if (!snap.reachable) return { offline: true, noData: false, hot: true, lineHot: true, line: 'Nav pieejams', tag: 'Nav pieejams', blocked: [] }
   const blocked = (snap.blocking ?? '').split(' | ').filter(Boolean)
   if (blocked.length) return { offline: false, noData: false, hot: true, lineHot: true, line: blocked.join(', '), tag: 'Nevar drukāt', blocked }

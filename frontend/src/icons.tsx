@@ -9,6 +9,8 @@ const svg = (size: number, children: ReactNode) => (
 export const Icon = {
   printer: (s = 22) => svg(s, <><path d="M7 9V4h10v5" /><rect x="3.5" y="9" width="17" height="8" rx="2.5" /><path d="M7 14h10v6H7z" /></>),
   box: (s = 22) => svg(s, <><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /></>),
+  // A crescent moon: the printer is asleep ("Miega režīmā").
+  moon: (s = 22) => svg(s, <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />),
   clock: (s = 22) => svg(s, <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>),
   sliders: (s = 22) => svg(s, <><path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></>),
   refresh: (s = 22) => svg(s, <><path d="M20 11a8 8 0 0 0-14-4L4 9" /><path d="M4 4v5h5" /><path d="M4 13a8 8 0 0 0 14 4l2-2" /><path d="M20 20v-5h-5" /></>),

@@ -2,6 +2,7 @@
 
 Three kinds, each user picks which they want (stored per user, applies to all their devices):
   printer      a printer can't print (jam, door open, no paper…) or stopped answering
+               (a printer that may sleep only when it should be awake and is not: see sleep.py)
   replacement  a toner or drum replacement was detected and waits in Vēsture → Jāpārbauda
   toner        the toner in a printer is below 40% — or its drum below 15% — (or forecast to run out within
                two weeks) and there is no spare in the reserve ("zems pēdējais toneris" / "…drums")
@@ -35,7 +36,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from . import forecast
+from . import forecast, sleep
 from .auth import current_username
 from .config import config
 from .db import db_dep, get_db
@@ -273,7 +274,7 @@ def after_poll(conn: sqlite3.Connection, printer_ids: list[int]) -> list[Message
             announced.discard(key)
 
     for pid in printer_ids:
-        printer = conn.execute("SELECT location, color_type FROM printers WHERE id = ?", (pid,)).fetchone()
+        printer = conn.execute("SELECT location, color_type, can_sleep FROM printers WHERE id = ?", (pid,)).fetchone()
         snaps = conn.execute("SELECT id, reachable, blocking FROM snmp_snapshots WHERE printer_id = ?"
                              " ORDER BY id DESC LIMIT 2", (pid,)).fetchall()
         if not printer or not snaps:
@@ -282,6 +283,17 @@ def after_poll(conn: sqlite3.Connection, printer_ids: list[int]) -> list[Message
         url = f"/?p={pid}"
 
         if not cur["reachable"]:
+            if printer["can_sleep"]:
+                # Not answering is its sleep. Only once it should be awake (weekday, from 8:00) and has not
+                # answered once today is it really unreachable: announced once that day, cleared the next night.
+                if sleep.overdue(conn, pid):
+                    start(f"offline:{pid}", Message(
+                        "printer", f"{name}: nav pieejams",
+                        f"Šodien vēl nav atbildējis, lai gan līdz {sleep.WAKE_CHECK:%H:%M} tam bija jāpamostas.",
+                        url, f"printer-{pid}"))
+                else:
+                    stop(f"offline:{pid}")
+                continue
             # One missed poll happens (sleep, a network blip). Two in a row = really not answering.
             if len(snaps) > 1 and not snaps[1]["reachable"]:
                 start(f"offline:{pid}", Message("printer", f"{name}: nav pieejams",

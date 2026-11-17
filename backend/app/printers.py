@@ -1,11 +1,12 @@
 import sqlite3
 from datetime import datetime, timedelta
 from ipaddress import IPv4Address
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from . import forecast, snmp, stockloc
+from . import forecast, sleep, snmp, stockloc
 from .auth import current_username
 from .db import db_dep
 from .poller import poll_all
@@ -21,6 +22,8 @@ class PrinterIn(BaseModel):
     ip: str | None = None  # empty = not on the network: only the toner reserve is tracked
     color_type: str = "Krāsains"
     snmp_enabled: bool = True
+    snmp_version: Literal["2c", "1"] = "2c"  # "1" for a printer without SNMP v2c (snmp.py)
+    can_sleep: bool = False  # "Printeris var aizmigt": not answering is sleep, not offline (sleep.py)
     active: bool = True
     notes: str = ""
     default_location_id: int | None = None  # where received cartridges go by default
@@ -57,6 +60,7 @@ def _printer_dict(conn: sqlite3.Connection, row: sqlite3.Row, with_supplies: boo
     d = dict(row)
     d["snmp_enabled"] = bool(d["snmp_enabled"])
     d["active"] = bool(d["active"])
+    d["can_sleep"] = bool(d["can_sleep"])
     # No IP = not polled; readings left from when it still had an address would only mislead.
     snap = conn.execute(
         "SELECT * FROM snmp_snapshots WHERE printer_id = ? ORDER BY ts DESC, id DESC LIMIT 1",
@@ -86,6 +90,8 @@ def _printer_dict(conn: sqlite3.Connection, row: sqlite3.Row, with_supplies: boo
                 "SELECT MIN(ts) FROM snmp_snapshots WHERE printer_id = ? AND reachable = 0 AND ts > ?",
                 (d["id"], last_ok or "")).fetchone()[0]
             s["offline_long"] = last_ok is None
+        # Not answering because it is asleep (it may, and it isn't past its wake check): shown grey, not red.
+        s["asleep"] = not s["reachable"] and d["can_sleep"] and not sleep.overdue(conn, d["id"])
         d["snapshot"] = s
     d["toners"] = [dict(x) for x in conn.execute(
         "SELECT t.id, t.code, t.color, t.kind, pt.qty, pt.optimal_qty, pt.qty < pt.optimal_qty AS low,"
@@ -153,12 +159,13 @@ async def refresh() -> dict:
 
 class SnmpTestIn(BaseModel):
     ip: IPv4Address  # validated: only a plain IPv4 address ever reaches the snmp command line
+    version: Literal["2c", "1"] = "2c"  # tried first; the other one if it doesn't answer
 
 
 @router.post("/test-snmp")
 def test_snmp(body: SnmpTestIn) -> dict:
     """'Pārbaudīt savienojumu' in the printer editor (sync: runs in the thread pool, can take a few seconds)."""
-    return snmp.test_printer(str(body.ip))
+    return snmp.test_printer(str(body.ip), body.version)
 
 
 @router.get("/{printer_id}")
@@ -290,10 +297,10 @@ def create_printer(body: PrinterIn, conn: sqlite3.Connection = Depends(db_dep)) 
     ip = _ip(body)
     try:
         cur = conn.execute(
-            "INSERT INTO printers (company, location, model, brand, ip, color_type, snmp_enabled, active, notes,"
-            " default_location_id, empties_location_id, main_location_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO printers (company, location, model, brand, ip, color_type, snmp_enabled, snmp_version, can_sleep,"
+            " active, notes, default_location_id, empties_location_id, main_location_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (body.company, body.location, body.model, body.brand, ip, body.color_type,
-             int(body.snmp_enabled), int(body.active), body.notes, body.default_location_id, body.empties_location_id,
+             int(body.snmp_enabled), body.snmp_version, int(body.can_sleep), int(body.active), body.notes, body.default_location_id, body.empties_location_id,
              body.main_location_id))
     except sqlite3.IntegrityError:
         raise HTTPException(409, "Printeris ar šādu IP jau eksistē")
@@ -307,10 +314,10 @@ def update_printer(printer_id: int, body: PrinterIn, conn: sqlite3.Connection = 
     try:
         cur = conn.execute(
             "UPDATE printers SET company=?, location=?, model=?, brand=?, ip=?, color_type=?,"
-            " snmp_enabled=?, active=?, notes=?, default_location_id=?, empties_location_id=?, main_location_id=? WHERE id=?",
+            " snmp_enabled=?, snmp_version=?, can_sleep=?, active=?, notes=?, default_location_id=?, empties_location_id=?, main_location_id=? WHERE id=?",
             (body.company, body.location, body.model, body.brand, ip, body.color_type,
-             int(body.snmp_enabled), int(body.active), body.notes, body.default_location_id, body.empties_location_id,
-             body.main_location_id, printer_id))
+             int(body.snmp_enabled), body.snmp_version, int(body.can_sleep), int(body.active), body.notes, body.default_location_id,
+             body.empties_location_id, body.main_location_id, printer_id))
     except sqlite3.IntegrityError:
         raise HTTPException(409, "Printeris ar šādu IP jau eksistē")
     if cur.rowcount == 0:

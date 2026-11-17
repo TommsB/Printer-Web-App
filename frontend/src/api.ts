@@ -25,6 +25,7 @@ export interface Snapshot {
   pages_since: string | null
   offline_since: string | null // not answering: since this reading (the first failed one after the last that answered)
   offline_long: boolean // …and no reading still kept answered, so it has been longer than that
+  asleep: boolean // not answering because it is asleep ("Printeris var aizmigt", before its wake check): grey, not red
 }
 /** How many of a printer's cartridges sit in one storage location. */
 export interface StockLoc { location_id: number; name: string; short: string; qty: number }
@@ -42,7 +43,8 @@ export interface PrinterToner {
 export interface Printer {
   id: number; company: string; location: string; model: string; brand: string
   ip: string | null // null = not on the network: reserve only, never polled
-  color_type: string; snmp_enabled: boolean; active: boolean; notes: string; default_location_id: number | null
+  color_type: string; snmp_enabled: boolean; snmp_version: SnmpVersion; active: boolean; notes: string; default_location_id: number | null
+  can_sleep: boolean // "Printeris var aizmigt": not answering is sleep, not offline (backend sleep.py)
   empties_location_id: number | null // where this printer's empty cartridges go by default (Tukšie)
   main_location_id: number | null // where its toners are kept: a move goes there by default
   snapshot: Snapshot | null; toners: PrinterToner[]
@@ -63,7 +65,7 @@ export interface UsageMonth {
 }
 export interface PrinterInput {
   company: string; location: string; model: string; brand: string; ip: string
-  color_type: string; snmp_enabled: boolean; active: boolean; notes: string; toner_ids: number[]
+  color_type: string; snmp_enabled: boolean; snmp_version: SnmpVersion; can_sleep: boolean; active: boolean; notes: string; toner_ids: number[]
   default_location_id: number | null
   empties_location_id: number | null
   main_location_id: number | null
@@ -120,9 +122,12 @@ export interface Empties { rows: EmptyRow[]; log: EmptyLogItem[] }
 export interface Undoable { movement_id: number }
 export interface OrderItem { printer_id: number; toner_id: number; qty: number }
 /** Result of "Pārbaudīt savienojumu" in the printer editor (one SNMP read, nothing saved). */
+/** '1' for a printer without SNMP v2c. */
+export type SnmpVersion = '2c' | '1'
+/** version: the one that answered (the chosen one is tried first, then the other). */
 export type SnmpTest =
   | { reachable: false }
-  | { reachable: true; hostname: string; description: string; serial: string; page_count: number | null
+  | { reachable: true; version: SnmpVersion; hostname: string; description: string; serial: string; page_count: number | null
       supplies: { description: string; pct: number | null }[] }
 
 /** A toner or drum replacement detected from SNMP (level jumped up), waiting for review in Žurnāls.
@@ -300,7 +305,7 @@ export const api = {
   /** Per-user settings (key → text); null = not set yet. */
   getSetting: (key: string) => req<{ value: string | null }>('GET', `/api/settings/${key}`),
   putSetting: (key: string, value: string) => req<{ value: string }>('PUT', `/api/settings/${key}`, { value }),
-  testSnmp: (ip: string) => req<SnmpTest>('POST', '/api/printers/test-snmp', { ip }),
+  testSnmp: (ip: string, version: SnmpVersion) => req<SnmpTest>('POST', '/api/printers/test-snmp', { ip, version }),
   /** Save the user's custom printer order (Statuss and Krājumi follow it; /api/printers returns printers in it). */
   setOrder: (ids: number[]) => req<{ ids: number[] }>('PUT', '/api/printers/order', { ids }),
 }

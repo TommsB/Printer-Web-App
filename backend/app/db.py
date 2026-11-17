@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS printers (
     ip TEXT UNIQUE,  -- NULL = not on the network: only its toner reserve is tracked, never polled
     color_type TEXT NOT NULL DEFAULT 'Krāsains',
     snmp_enabled INTEGER NOT NULL DEFAULT 1,
+    snmp_version TEXT NOT NULL DEFAULT '2c',  -- '2c' | '1' (snmp.py)
+    can_sleep INTEGER NOT NULL DEFAULT 0,  -- may fall asleep and stop answering: not reported as offline (sleep.py)
     active INTEGER NOT NULL DEFAULT 1,
     notes TEXT NOT NULL DEFAULT ''
 );
@@ -387,6 +389,10 @@ def init_db() -> None:
         if "main_location_id" not in _columns(conn, "printers"):  # where this printer's toners are kept (moves go there)
             conn.execute("ALTER TABLE printers ADD COLUMN main_location_id INTEGER"
                          " REFERENCES locations(id) ON DELETE SET NULL")
+        if "snmp_version" not in _columns(conn, "printers"):  # v1 for printers without SNMP v2c
+            conn.execute("ALTER TABLE printers ADD COLUMN snmp_version TEXT NOT NULL DEFAULT '2c'")
+        if "can_sleep" not in _columns(conn, "printers"):  # "Printeris var aizmigt" (sleep.py)
+            conn.execute("ALTER TABLE printers ADD COLUMN can_sleep INTEGER NOT NULL DEFAULT 0")
         if "is_global" not in _columns(conn, "locations"):  # a shared store every printer moves cartridges to (SP, LI)
             conn.execute("ALTER TABLE locations ADD COLUMN is_global INTEGER NOT NULL DEFAULT 0")
         if "short" not in _columns(conn, "locations"):  # short display name for tight spaces (toner rows)

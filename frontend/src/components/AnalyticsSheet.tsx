@@ -10,6 +10,15 @@ import { Segmented } from './Toggle'
 const TONERS: Record<string, { label: string; color: string; ink: string }> = {
   K: { label: 'Black', color: 'var(--k)', ink: 'var(--on-ink)' }, C: { label: 'Cyan', color: 'var(--c)', ink: '#fff' },
   M: { label: 'Magenta', color: 'var(--m)', ink: '#fff' }, Y: { label: 'Yellow', color: 'var(--y)', ink: '#33332F' },
+  '': { label: 'Drums', color: 'var(--g)', ink: '#fff' }, // a drum the printer reports without a colour
+}
+const COLORS = ['K', 'C', 'M', 'Y', '']
+/** What the sheet shows the levels and use of: toners, or drums (the "Toneri / Drumi" switch in the heading). */
+export type Kind = 'toner' | 'drum'
+/** The words that change with it. */
+const W = {
+  toner: { Of: 'Toneru', of: 'toneru', One: 'Toneris', one: 'toneris', many: 'toneri', its: 'tonera', replaced: 'Nomainītās kasetnes', replacedShort: 'Nomainītas kasetnes' },
+  drum: { Of: 'Drumu', of: 'drumu', One: 'Drums', one: 'drums', many: 'drumi', its: 'druma', replaced: 'Nomainītie drumi', replacedShort: 'Nomainīti drumi' },
 }
 /** "2026-10-08" → "08.10." */
 const dayLabel = (d: string) => `${d.slice(8)}.${d.slice(5, 7)}.`
@@ -23,15 +32,15 @@ const COMPANY_ORDER = ['Tenax Panel', 'Tenapors', 'Tenax'] // the rows of the pr
 const RISE_START = 0.12, RISE_STEP = 0.035 // seconds: the picker's cards start rising while the sheet is still coming up, one after another
 
 /**
- * Per toner colour: how many percentage points of the cartridge went each day — the drop between one day's
+ * Per toner (or drum) colour: how many percentage points went each day — the drop between one day's
  * last reading and the next. A level that went up (a new cartridge) adds nothing; a day without a reading
  * adds nothing either, and what went that day shows on the next day that has one.
  */
-function tonerUse(data: AnalyticsPart, mono: boolean): Map<string, number[]> {
+function tonerUse(data: AnalyticsPart, mono: boolean, kind: Kind = 'toner'): Map<string, number[]> {
   const out = new Map<string, number[]>()
   for (const s of data.supplies) {
     const c = classifySupply(s.description, mono)
-    if (c?.kind !== 'toner') continue
+    if (c?.kind !== kind) continue
     const drops = out.get(c.color) ?? data.days.map(() => 0)
     let prev: number | null = null
     s.pct.forEach((p, i) => {
@@ -184,7 +193,7 @@ interface Series { key: string; label: string; color: string; ink: string; value
  * heading. Every line starts and ends in a dot, with its level there in a pill of its colour beside it — these
  * stand in for a scale, so the grid lines (0, 50, 100%) carry no numbers.
  */
-function Levels({ days, series, compact }: { days: string[]; series: Series[]; compact: boolean }) {
+function Levels({ days, series, compact, kind }: { days: string[]; series: Series[]; compact: boolean; kind: Kind }) {
   const [box, w, h] = useSize()
   const [hover, setHover] = useState<number | null>(null)
   // The plot takes whatever height the sheet has left for it (CSS), never less than MIN.
@@ -202,7 +211,7 @@ function Levels({ days, series, compact }: { days: string[]; series: Series[]; c
     setHover(Math.min(n - 1, Math.max(0, Math.round(((px - L) / Math.max(1, w - L - R)) * (n - 1)))))
   }
   const show = (v: number | null) => (v === null ? '–' : `${v}%`)
-  const title = 'Toneru līmeņu % kritums laika gaitā'
+  const title = `${W[kind].Of} līmeņu % kritums laika gaitā`
   // Start and end labels: each line's first and latest level in a small pill of its colour, beside the dot there.
   // Where lines start or end close together the pills are spread just enough not to overlap (PILL apart),
   // keeping their order.
@@ -231,9 +240,9 @@ function Levels({ days, series, compact }: { days: string[]; series: Series[]; c
       <div className="an-card__head">
         <h3>{title}
           <Hint label={`Kā lasīt: ${title}`}>
-            Katras krāsas kasetnes līmenis (0–100%) katras dienas beigās, kā to ziņo printeris.<br />
-            <b>Kritums</b> – līnija iet uz leju, kad toneris tiek tērēts; jo stāvāk, jo vairāk izlietots.<br />
-            <b>Lēciens uz augšu</b> – kasetne nomainīta pret jaunu.<br />
+            {kind === 'toner' ? 'Katras krāsas kasetnes' : 'Katra druma'} līmenis (0–100%) katras dienas beigās, kā to ziņo printeris.<br />
+            <b>Kritums</b> – līnija iet uz leju, kad {kind === 'toner' ? 'toneris tiek tērēts' : 'drums nolietojas'}; jo stāvāk, jo vairāk izlietots.<br />
+            <b>Lēciens uz augšu</b> – {kind === 'toner' ? 'kasetne nomainīta' : 'drums nomainīts'} pret jaunu.<br />
             <b>Līdzens posms</b> – tajās dienās nav drukāts vai printeris nav bijis sasniedzams.
           </Hint>
         </h3>
@@ -368,31 +377,32 @@ function Pie({ parts, title, hint, head, totalText, fact, none }: {
   )
 }
 
-function Charts({ data: all, mono, printer }: { data: Analytics; mono: boolean; printer: Printer }) {
+function Charts({ data: all, mono, printer, kind }: { data: Analytics; mono: boolean; printer: Printer; kind: Kind }) {
+  const w = W[kind]
   const from = dataStart(all)
   const data: AnalyticsPart = { days: all.days.slice(from), pages: all.pages.slice(from), supplies: all.supplies.map((s) => ({ ...s, pct: s.pct.slice(from) })) }
   const n = data.days.length
-  const use = tonerUse(data, mono)
+  const use = tonerUse(data, mono, kind)
   const perDay = data.days.map((_, i) => sum([...use.values()].map((d) => d[i])))
-  const parts = ['K', 'C', 'M', 'Y'].filter((c) => use.has(c)).map((c) => ({ key: c, ...TONERS[c], value: sum(use.get(c)!) }))
+  const parts = COLORS.filter((c) => use.has(c)).map((c) => ({ key: c || 'G', ...TONERS[c], value: sum(use.get(c)!) }))
   const pages = data.pages.map((v) => v ?? 0)
   const counted = data.pages.filter((v) => v !== null).length
   // Days a toner level could be compared with the day before: the first day that has a reading is only the starting point.
-  const tonerDaysOf = (d: AnalyticsPart) => Math.max(0, d.days.filter((_, i) => d.supplies.some((s) => s.pct[i] !== null && classifySupply(s.description, mono)?.kind === 'toner')).length - 1)
+  const tonerDaysOf = (d: AnalyticsPart) => Math.max(0, d.days.filter((_, i) => d.supplies.some((s) => s.pct[i] !== null && classifySupply(s.description, mono)?.kind === kind)).length - 1)
   const tonerDays = tonerDaysOf(data)
   // The toner average is per working day too: the days with printing, from the day after the first toner reading
   // on (that first reading is only the starting point). Not "days with a drop" — levels come in whole percent,
   // so a light day's use often only shows a day or two later. With no page counts at all, every day counts.
   const tonerWorkDaysOf = (d: AnalyticsPart) => {
-    const first = d.days.findIndex((_, i) => d.supplies.some((x) => x.pct[i] !== null && classifySupply(x.description, mono)?.kind === 'toner'))
+    const first = d.days.findIndex((_, i) => d.supplies.some((x) => x.pct[i] !== null && classifySupply(x.description, mono)?.kind === kind))
     return first < 0 ? 0 : d.pages.filter((v, i) => i > first && (v ?? 0) > 0).length || tonerDaysOf(d)
   }
   const tonerWorkDays = tonerWorkDaysOf(data)
   const compact = window.matchMedia('(max-width: 800px)').matches
-  // Each toner's level at the end of every day (the first supply of a colour, should a printer report two).
-  const levels: Series[] = ['K', 'C', 'M', 'Y'].flatMap((c) => {
-    const supply = data.supplies.find((s) => { const k = classifySupply(s.description, mono); return k?.kind === 'toner' && k.color === c })
-    return supply ? [{ key: c, ...TONERS[c], values: supply.pct }] : []
+  // Each toner's (drum's) level at the end of every day (the first supply of a colour, should a printer report two).
+  const levels: Series[] = COLORS.flatMap((c) => {
+    const supply = data.supplies.find((s) => { const k = classifySupply(s.description, mono); return k?.kind === kind && k.color === c })
+    return supply ? [{ key: c || 'G', ...TONERS[c], values: supply.pct }] : []
   })
 
   // The period before, for "+12% pret iepr." — only when this period is shown whole and the one before is
@@ -401,12 +411,12 @@ function Charts({ data: all, mono, printer }: { data: Analytics; mono: boolean; 
   const prevCounted = prev ? prev.pages.filter((v) => v !== null).length : 0
   const prevPages = prev && prevCounted >= 0.8 * n ? sum(prev.pages.map((v) => v ?? 0)) : null
   const prevTonerDays = prev && tonerDaysOf(prev) >= 0.8 * (n - 1) ? tonerDaysOf(prev) : 0
-  const prevUse = prev && prevTonerDays ? sum([...tonerUse(prev, mono).values()].flat()) : null
+  const prevUse = prev && prevTonerDays ? sum([...tonerUse(prev, mono, kind).values()].flat()) : null
   const pagesAvg = perWorkDay(pages), tonerAvg = tonerWorkDays ? sum(perDay) / tonerWorkDays : 0
   const tonerHint = (
-    <Hint label="Kā skaitīts toneru % patēriņš">
-      Visu krāsu kasetņu līmeņa kritums kopā, procentpunktos. Piemēram, melnais −40% un ciāns −15% dod 55%.
-      Virs 100% nozīmē, ka kopā izlietots vairāk nekā vienas pilnas kasetnes saturs.
+    <Hint label={`Kā skaitīts ${w.of} % patēriņš`}>
+      {kind === 'toner' ? 'Visu krāsu kasetņu' : 'Visu drumu'} līmeņa kritums kopā, procentpunktos. Piemēram, melnais −40% un ciāns −15% dod 55%.
+      Virs 100% nozīmē, ka kopā izlietots vairāk nekā {kind === 'toner' ? 'vienas pilnas kasetnes saturs' : 'viena jauna druma resurss'}.
     </Hint>
   )
   return (
@@ -414,9 +424,9 @@ function Charts({ data: all, mono, printer }: { data: Analytics; mono: boolean; 
       <div className="an-tiles">
         <Tile label={`Lapas ${n} dienās`} value={counted ? fmtNum(sum(pages)) : '–'} delta={counted ? change(sum(pages), prevPages) : null} spark={sparkPath(pages)} color="var(--ink)" />
         <Tile label={compact ? 'Vidēji darba dienā' : 'Lapas vidēji darba dienā'} hint={<Hint label="Kā rēķināts vidējais darba dienā">{WORKDAY_HINT}</Hint>} value={counted ? fmtNum(Math.round(pagesAvg)) : '–'} delta={counted ? change(pagesAvg, prevPages !== null ? perWorkDay(prev!.pages.map((v) => v ?? 0)) : null) : null} spark={sparkPath(pages)} color="var(--ink)" />
-        <Tile label={compact ? `Toneru % ${n} dienās` : `Toneru % patēriņš ${n} dienās`} hint={tonerHint} value={use.size ? String(sum(perDay)) : '–'} unit={use.size ? '%' : ''}
+        <Tile label={compact ? `${w.Of} % ${n} dienās` : `${w.Of} % patēriņš ${n} dienās`} hint={tonerHint} value={use.size ? String(sum(perDay)) : '–'} unit={use.size ? '%' : ''}
           delta={use.size ? change(sum(perDay), prevUse) : null} spark={use.size ? sparkPath(perDay) : null} color="var(--accent-line)" />
-        <Tile label={compact ? 'Toneru % darba dienā' : 'Toneru % patēriņš vidēji darba dienā'} hint={<Hint label="Kā rēķināts toneru patēriņš darba dienā">{WORKDAY_HINT}</Hint>} value={tonerDays ? tonerAvg.toLocaleString('lv-LV', { maximumFractionDigits: 1 }) : '–'} unit={tonerDays ? '%' : ''}
+        <Tile label={compact ? `${w.Of} % darba dienā` : `${w.Of} % patēriņš vidēji darba dienā`} hint={<Hint label={`Kā rēķināts ${w.of} patēriņš darba dienā`}>{WORKDAY_HINT}</Hint>} value={tonerDays ? tonerAvg.toLocaleString('lv-LV', { maximumFractionDigits: 1 }) : '–'} unit={tonerDays ? '%' : ''}
           delta={tonerDays ? change(tonerAvg, prevUse !== null && prev && tonerWorkDaysOf(prev) ? prevUse / tonerWorkDaysOf(prev) : null) : null} spark={use.size ? sparkPath(perDay) : null} color="var(--accent-line)" />
       </div>
       <div className="an-cols">
@@ -425,36 +435,36 @@ function Charts({ data: all, mono, printer }: { data: Analytics; mono: boolean; 
           <section className="an-card"><Bars days={data.days} values={data.pages} compact={compact} /></section>
           <section className="an-card an-card--2">
           {levels.length > 0
-            ? <Levels days={data.days} series={levels} compact={compact} />
-            : <div className="an-block"><div className="an-card__head"><h3>Toneru līmeņu % kritums laika gaitā</h3></div><p className="muted an-none">Šis printeris pēdējās dienās nav ziņojis toneru līmeni.</p></div>}
+            ? <Levels days={data.days} series={levels} compact={compact} kind={kind} />
+            : <div className="an-block"><div className="an-card__head"><h3>{w.Of} līmeņu % kritums laika gaitā</h3></div><p className="muted an-none">Šis printeris pēdējās dienās nav ziņojis {w.of} līmeni.</p></div>}
           </section>
         </div>
         <div className="an-side">
         {use.size > 0 && (
-          <Pie parts={parts} title="Toneru % patēriņa sadalījums" head={['Krāsa', 'Relatīvais %', 'Fakts %']} totalText={(t) => `${t}%`}
-            fact={(v) => (v ? `−${v}%` : '0%')} none="Šajās dienās toneru līmenis nav mainījies."
+          <Pie parts={parts} title={`${w.Of} % patēriņa sadalījums`} head={['Krāsa', 'Relatīvais %', 'Fakts %']} totalText={(t) => `${t}%`}
+            fact={(v) => (v ? `−${v}%` : '0%')} none={`Šajās dienās ${w.of} līmenis nav mainījies.`}
             hint={(
               <Hint label="Ko nozīmē Relatīvais % un Fakts %">
-                <b>Relatīvais %</b> – šīs krāsas daļa no visa periodā izlietotā tonera (visas krāsas kopā ir 100%).<br />
-                <b>Fakts %</b> – par cik procentpunktiem periodā saruka šīs krāsas kasetnes līmenis.
+                <b>Relatīvais %</b> – {kind === 'toner' ? 'šīs krāsas daļa no visa periodā izlietotā tonera' : 'šī druma daļa no visu drumu nolietojuma periodā'} (visas krāsas kopā ir 100%).<br />
+                <b>Fakts %</b> – par cik procentpunktiem periodā saruka {kind === 'toner' ? 'šīs krāsas kasetnes' : 'šī druma'} līmenis.
               </Hint>
             )} />
         )}
           <ComponentForecast printer={printer} />
         </div>
       </div>
-      <p className="mhint an-note">Līmenis ir katras dienas pēdējais nolasījums; lēciens uz augšu ir kasetnes nomaiņa. Patēriņš ir līmeņa kritums procentpunktos, nomaiņas diena netiek skaitīta. „Pret iepr.” salīdzina ar tikpat garu periodu pirms šī.</p>
+      <p className="mhint an-note">Līmenis ir katras dienas pēdējais nolasījums; lēciens uz augšu ir nomaiņa (jauna kasetne vai drums). Patēriņš ir līmeņa kritums procentpunktos, nomaiņas diena netiek skaitīta. „Pret iepr.” salīdzina ar tikpat garu periodu pirms šī.</p>
     </div>
   )
 }
 
-/** A cartridge counts as replaced when a toner's level is at least this many points above the reading before. */
+/** A cartridge counts as replaced when a toner's (drum's) level is at least this many points above the reading before. */
 const REPLACED_JUMP = 15
-/** Per day: how many toner cartridges were replaced (a level that jumped up), from the printer's own readings. */
-function replacements(data: AnalyticsPart, mono: boolean): number[] {
+/** Per day: how many toner cartridges (drums) were replaced (a level that jumped up), from the printer's own readings. */
+function replacements(data: AnalyticsPart, mono: boolean, kind: Kind = 'toner'): number[] {
   const out = data.days.map(() => 0)
   for (const s of data.supplies) {
-    if (classifySupply(s.description, mono)?.kind !== 'toner') continue
+    if (classifySupply(s.description, mono)?.kind !== kind) continue
     let prev: number | null = null
     s.pct.forEach((p, i) => {
       if (p === null) return
@@ -510,7 +520,8 @@ function ComponentForecast({ printer }: { printer: Printer }) {
   )
 }
 
-function AllCharts({ items, printers }: { items: AllAnalytics['printers']; printers: Printer[] }) {
+function AllCharts({ items, printers, kind }: { items: AllAnalytics['printers']; printers: Printer[]; kind: Kind }) {
+  const w = W[kind]
   const compact = window.matchMedia('(max-width: 800px)').matches
   const byId = new Map(printers.map((p) => [p.id, p]))
   const rows = items.flatMap((it) => { const p = byId.get(it.id); return p ? [{ p, data: it as Analytics, mono: p.color_type === 'Melnbalts' }] : [] })
@@ -527,7 +538,7 @@ function AllCharts({ items, printers }: { items: AllAnalytics['printers']; print
   const n = days.length
   const pages = pagesByDay.map((v) => v ?? 0), counted = pagesByDay.filter((v) => v !== null).length
   const perPrinter = rows.map((r) => ({ p: r.p, pages: sum(r.data.pages.slice(from).map((v) => v ?? 0)) })).sort((a, b) => b.pages - a.pages)
-  const replacedByDay = days.map((_, i) => sum(rows.map((r) => replacements(r.data, r.mono)[from + i])))
+  const replacedByDay = days.map((_, i) => sum(rows.map((r) => replacements(r.data, r.mono, kind)[from + i])))
   const replaced = sum(replacedByDay)
 
   // The period before, for "pret iepr.": only when every printer counted now was (nearly) fully counted then too —
@@ -535,10 +546,14 @@ function AllCharts({ items, printers }: { items: AllAnalytics['printers']; print
   const prevPagesByDay = from === 0 ? total((r) => r.data.prev) : []
   const prevOk = n > 0 && from === 0 && rows.filter((r) => r.data.pages.some((v) => v !== null)).every((r) => r.data.prev.pages.filter((v) => v !== null).length >= 0.8 * n)
   const prevPages = prevOk ? sum(prevPagesByDay.map((v) => v ?? 0)) : null
-  const prevReplaced = prevOk ? sum(rows.map((r) => sum(replacements(r.data.prev, r.mono)))) : null
+  const prevReplaced = prevOk ? sum(rows.map((r) => sum(replacements(r.data.prev, r.mono, kind)))) : null
 
-  // Toners by how soon they run out, from what the printers report now.
-  const toners = printers.filter((p) => p.active && p.ip).flatMap((p) => splitSupplies(p).toners.filter((t) => t.days !== null).map((t) => ({ p, ...t, days: t.days! })))
+  // Toners (drums) by how soon they run out, from what the printers report now.
+  const toners = printers.filter((p) => p.active && p.ip).flatMap((p) => {
+    const { toners, drums } = splitSupplies(p)
+    const list = kind === 'toner' ? toners.map((t) => ({ ...t, key: t.col as string })) : drums.map((d) => ({ ...d, key: d.idx }))
+    return list.filter((t) => t.days !== null).map((t) => ({ p, ...t, days: t.days! }))
+  })
     .sort((a, b) => a.days - b.days || (a.pct ?? 0) - (b.pct ?? 0))
   const soon = toners.filter((t) => t.days <= SOON_DAYS).length
   const firstOut = toners.slice(0, compact ? 4 : 5)
@@ -555,14 +570,14 @@ function AllCharts({ items, printers }: { items: AllAnalytics['printers']; print
       <div className="an-tiles">
         <Tile label={`Lapas ${n} dienās`} value={counted ? fmtNum(sum(pages)) : '–'} delta={counted ? change(sum(pages), prevPages) : null} spark={sparkPath(pages)} color="var(--ink)" />
         <Tile label={compact ? 'Vidēji darba dienā' : 'Lapas vidēji darba dienā'} hint={<Hint label="Kā rēķināts vidējais darba dienā">{WORKDAY_HINT}</Hint>} value={counted ? fmtNum(Math.round(pagesAvg)) : '–'} delta={counted ? change(pagesAvg, prevPages !== null ? perWorkDay(prevPagesByDay.map((v) => v ?? 0)) : null) : null} spark={sparkPath(pages)} color="var(--ink)" />
-        <Tile label={compact ? 'Nomainītas kasetnes' : `Nomainītās kasetnes ${n} dienās`} value={String(replaced)} delta={change(replaced, prevReplaced)} spark={sparkPath(replacedByDay)} color="var(--accent-line)"
+        <Tile label={compact ? w.replacedShort : `${w.replaced} ${n} dienās`} value={String(replaced)} delta={change(replaced, prevReplaced)} spark={sparkPath(replacedByDay)} color="var(--accent-line)"
           hint={(
-            <Hint label="Kā skaitītas nomainītās kasetnes">
-              Skaitīts no printeru ziņotā: ja tonera līmenis no viena nolasījuma uz nākamo pieaug vismaz par {REPLACED_JUMP} procentpunktiem, tā ir kasetnes nomaiņa.
+            <Hint label={`Kā skaitīti: ${w.replaced.toLowerCase()}`}>
+              Skaitīts no printeru ziņotā: ja {w.its} līmenis no viena nolasījuma uz nākamo pieaug vismaz par {REPLACED_JUMP} procentpunktiem, tā ir {kind === 'toner' ? 'kasetnes' : 'druma'} nomaiņa.
             </Hint>
           )} />
-        <Tile label="Drīz beigsies" value={String(soon)} unit={soon === 1 ? ' toneris' : ' toneri'} delta={null} spark={null} color="var(--accent-line)"
-          hint={<Hint label="Kas ir Drīz beigsies">Toneri, kam pēc pašreizējā patēriņa atlikušas {SOON_DAYS} dienas vai mazāk. Rēķināts no šī brīža līmeņiem, nevis izvēlētā perioda.</Hint>} />
+        <Tile label="Drīz beigsies" value={String(soon)} unit={` ${soon === 1 ? w.one : w.many}`} delta={null} spark={null} color="var(--accent-line)"
+          hint={<Hint label="Kas ir Drīz beigsies">{w.many[0].toUpperCase() + w.many.slice(1)}, kam pēc pašreizējā patēriņa atlikušas {SOON_DAYS} dienas vai mazāk. Rēķināts no šī brīža līmeņiem, nevis izvēlētā perioda.</Hint>} />
       </div>
       <div className="an-cols">
         <div className="an-main">
@@ -587,17 +602,17 @@ function AllCharts({ items, printers }: { items: AllAnalytics['printers']; print
           <section className="an-card an-soon">
             <div className="an-card__head">
               <h3>{Icon.stopwatch(18)}Drīzumā beigsies
-                <Hint label="Kā rēķināts, kas drīzumā beigsies">Toneri ar mazāko atlikušo dienu skaitu pēc to pašreizējā patēriņa. Printeri, kam prognozes vēl nav (par maz datu vai nav tīklā), šeit neparādās.</Hint>
+                <Hint label="Kā rēķināts, kas drīzumā beigsies">{w.many[0].toUpperCase() + w.many.slice(1)} ar mazāko atlikušo dienu skaitu pēc to pašreizējā patēriņa. Printeri, kam prognozes vēl nav (par maz datu vai nav tīklā), šeit neparādās.</Hint>
               </h3>
             </div>
             {firstOut.length === 0
               ? <p className="muted an-none">Vēl nav pietiekami daudz datu, lai prognozētu.</p>
               : <ul>
-                <li className="an-soon__head" aria-hidden="true"><span>Toneris</span><em>Atlikums</em><strong>Prognoze</strong></li>
+                <li className="an-soon__head" aria-hidden="true"><span>{w.One}</span><em>Atlikums</em><strong>Prognoze</strong></li>
                 {firstOut.map((t) => (
-                  <li key={`${t.p.id}-${t.col}`}>
-                    <i className={t.col} />
-                    <span><b>{t.p.location}</b><small>{t.name}</small></span>
+                  <li key={`${t.p.id}-${t.key}`}>
+                    <i className={t.col || 'g'} />
+                    <span><b>{t.p.location}</b><small>{t.name || w.One}</small></span>
                     <em aria-label={`atlikums ${t.pct === null ? 'nav zināms' : `${t.pct}%`}`}>{t.pct === null ? '–' : `${t.pct}%`}</em>
                     <strong className={t.days <= SOON_DAYS ? 'hot' : ''} aria-label={`prognoze ${fmtDaysLeft(t.days)}`}>{fmtDaysLeft(t.days)}</strong>
                   </li>
@@ -619,6 +634,7 @@ export function AnalyticsSheet({ printers, onClose, initial = null }: { printers
   // `initial`: opened from a printer's page, straight on that printer (the picker is one tap away in the heading).
   const [id, setId] = useState<number | 'all' | null>(initial)
   const [days, setDays] = useRemembered('analytics.days', 30)
+  const [kindPick, setKind] = useState<Kind>('toner') // Toneri every time the sheet opens (not remembered, unlike the period)
   const [loaded, setLoaded] = useState<{ id: number; days: number; data: Analytics } | null>(null)
   const [loadedAll, setLoadedAll] = useState<{ days: number; items: AllAnalytics['printers'] } | null>(null)
   const [error, setError] = useState('')
@@ -644,6 +660,12 @@ export function AnalyticsSheet({ printers, onClose, initial = null }: { printers
   }, [id, days])
   const fresh = printer !== null && loaded?.id === printer.id && loaded.days === days
   const freshAll = all && loadedAll?.days === days
+  // "Toneri / Drumi" only where there are drums to show: this printer reports a drum level, or (Visi printeri) any does.
+  const hasDrums = all
+    ? list.some((p) => splitSupplies(p).drums.length > 0)
+    : fresh && loaded!.data.supplies.some((s) => classifySupply(s.description, printer!.color_type === 'Melnbalts')?.kind === 'drum')
+  const kind: Kind = hasDrums ? kindPick : 'toner'
+  const KINDS = [{ value: 'toner' as Kind, label: 'Toneri' }, { value: 'drum' as Kind, label: 'Drumi' }]
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
@@ -668,11 +690,21 @@ export function AnalyticsSheet({ printers, onClose, initial = null }: { printers
           {/* With a printer picked its name is the heading and "Analītika" a small label over it. */}
           {picked
             ? <div className="asheet__title">
-                <span className="asheet__kicker">{Icon.chart(16)}Analītika<i> · {days} dienas</i></span>
+                <span className="asheet__kicker">{Icon.chart(16)}Analītika<i> · {days} dienas{kind === 'drum' ? ' · drumi' : ''}</i></span>
                 <h2>{all ? 'Visi printeri' : printer!.location}</h2>
               </div>
             : <h2 className="asheet__big">{Icon.chart(28)}Analītika</h2>}
           {/* The period: a 7 / 30 / 90 switch on desktop; on phones a stopwatch with the browser's own list behind it. */}
+          {/* Toneri / Drumi: a switch on desktop; on phones a round button with the browser's own list behind it. */}
+          {picked && hasDrums && <div className="asheet__period asheet__kind"><Segmented label="Komponenti" value={kind} onChange={setKind} options={KINDS} /></div>}
+          {picked && hasDrums && (
+            <label className="icon-btn asheet__sel asheet__sel--days" title="Komponenti">
+              {Icon.layers(18)}
+              <select value={kind} onChange={(e) => setKind(e.target.value as Kind)} aria-label="Komponenti">
+                {KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+              </select>
+            </label>
+          )}
           {picked && <div className="asheet__period"><Segmented label="Periods" value={String(days)} onChange={(v) => period(+v)} options={PERIODS.map((d) => ({ value: String(d), label: `${d} dienas` }))} /></div>}
           {picked && (
             <label className="icon-btn asheet__sel asheet__sel--days" title="Periods">
@@ -728,8 +760,8 @@ export function AnalyticsSheet({ printers, onClose, initial = null }: { printers
         {all && <div className="asheet__who"><span>{list.length} printeri tīklā · visi uzņēmumi kopā</span></div>}
         {picked && error && <p className="alert">{error}</p>}
         {picked && !error && !(all ? freshAll : fresh) && <p className="muted asheet__wait">Ielādē…</p>}
-        {all && !error && freshAll && <AllCharts key={`all-${days}`} items={loadedAll!.items} printers={printers} />}
-        {printer && !error && fresh && <Charts key={`${printer.id}-${days}`} data={loaded!.data} mono={printer.color_type === 'Melnbalts'} printer={printer} />}
+        {all && !error && freshAll && <AllCharts key={`all-${days}-${kind}`} items={loadedAll!.items} printers={printers} kind={kind} />}
+        {printer && !error && fresh && <Charts key={`${printer.id}-${days}-${kind}`} data={loaded!.data} mono={printer.color_type === 'Melnbalts'} printer={printer} kind={kind} />}
       </section>
     </>,
     document.body,
