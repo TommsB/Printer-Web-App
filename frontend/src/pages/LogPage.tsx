@@ -7,6 +7,7 @@ import { EmptyPlace } from '../components/EmptyPlace'
 import { WarrantyForm } from '../components/TonerDialogs'
 import { matches, SearchBox } from '../components/SearchBox'
 import { TopBar } from '../components/TopBar'
+import { Segmented } from '../components/Toggle'
 import { useRemembered } from '../uiMemory'
 import { useApp } from '../ctx'
 import { Icon } from '../icons'
@@ -114,11 +115,7 @@ export function LogPage() {
   }, [flashShown, flash])
 
   const seg = (label: string, options: { key: string; label: string }[], value: string, pick: (k: string) => void) => (
-    <div className="seg" role="group" aria-label={label}>
-      {options.map((o) => (
-        <button key={o.key} aria-pressed={value === o.key} className={value === o.key ? 'on' : ''} onClick={() => pick(o.key)}>{o.label}</button>
-      ))}
-    </div>
+    <Segmented className="seg" label={label} value={value} onChange={pick} options={options.map((o) => ({ value: o.key, label: o.label }))} />
   )
   // Shown in the page and again in the compact top bar once you scroll down.
   // "Tukšie" is not a history view like the three in the switch (it is a count of what is lying around now),

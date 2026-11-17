@@ -25,6 +25,9 @@ docker compose down                 # data survives (named volume printer-data)
   notification. It counts as unreachable only on a weekday from 8:00 if it hasn't answered once since midnight
   (its wake schedule should have woken it). Such printers also get a longer retry (5 s × 3) before a poll gives up.
   See `backend/app/sleep.py`.
+- **Printer picture** (Pārvaldība → printer → Pamatinformācija → Attēls): shown round in Statuss in place of the
+  printer icon. The browser crops it to the middle square and shrinks it (320 px JPEG) before uploading; the server
+  only accepts real JPEG/PNG/WebP files up to 3 MB and keeps them in `/app/data/printer-photos/`. See `backend/app/photos.py`.
 - The container must be able to route to the printer subnets (192.168.88/90/91.x, 10.0.2.x).
 
 ### Sign in with Microsoft (Entra ID)
@@ -103,6 +106,8 @@ docker compose exec printers python -c "import sqlite3;print(sqlite3.connect('/a
 docker compose cp printers:/app/data/printers.db ./printers-backup.db     # backup / open in DB Browser for SQLite
 docker compose cp ./printers.db printers:/app/data/printers.db            # restore (stop the container first)
 ```
+Files live next to the database in the same volume: `/app/data/attachments/` (order files, delivery notes) and
+`/app/data/printer-photos/` (printer pictures). A full backup copies them too, e.g. `docker compose cp printers:/app/data ./data-backup`.
 Seed from Excel (empty DB): `docker compose cp file.xlsx printers:/tmp/f.xlsx; docker compose exec printers python scripts/import_excel.py /tmp/f.xlsx`
 
 ## Develop without Docker (Windows)

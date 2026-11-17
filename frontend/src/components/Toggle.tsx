@@ -11,16 +11,18 @@ export function Toggle({ checked, onChange, label, hint, disabled }: {
   )
 }
 
-/** Segmented choice (e.g. Krāsains / Melnbalts). */
-export function Segmented<T extends string>({ value, options, onChange, label }: {
-  value: T; options: { value: T; label: React.ReactNode }[]; onChange: (v: T) => void; label: string
+import RubberSegment from './RubberSegment'
+
+/**
+ * Segmented choice (e.g. Krāsains / Melnbalts) — every switch and filter in the app. A React Bits RubberSegment:
+ * the chosen pill stretches over to the new option and snaps in, and can be dragged. Its size and colours come
+ * from the .seg styles where it sits (index.css). `className` replaces the default "seg seg--form" (form
+ * fields); page switches pass plain "seg".
+ */
+export function Segmented<T extends string>({ value, options, onChange, label, className = 'seg seg--form' }: {
+  value: T; options: { value: T; label: React.ReactNode }[]; onChange: (v: T) => void; label: string; className?: string
 }) {
   return (
-    <div className="seg seg--form" role="radiogroup" aria-label={label}>
-      {options.map((o) => (
-        <button key={o.value} type="button" role="radio" aria-checked={value === o.value}
-          className={value === o.value ? 'on' : ''} onClick={() => onChange(o.value)}>{o.label}</button>
-      ))}
-    </div>
+    <RubberSegment items={options} value={value} onChange={(v) => onChange(v as T)} equalSlots={false} aria-label={label} className={className} />
   )
 }

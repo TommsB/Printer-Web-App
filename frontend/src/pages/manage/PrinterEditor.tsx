@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { api, type Printer, type PrinterInput, type SnmpTest, type SnmpVersion, type StoreLocation, type Toner } from '../../api'
+import { useEffect, useRef, useState } from 'react'
+import { squarePhoto } from '../../photo'
+import { api, photoUrl, type Printer, type PrinterInput, type SnmpTest, type SnmpVersion, type StoreLocation, type Toner } from '../../api'
 import { classifySupply, fmtNum, supplyCode } from '../../lib'
 import { Dialog, DestructiveDialog } from '../../components/Dialog'
 import { Stepper } from '../../components/Stepper'
@@ -202,10 +203,28 @@ export function PrinterEditor({ printer, template, onDuplicate, toners: catalogu
     }
   }
 
+  // The printer's picture: kept as it is, a new one picked here (cropped and shrunk already), or removed.
+  // Nothing is sent until Saglabāt, so Atcelt leaves the old picture in place.
+  const [photo, setPhoto] = useState<{ kind: 'keep' } | { kind: 'new'; blob: Blob; url: string } | { kind: 'remove' }>({ kind: 'keep' })
+  const [photoError, setPhotoError] = useState('')
+  const photoInput = useRef<HTMLInputElement>(null)
+  const newPhotoUrl = photo.kind === 'new' ? photo.url : null
+  useEffect(() => () => { if (newPhotoUrl) URL.revokeObjectURL(newPhotoUrl) }, [newPhotoUrl])
+  const shownPhoto = photo.kind === 'new' ? photo.url : photo.kind === 'keep' && printer ? photoUrl(printer) : null
+  const pickPhoto = async (file: File | undefined) => {
+    if (!file) return
+    setPhotoError('')
+    try {
+      const blob = await squarePhoto(file)
+      setPhoto({ kind: 'new', blob, url: URL.createObjectURL(blob) })
+    } catch (err) { setPhotoError(err instanceof Error ? err.message : 'Attēlu neizdevās atvērt') }
+  }
+
   const save = async () => {
     const body = { ...form, location: form.location.trim(), ip: form.ip.trim() }
-    if (printer) await api.updatePrinter(printer.id, body)
-    else await api.createPrinter(body)
+    const saved = printer ? await api.updatePrinter(printer.id, body) : await api.createPrinter(body)
+    if (photo.kind === 'new') await api.setPrinterPhoto(saved.id, photo.blob)
+    else if (photo.kind === 'remove' && printer?.photo) await api.deletePrinterPhoto(saved.id)
     await onSaved()
   }
 
@@ -217,6 +236,27 @@ export function PrinterEditor({ printer, template, onDuplicate, toners: catalogu
         )}
         <div className="fsec">
           <div className="lab">Pamatinformācija</div>
+          {/* The printer's picture: shown round in Statuss in place of the printer icon. */}
+          <div className="pphoto">
+            <span className="pphoto__img">{shownPhoto ? <img src={shownPhoto} alt="" /> : Icon.printer(26)}</span>
+            <span className="pphoto__txt">
+              <b>Attēls</b>
+              <small>Redzams Statusā printera ikonas vietā. Tiek izmantota attēla vidusdaļa (kvadrāts).</small>
+              <span className="pphoto__btns">
+                <button type="button" className="btn small" onClick={() => photoInput.current?.click()}>
+                  {Icon.image(15)}{shownPhoto ? 'Mainīt' : 'Pievienot attēlu'}
+                </button>
+                {shownPhoto && (
+                  <button type="button" className="btn small" onClick={() => { setPhoto({ kind: 'remove' }); setPhotoError('') }}>
+                    {Icon.trash(15)}Noņemt
+                  </button>
+                )}
+              </span>
+              {photoError && <small className="err" role="alert">{photoError}</small>}
+            </span>
+            <input ref={photoInput} type="file" accept="image/*" hidden
+              onChange={(e) => { void pickPhoto(e.target.files?.[0]); e.target.value = '' }} />
+          </div>
           <label>Nosaukums (atrašanās vieta)<input name="location" autoComplete="off" value={form.location} onChange={(e) => set('location', e.target.value)} placeholder="piem. TXP Main birojs…" /></label>
           <div className="frow">
             <label>Modelis<input name="model" autoComplete="off" spellCheck={false} value={form.model} onChange={(e) => set('model', e.target.value)} placeholder="piem. HP MFP M577…" /></label>

@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import attachments, auth, empties, microsoft, orders, printers, push, replacements, settings, toners
+from . import attachments, auth, empties, microsoft, orders, photos, printers, push, replacements, settings, toners
 from .auth import current_username
 from .config import config
 from .db import init_db
@@ -19,6 +19,7 @@ async def lifespan(_: FastAPI):
     init_db()
     auth.bootstrap_users()  # first start: logins from auth_users.json become the first admins
     attachments.sweep()  # defect files whose record is gone
+    photos.sweep()  # printer pictures no printer points at
     task = asyncio.create_task(poll_loop())
     yield
     task.cancel()
@@ -30,6 +31,7 @@ require_auth = Depends(current_username)
 app.include_router(auth.router)
 app.include_router(microsoft.router)  # Sign in with Microsoft (off until ENTRA_* and PUBLIC_URL are set)
 app.include_router(auth.users_router, dependencies=[Depends(auth.require_admin)])  # every route: admins only
+app.include_router(photos.router, dependencies=[require_auth])  # before printers: same /api/printers prefix
 app.include_router(printers.router, dependencies=[require_auth])
 app.include_router(toners.router, dependencies=[require_auth])
 app.include_router(orders.router, dependencies=[require_auth])
@@ -50,13 +52,15 @@ async def cache_headers(request, call_next):
     """Phones (esp. the iPhone home-screen app) must never keep an old app version:
     - /assets/* have content hashes in their names -> cache forever;
     - the page itself, manifest, icons -> always revalidate (cheap 304 via ETag), so a new build shows up;
-    - /api/* -> never cache data."""
+    - /api/* -> never cache data, unless the route set its own rule (a printer picture: its address changes
+      with the picture, so it is cached for good — photos.py)."""
     response = await call_next(request)
     path = request.url.path
     if path.startswith("/assets/"):
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     elif path.startswith("/api/"):
-        response.headers["Cache-Control"] = "no-store"
+        if "cache-control" not in response.headers:
+            response.headers["Cache-Control"] = "no-store"
     else:
         response.headers["Cache-Control"] = "no-cache"
     return response

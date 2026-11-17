@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS printers (
     snmp_enabled INTEGER NOT NULL DEFAULT 1,
     snmp_version TEXT NOT NULL DEFAULT '2c',  -- '2c' | '1' (snmp.py)
     can_sleep INTEGER NOT NULL DEFAULT 0,  -- may fall asleep and stop answering: not reported as offline (sleep.py)
+    photo TEXT,  -- its picture's file name in data/printer-photos/ (photos.py); NULL = none, the printer icon shows
     active INTEGER NOT NULL DEFAULT 1,
     notes TEXT NOT NULL DEFAULT ''
 );
@@ -393,6 +394,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE printers ADD COLUMN snmp_version TEXT NOT NULL DEFAULT '2c'")
         if "can_sleep" not in _columns(conn, "printers"):  # "Printeris var aizmigt" (sleep.py)
             conn.execute("ALTER TABLE printers ADD COLUMN can_sleep INTEGER NOT NULL DEFAULT 0")
+        if "photo" not in _columns(conn, "printers"):  # the printer's picture (photos.py)
+            conn.execute("ALTER TABLE printers ADD COLUMN photo TEXT")
         if "is_global" not in _columns(conn, "locations"):  # a shared store every printer moves cartridges to (SP, LI)
             conn.execute("ALTER TABLE locations ADD COLUMN is_global INTEGER NOT NULL DEFAULT 0")
         if "short" not in _columns(conn, "locations"):  # short display name for tight spaces (toner rows)

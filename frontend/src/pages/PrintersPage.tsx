@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { api, fmtClock, fmtTime, type Order, type Printer, type StoreLocation, type Supply, type UsageMonth } from '../api'
+import { api, fmtClock, fmtTime, photoUrl, type Order, type Printer, type StoreLocation, type Supply, type UsageMonth } from '../api'
 import { useApiData } from '../cache'
 import { AnalyticsSheet } from '../components/AnalyticsSheet'
 import { CompactBar } from '../components/CompactBar'
@@ -53,6 +53,12 @@ function ConnBadge({ p }: { p: Printer }) {
     : st.blocked.length ? ['stop', `Nevar drukāt: ${st.blocked.join(', ')}`, Icon.alert(11)]
     : ['ok', 'SNMP savienojums ir, var drukāt', Icon.check(10)]
   return <span className={`conn ${cls}`} role="img" aria-label={text} title={text}>{icon}</span>
+}
+
+/** The printer's picture, round, in the icon's place (Pārvaldība → printer → Attēls); the printer icon without one. */
+function Avatar({ p, size }: { p: Printer; size: number }) {
+  const url = photoUrl(p)
+  return url ? <img className="ic__photo" src={url} alt="" loading="lazy" decoding="async" /> : Icon.printer(size)
 }
 
 /** Amber dot = needs attention (maintenance / reserve below norm); hover or screen reader says why. */
@@ -175,7 +181,7 @@ export function PrintersPage() {
             ? <div className="splist__sort">
                 <ReorderList items={inScope} label={(p) => p.location} onReorder={reorder}
                   render={(p) => <>
-                    <span className="ic">{Icon.printer(18)}</span>
+                    <span className="ic"><Avatar p={p} size={18} /></span>
                     <span className="rrow__txt"><b>{p.location}</b><small>{[p.model, p.ip].filter(Boolean).join(' · ')}</small></span>
                   </>} />
               </div>
@@ -186,7 +192,7 @@ export function PrintersPage() {
                 // Clicking the selected printer again deselects it.
                 <button key={p.id} className={p.id === selId ? 'item on' : 'item'} aria-pressed={p.id === selId} style={vtName(`printer-${p.id}`, 'row')}
                   onClick={() => select(p.id === selId ? null : p.id)}>
-                  <span className="ic">{Icon.printer(20)}<AttentionDot p={p} /><ConnBadge p={p} /></span>
+                  <span className="ic"><Avatar p={p} size={20} /><AttentionDot p={p} /><ConnBadge p={p} /></span>
                   <span className="nm">
                     <span className="nm-t">{p.location}</span>
                   </span>

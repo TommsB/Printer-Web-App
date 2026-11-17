@@ -4,6 +4,7 @@ import { api, type Printer, type StoreLocation, type Toner } from '../api'
 import { useApiData } from '../cache'
 import { matches, SearchBox } from '../components/SearchBox'
 import { TopBar } from '../components/TopBar'
+import { Segmented } from '../components/Toggle'
 import { useApp } from '../ctx'
 import { Icon } from '../icons'
 import { LocationEditor } from './manage/LocationEditor'
@@ -70,11 +71,7 @@ export function ManagePage() {
 
   // Shown in the panel and again in the compact top bar once you scroll down.
   const sections = (
-    <div className="seg" role="group" aria-label="Sadaļa">
-      {tabs.map((t) => (
-        <button key={t.key} aria-pressed={tab === t.key} className={tab === t.key ? 'on' : ''} onClick={() => setTab(t.key)}>{t.label}</button>
-      ))}
-    </div>
+    <Segmented className="seg" label="Sadaļa" value={tab} onChange={setTab} options={tabs.map((t) => ({ value: t.key, label: t.label }))} />
   )
 
   return (

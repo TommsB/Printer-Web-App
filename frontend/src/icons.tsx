@@ -11,6 +11,8 @@ export const Icon = {
   box: (s = 22) => svg(s, <><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /></>),
   // A crescent moon: the printer is asleep ("Miega režīmā").
   moon: (s = 22) => svg(s, <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />),
+  // A picture (mountains and sun in a frame): a printer's photo.
+  image: (s = 18) => svg(s, <><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="9.5" r="1.8" /><path d="M21 16l-5-5-9 9" /></>),
   clock: (s = 22) => svg(s, <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>),
   sliders: (s = 22) => svg(s, <><path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></>),
   refresh: (s = 22) => svg(s, <><path d="M20 11a8 8 0 0 0-14-4L4 9" /><path d="M4 4v5h5" /><path d="M4 13a8 8 0 0 0 14 4l2-2" /><path d="M20 20v-5h-5" /></>),

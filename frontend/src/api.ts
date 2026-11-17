@@ -47,8 +47,11 @@ export interface Printer {
   can_sleep: boolean // "Printeris var aizmigt": not answering is sleep, not offline (backend sleep.py)
   empties_location_id: number | null // where this printer's empty cartridges go by default (Tukšie)
   main_location_id: number | null // where its toners are kept: a move goes there by default
+  photo: string | null // its picture's file name (backend photos.py); null = the printer icon shows
   snapshot: Snapshot | null; toners: PrinterToner[]
 }
+/** Address of a printer's picture. It carries the file name, so a new picture is a new address (cached for good). */
+export const photoUrl = (p: Pick<Printer, 'id' | 'photo'>) => (p.photo ? `/api/printers/${p.id}/photo?v=${encodeURIComponent(p.photo)}` : null)
 /** One month of a printer's use (newest first from the API). */
 /** The chosen period (7, 30 or 90 days) for the "Analītika" charts: pages printed per day, and each reported supply's level at the end of each day. */
 export interface AnalyticsPart { days: string[]; pages: (number | null)[]; supplies: { idx: string; description: string; pct: (number | null)[] }[] }
@@ -216,6 +219,13 @@ export const api = {
   createPrinter: (b: PrinterInput) => req<Printer>('POST', '/api/printers', b),
   updatePrinter: (id: number, b: PrinterInput) => req<Printer>('PUT', `/api/printers/${id}`, b),
   deletePrinter: (id: number) => req<unknown>('DELETE', `/api/printers/${id}`),
+  /** Set or replace a printer's picture (already cropped and shrunk: see photo.ts). */
+  setPrinterPhoto: (id: number, image: Blob) => {
+    const form = new FormData()
+    form.append('file', image, 'printeris.jpg')
+    return req<{ photo: string }>('PUT', `/api/printers/${id}/photo`, form)
+  },
+  deletePrinterPhoto: (id: number) => req<{ photo: null }>('DELETE', `/api/printers/${id}/photo`),
   toners: () => req<Toner[]>('GET', '/api/toners'),
   createToner: (b: Omit<Toner, 'id'>) => req<Toner>('POST', '/api/toners', b),
   updateToner: (id: number, b: Omit<Toner, 'id'>) => req<Toner>('PUT', `/api/toners/${id}`, b),

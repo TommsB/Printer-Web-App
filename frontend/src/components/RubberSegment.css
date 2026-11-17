@@ -1,0 +1,136 @@
+/* RubberSegment (React Bits). The default look of a bare control; every rule is zero-specificity (:where), so the
+   app's own switch styles (.seg, .nv-rubber in index.css) override it without fighting. The thumb's position,
+   height, radius and label fonts are measured from the buttons in RubberSegment.tsx. */
+:where(.rubber-segment) {
+  --rs-track: #27272a;
+  --rs-thumb: #fafafa;
+  --rs-ink: #fafafa;
+  --rs-ink-active: #18181b;
+  --rs-radius: 10px;
+  --rs-inset: 3px;
+  --rs-thumb-radius: 7px;
+  --rs-h: 36px;
+  --rs-font: 13px;
+  --rs-pad: 14px;
+  --rs-min: 44px;
+  --rs-idle: 0.7;
+  --rs-hover: 0.9;
+  --rs-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: auto;
+  vertical-align: middle;
+  padding: var(--rs-inset);
+  border-radius: var(--rs-radius);
+  background: var(--rs-track);
+  font-family: inherit;
+  touch-action: pan-x pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Kept at normal specificity: the pill and labels are placed against the track. */
+.rubber-segment {
+  position: relative;
+}
+
+:where(.rubber-segment[data-equal]) {
+  grid-auto-columns: minmax(0, 1fr);
+}
+
+:where(.rubber-segment[aria-disabled='true']) {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+:where(.rubber-segment__item) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: calc(var(--rs-h) - var(--rs-inset) * 2);
+  min-width: var(--rs-min);
+  margin: 0;
+  padding: 0 var(--rs-pad);
+  border: 0;
+  border-radius: var(--rs-thumb-radius);
+  background: none;
+  color: var(--rs-ink);
+  opacity: var(--rs-idle);
+  font: inherit;
+  font-size: var(--rs-font);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+  transition:
+    opacity 160ms ease,
+    transform 160ms var(--rs-ease-out);
+}
+
+:where(.rubber-segment__item[aria-checked='true']) {
+  cursor: default;
+}
+
+:where(.rubber-segment[data-draggable] .rubber-segment__item[aria-checked='true']) {
+  cursor: grab;
+}
+
+:where(.rubber-segment[data-held], .rubber-segment[data-held] .rubber-segment__item) {
+  cursor: grabbing;
+}
+
+:where(.rubber-segment__item[data-pressed]) {
+  transform: scale(0.96);
+}
+
+:where(.rubber-segment__item:focus-visible) {
+  outline: 2px solid var(--rs-thumb);
+  outline-offset: 3px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :where(.rubber-segment__item[aria-checked='false']:hover) {
+    opacity: var(--rs-hover);
+  }
+}
+
+/* The thumb's look: a real box moved and sized with the rubber edges, so it can carry shadows and blur. */
+.rubber-segment__pill {
+  position: absolute;
+  left: 0;
+  pointer-events: none;
+}
+:where(.rubber-segment__pill) {
+  background: var(--rs-thumb);
+}
+
+/* The labels in the active colour, each laid over its button and clipped to the thumb's shape. */
+.rubber-segment__thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+:where(.rubber-segment__thumb) {
+  color: var(--rs-ink-active);
+}
+
+.rubber-segment__copy {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(.rubber-segment__item) {
+    transition: opacity 160ms ease;
+  }
+}

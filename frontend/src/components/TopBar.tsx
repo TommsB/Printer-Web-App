@@ -1,14 +1,15 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import ShinyText from './ShinyText'
+import RubberSegment from './RubberSegment'
 import { lightness } from '../color'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../ctx'
 import { useNavCounts } from '../navCounts'
 import { Icon } from '../icons'
 import { ROLE_LV } from '../lib'
 import { Segmented } from './Toggle'
 import { DEFAULT_SURFACE, DEFAULT_THEME, THEMES, useSurface, useTheme, type Surface } from '../theme'
-import { useTabClick } from '../viewTransition'
+import { useGoToSection } from '../viewTransition'
 import { CompactBar } from './CompactBar'
 import { Dialog } from './Dialog'
 import { NotificationsButton } from './NotificationsButton'
@@ -96,11 +97,50 @@ function useTitleColors() {
  *  page opens: the first sweep waits as long as the pause between sweeps. */
 const SHINE = { speed: 3, delay: 5, initialDelay: 5, shineWidth: 35, softness: 0.9, angle: 120 } as const
 
+/** The section that was showing last. Every page has its own top bar, so the new page's switch starts its thumb
+ *  on the section you came from and stretches it over to the new one. */
+let lastSection: string | undefined
+
+/** The old nav's size: 48 px tall like the round buttons beside it, 15 px labels, 18 px side padding. */
+const NAV_SIZE = { '--rs-h': '48px', '--rs-font': '15px', '--rs-pad': '18px' } as CSSProperties
+
+/**
+ * Desktop section switch (phones use the bottom bar): the old trough-and-pill nav as a React Bits RubberSegment.
+ * The pill stretches across the old and new section, snaps in with a small squash, and can be dragged or flicked
+ * to another section. Colours come from the theme and Stils (.nv-rubber in index.css). Tapping the current
+ * section scrolls back to the top.
+ */
+function SectionNav() {
+  const { pathname } = useLocation()
+  const counts = useNavCounts()
+  const go = useGoToSection()
+  const active = NAV.find((n) => (n.end ? pathname === n.to : pathname === n.to || pathname.startsWith(`${n.to}/`)))?.to ?? NAV[0].to
+  const [from] = useState(() => lastSection)
+  useEffect(() => { lastSection = active }, [active])
+  const items = NAV.map((n) => ({
+    value: n.to,
+    label: <>{n.label}{counts[n.to] && <span className="badge-n" title={counts[n.to].text}>{counts[n.to].n}</span>}</>,
+  }))
+  return (
+    <RubberSegment
+      items={items}
+      value={active}
+      from={from}
+      onChange={(to) => go(to)}
+      onReselect={(to) => go(to)}
+      radius={24}
+      inset={4}
+      equalSlots={false}
+      aria-label="Sadaļas"
+      className="nv-rubber"
+      style={NAV_SIZE}
+    />
+  )
+}
+
 export function TopBar({ title, children, sticky }: { title: [string, string]; children?: ReactNode; sticky?: ReactNode }) {
   const colors = useTitleColors()
   const { user, role, logout } = useApp()
-  const counts = useNavCounts()
-  const tabClick = useTabClick()
   const [heading, setHeading] = useState<HTMLHeadingElement | null>(null)
   const [profile, setProfile] = useState(false)
   const [theme, setTheme] = useTheme()
@@ -113,14 +153,7 @@ export function TopBar({ title, children, sticky }: { title: [string, string]; c
         <ShinyText text={title[1]} color={colors.faint} shineColor={colors.shine2} {...SHINE} className="top__t2" />
       </h1>
       <div className="tools">
-        <nav className="nv" aria-label="Sadaļas">
-          {NAV.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? 'on' : '')} onClick={(e) => tabClick(e, n.to)}>
-              {n.label}
-              {counts[n.to] && <span className="badge-n" title={counts[n.to].text}>{counts[n.to].n}</span>}
-            </NavLink>
-          ))}
-        </nav>
+        <SectionNav />
         {/* Company filter pills are hidden for now to keep the phone view simple; ctx.company stays '' (all). */}
         <div className="acts">
           <DeskAnalytics />

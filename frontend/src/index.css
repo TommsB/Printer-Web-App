@@ -82,9 +82,18 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 /* The two title lines (ShinyText: the colour comes from its own gradient, so no `color` here). */
 .top h1 .shiny-text { display: block; width: fit-content; }
 .tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.nv { display: flex; gap: 4px; height: 48px; padding: 4px; border-radius: 24px; background: var(--pillbg); margin-right: 8px; }
-.nv a { display: flex; align-items: center; padding: 0 18px; border-radius: 20px; font-size: 15px; font-weight: 500; color: var(--muted); text-decoration: none; }
-.nv a.on { background: var(--card); color: var(--ink); }
+/* Desktop section switch (React Bits RubberSegment; see TopBar SectionNav), in the old nav's colours: the grey
+   trough, the current section on a card-coloured pill, the other labels grey and darker on hover.
+   Glass style further down, with the other glass rules. */
+.rubber-segment.nv-rubber {
+  margin-right: 8px;
+  --rs-track: var(--pillbg); --rs-thumb: var(--card); --rs-ink: var(--muted); --rs-ink-active: var(--ink);
+  --rs-idle: 1; --rs-hover: 1;
+}
+.nv-rubber .rubber-segment__item { transition: color 160ms ease, transform 160ms var(--rs-ease-out); }
+@media (hover: hover) and (pointer: fine) { .nv-rubber .rubber-segment__item[aria-checked='false']:hover { color: var(--ink); } }
+.nv-rubber .rubber-segment__item:focus-visible { outline-color: var(--outline); }
+.nv-rubber .badge-n { margin-left: 0; }
 .pills { display: flex; gap: 10px; }
 .pill { flex: none; height: 48px; padding: 0 22px; border-radius: 24px; border: 0; background: var(--pillbg); color: var(--muted); font-size: 15px; font-weight: 500; cursor: pointer; }
 .pill.on { background: var(--ink); color: var(--on-ink); }
@@ -135,6 +144,8 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 /* The open printer: the same dark outline and lift as an open card on Krājumi. */
 .item.on { background: var(--card); border-color: var(--outline); box-shadow: inset 0 0 0 .5px var(--outline), 0 12px 32px rgba(40, 40, 36, .13); }
 .ic { grid-area: ic; width: 44px; height: 44px; border-radius: 50%; background: var(--tile); display: flex; align-items: center; justify-content: center; position: relative; }
+/* The printer's picture in the icon's place: fills the circle; the status badges stay on top of it. */
+.ic__photo { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .06); }
 /* SNMP connection badge on the printer icon (bottom right): green ✓ / red ×, ringed in the row's colour. */
 .conn { position: absolute; right: -3px; bottom: -3px; width: 17px; height: 17px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   color: #fff; box-shadow: 0 0 0 2px var(--card); }
@@ -785,6 +796,15 @@ button.flist__name { border: 0; background: none; padding: 0; font: inherit; tex
 .dialog h3 + .fsec { border-top: 0; padding-top: 0; }
 .fsec .lab { margin: 0; }
 .frow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* Printer editor → Attēls: the round preview (as in Statuss, larger), a line of explanation, the buttons. */
+.pphoto { display: flex; align-items: center; gap: 14px; }
+.pphoto__img { flex: none; width: 72px; height: 72px; border-radius: 50%; overflow: hidden; background: var(--tile); color: var(--muted); display: flex; align-items: center; justify-content: center; }
+.pphoto__img img { width: 100%; height: 100%; object-fit: cover; }
+.pphoto__txt { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 14px; }
+.pphoto__txt small { color: var(--muted); font-size: 12.5px; }
+.pphoto__txt small.err { color: var(--bad); }
+.pphoto__btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.pphoto__btns .btn { display: inline-flex; align-items: center; gap: 6px; }
 .fnote { margin: 0; font-size: 12.5px; color: var(--muted); }
 /* Printer editor: IP field + "Pārbaudīt savienojumu", and the test result box below */
 .ip-row { display: flex; align-items: flex-end; gap: 8px; }
@@ -852,7 +872,13 @@ textarea { font: inherit; padding: 10px 14px; border: 1px solid var(--line); bor
 .seg { display: flex; gap: 4px; padding: 4px; background: var(--tile); border-radius: 22px; overflow-x: auto; scrollbar-width: none; min-width: 0; }
 .seg::-webkit-scrollbar { display: none; }
 .seg button { flex: none; height: 34px; padding: 0 14px; border: 0; border-radius: 17px; background: none; color: var(--muted); font-size: 13.5px; font-weight: 500; cursor: pointer; }
-.seg button:hover:not(.on) { color: var(--ink); background: color-mix(in srgb, var(--card) 55%, transparent); }
+.seg button:hover:not(.on):not([aria-checked="true"]) { color: var(--ink); background: color-mix(in srgb, var(--card) 55%, transparent); }
+/* Switches are RubberSegments (Toggle.tsx Segmented): the chosen option is a pill that moves on its own layer;
+   the buttons keep the sizes above, which the pill measures. */
+.seg.rubber-segment { --rs-ink-active: var(--ink); --rs-idle: 1; --rs-hover: 1; }
+.seg .rubber-segment__item { transition: color 160ms ease, background 160ms ease, transform 160ms var(--rs-ease-out); }
+.seg .rubber-segment__pill { background: var(--seg-on); box-shadow: 0 1px 2px rgba(40, 40, 36, .08); }
+.seg .rubber-segment__item:focus-visible { outline: 2px solid var(--outline); outline-offset: -2px; }
 .seg button.on { background: var(--seg-on); color: var(--ink); box-shadow: 0 1px 2px rgba(40, 40, 36, .08); }
 .empty { padding: 24px 0; text-align: center; }
 
@@ -1027,7 +1053,7 @@ body:has(.cbar--detail.on) .cbar:not(.cbar--detail) { opacity: 0; pointer-events
   .page { padding: calc(20px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(110px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); gap: 20px; }
   .top h1 { font-size: 34px; line-height: .98; }
   .tools { display: contents; }
-  .nv { display: none; }
+  .top .nv-rubber { display: none; } /* .top: wins over RubberSegment.css's own display, whatever the load order */
   .acts { order: 2; margin-left: auto; }
   .rb { width: 56px; height: 56px; }
   .pills { order: 3; flex-basis: 100%; overflow-x: auto; gap: 8px; padding-bottom: 2px; }
@@ -1491,8 +1517,20 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
 }
 :root[data-surface="glass"]:is([data-theme="dark"], [data-theme="neon"]) { --well: rgba(255, 255, 255, .07); --seg-glass: rgba(255, 255, 255, .17); }
 /* Switches (company, period, tabs) and the desktop navigation: a see-through trough, the chosen option a brighter pane. */
-:root[data-surface="glass"] :is(.seg, .nv) { background: var(--well); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glass-edge) 55%, transparent); }
-:root[data-surface="glass"] :is(.seg button.on, .nv a.on) { background: var(--seg-glass); box-shadow: var(--glass-shine); }
+:root[data-surface="glass"] .seg { background: var(--well); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glass-edge) 55%, transparent); }
+:root[data-surface="glass"] .seg button.on { background: var(--seg-glass); box-shadow: var(--glass-shine); }
+/* The section switch: the same see-through trough; the pill a pane of glass — a light sheen fading down over
+   the theme's glass tint, frosted (blur) over what's behind it, a bright rim and a soft shadow under it. */
+:root[data-surface="glass"] .rubber-segment.nv-rubber { --rs-track: var(--well); --rs-thumb: var(--seg-glass); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glass-edge) 55%, transparent); }
+:root[data-surface="glass"] :is(.nv-rubber, .seg) .rubber-segment__pill {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .55) 0%, rgba(255, 255, 255, .12) 55%, rgba(255, 255, 255, .28) 100%), var(--seg-glass);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--glass-shine);
+  -webkit-backdrop-filter: blur(12px) saturate(1.8);
+  backdrop-filter: blur(12px) saturate(1.8);
+}
+:root[data-surface="glass"]:is([data-theme="dark"], [data-theme="neon"]) :is(.nv-rubber, .seg) .rubber-segment__pill {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .22) 0%, rgba(255, 255, 255, .05) 55%, rgba(255, 255, 255, .1) 100%), var(--seg-glass);
+}
 /* The round filter buttons in Analītika's heading, and the same kind of button in the compact bar. */
 :root[data-surface="glass"] :is(.asheet__head .icon-btn:not(.asheet__close), .cbar__start .icon-btn) { background: var(--glass); box-shadow: var(--glass-shine); }
 /* Windows (Profils, Paziņojumi, every form and confirmation) and the ⋮ menus: frosted panes with a light rim, over a

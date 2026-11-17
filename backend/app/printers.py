@@ -6,7 +6,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from . import forecast, sleep, snmp, stockloc
+from . import forecast, photos, sleep, snmp, stockloc
 from .auth import current_username
 from .db import db_dep
 from .poller import poll_all
@@ -332,7 +332,9 @@ def update_printer(printer_id: int, body: PrinterIn, conn: sqlite3.Connection = 
 
 @router.delete("/{printer_id}")
 def delete_printer(printer_id: int, conn: sqlite3.Connection = Depends(db_dep)) -> dict:
+    row = conn.execute("SELECT photo FROM printers WHERE id = ?", (printer_id,)).fetchone()
     cur = conn.execute("DELETE FROM printers WHERE id = ?", (printer_id,))
     if cur.rowcount == 0:
         raise HTTPException(404, "Printer not found")
+    photos.remove(row["photo"] if row else None)  # its picture goes too
     return {"ok": True}

@@ -38,24 +38,32 @@ export function withViewTransition(update: () => void, kind: 'state' | 'tab' | '
 export const vtName = (name: string, shape?: 'pane' | 'list' | 'row' | 'card' | 'card-open' | 'rv'): React.CSSProperties =>
   ({ viewTransitionName: name, ...(shape && { viewTransitionClass: shape }) }) as React.CSSProperties
 
-/** onClick for the section tabs (top nav + phone bottom bar): a short cross-fade between sections. */
-export function useTabClick() {
+/** Go to a section (top nav + phone bottom bar) with a short cross-fade; the one you're in scrolls back to the top. */
+export function useGoToSection() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  return (e: React.MouseEvent, to: string) => {
-    // Let the browser handle new-tab clicks; nothing to animate when already there.
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+  return (to: string) => {
     // Tapping the section you're already in scrolls it back to the top (as on iOS).
     if (to === pathname) {
       const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
       window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' })
       return
     }
-    e.preventDefault()
     const url = sectionUrl(to) // back to the section as you left it (e.g. the Pārvaldība tab)
     // Phones: plain navigation. iPhone Safari flashes the fixed bottom bar in view-transition snapshots, so there
     // the pill slides and the page fades in with ordinary CSS instead (.bnav__pill, .page animation in index.css).
     if (window.matchMedia('(max-width: 800px)').matches) navigate(url)
     else withViewTransition(() => navigate(url), 'tab')
+  }
+}
+
+/** onClick for section links: as useGoToSection, but new-tab clicks are left to the browser. */
+export function useTabClick() {
+  const go = useGoToSection()
+  const { pathname } = useLocation()
+  return (e: React.MouseEvent, to: string) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+    if (to !== pathname) e.preventDefault()
+    go(to)
   }
 }
