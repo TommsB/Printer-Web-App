@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { api, type Printer, type StoreLocation, type Toner } from '../api'
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { api, photoUrl, type Printer, type StoreLocation, type Toner } from '../api'
 import { useApiData } from '../cache'
 import { matches, SearchBox } from '../components/SearchBox'
 import { TopBar } from '../components/TopBar'
@@ -45,12 +45,30 @@ export function ManagePage() {
   const [editor, setEditor] = useState<OpenEditor>(null)
   const [addingUser, setAddingUser] = useState(false)
 
+  // The "Iestatījumi" shortcut in Statuss (printer → Informācija) arrives as /manage?printer=12: open that printer's
+  // editor once the list is here, then drop the parameter so a reload doesn't open it again. Came from Statuss
+  // (router state) = closing the editor goes back there, to the same printer.
+  const navigate = useNavigate()
+  const fromStatus = (useLocation().state as { fromStatus?: boolean } | null)?.fromStatus === true
+  const wanted = Number(params.get('printer')) || null
+  const linked = wanted !== null ? pr.data.find((p) => p.id === wanted) : undefined
+  const [opened, setOpened] = useState<{ id: number; back: boolean } | null>(null)
+  if (linked && opened?.id !== linked.id) { // adjust state while rendering
+    setOpened({ id: linked.id, back: fromStatus })
+    setEditor({ kind: 'printer', item: linked })
+  }
+  useEffect(() => { if (linked) setParams({}, { replace: true }) }, [linked, setParams])
+
   const setTab = (t: Tab) => {
     setParams(t === 'printers' ? {} : { tab: t }, { replace: true })
     setQuery('')
   }
   const reloadAll = () => Promise.all([pr.reload(), tn.reload(), lc.reload()])
-  const close = () => setEditor(null)
+  const close = () => {
+    setEditor(null)
+    if (opened?.back) navigate(-1)
+    setOpened(null)
+  }
 
   // toner id -> printers using it (Toneri tab, and delete protection in the toner editor)
   const usage = new Map<number, Printer[]>()
@@ -101,7 +119,8 @@ export function ManagePage() {
           {tab === 'printers' && printers.map((p) => (
             <li key={p.id}>
               <button className={p.active ? 'mrow' : 'mrow off'} onClick={() => setEditor({ kind: 'printer', item: p })}>
-                <span className="mrow__ic">{Icon.printer(18)}</span>
+                {/* The printer's picture (as in Statuss), or the printer icon without one. */}
+                <span className="mrow__ic">{photoUrl(p) ? <img src={photoUrl(p)!} alt="" loading="lazy" decoding="async" /> : Icon.printer(18)}</span>
                 <span className="mrow__body">
                   <span className="mrow__l1"><b>{p.location}</b>
                     {!p.active && <span className="tag-s">Neaktīvs</span>}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { squarePhoto } from '../../photo'
+import { loadPhoto, type Crop } from '../../photo'
+import { PhotoCropper } from '../../components/PhotoCropper'
 import { api, photoUrl, type Printer, type PrinterInput, type SnmpTest, type SnmpVersion, type StoreLocation, type Toner } from '../../api'
 import { classifySupply, fmtNum, supplyCode } from '../../lib'
 import { Dialog, DestructiveDialog } from '../../components/Dialog'
@@ -204,8 +205,11 @@ export function PrinterEditor({ printer, template, onDuplicate, toners: catalogu
   }
 
   // The printer's picture: kept as it is, a new one picked here (cropped and shrunk already), or removed.
-  // Nothing is sent until Saglabāt, so Atcelt leaves the old picture in place.
-  const [photo, setPhoto] = useState<{ kind: 'keep' } | { kind: 'new'; blob: Blob; url: string } | { kind: 'remove' }>({ kind: 'keep' })
+  // Nothing is sent until Saglabāt, so Atcelt leaves the old picture in place. A picked photo first opens the
+  // crop window (PhotoCropper); the original stays in memory, so "Izgriezums" can adjust it again before saving.
+  type NewPhoto = { kind: 'new'; blob: Blob; url: string; img: ImageBitmap; crop: Crop }
+  const [photo, setPhoto] = useState<{ kind: 'keep' } | NewPhoto | { kind: 'remove' }>({ kind: 'keep' })
+  const [cropping, setCropping] = useState<{ img: ImageBitmap; crop?: Crop } | null>(null)
   const [photoError, setPhotoError] = useState('')
   const photoInput = useRef<HTMLInputElement>(null)
   const newPhotoUrl = photo.kind === 'new' ? photo.url : null
@@ -214,10 +218,8 @@ export function PrinterEditor({ printer, template, onDuplicate, toners: catalogu
   const pickPhoto = async (file: File | undefined) => {
     if (!file) return
     setPhotoError('')
-    try {
-      const blob = await squarePhoto(file)
-      setPhoto({ kind: 'new', blob, url: URL.createObjectURL(blob) })
-    } catch (err) { setPhotoError(err instanceof Error ? err.message : 'Attēlu neizdevās atvērt') }
+    try { setCropping({ img: await loadPhoto(file) }) }
+    catch (err) { setPhotoError(err instanceof Error ? err.message : 'Attēlu neizdevās atvērt') }
   }
 
   const save = async () => {
@@ -241,11 +243,16 @@ export function PrinterEditor({ printer, template, onDuplicate, toners: catalogu
             <span className="pphoto__img">{shownPhoto ? <img src={shownPhoto} alt="" /> : Icon.printer(26)}</span>
             <span className="pphoto__txt">
               <b>Attēls</b>
-              <small>Redzams Statusā printera ikonas vietā. Tiek izmantota attēla vidusdaļa (kvadrāts).</small>
+              <small>Redzams Statusā printera ikonas vietā un printera informācijā. Pēc izvēles var norādīt, kuru daļu rādīt.</small>
               <span className="pphoto__btns">
                 <button type="button" className="btn small" onClick={() => photoInput.current?.click()}>
                   {Icon.image(15)}{shownPhoto ? 'Mainīt' : 'Pievienot attēlu'}
                 </button>
+                {photo.kind === 'new' && (
+                  <button type="button" className="btn small" onClick={() => setCropping({ img: photo.img, crop: photo.crop })}>
+                    {Icon.crop(15)}Izgriezums
+                  </button>
+                )}
                 {shownPhoto && (
                   <button type="button" className="btn small" onClick={() => { setPhoto({ kind: 'remove' }); setPhotoError('') }}>
                     {Icon.trash(15)}Noņemt
@@ -426,6 +433,11 @@ export function PrinterEditor({ printer, template, onDuplicate, toners: catalogu
           onConfirm={async () => { await api.deletePrinter(printer.id); await onSaved(); onClose() }}>
           <p className="dlg-text">Dzēst „{printer.location}” kopā ar tā toneru rezervi un vēsturi? To nevar atsaukt. Ja printeris tikai vairs netiek lietots, labāk izslēdziet „Aktīvs”.</p>
         </DestructiveDialog>
+      )}
+      {/* Beside the editor's form, not inside it: its submit must not reach the editor's. */}
+      {cropping && (
+        <PhotoCropper img={cropping.img} initial={cropping.crop} onClose={() => setCropping(null)}
+          onDone={(blob, crop) => setPhoto({ kind: 'new', blob, url: URL.createObjectURL(blob), img: cropping.img, crop })} />
       )}
     </>
   )

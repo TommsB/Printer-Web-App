@@ -26,7 +26,9 @@ docker compose down                 # data survives (named volume printer-data)
   (its wake schedule should have woken it). Such printers also get a longer retry (5 s × 3) before a poll gives up.
   See `backend/app/sleep.py`.
 - **Printer picture** (Pārvaldība → printer → Pamatinformācija → Attēls): shown round in Statuss in place of the
-  printer icon. The browser crops it to the middle square and shrinks it (320 px JPEG) before uploading; the server
+  printer icon, beside the name in the printer's panel, and large in Informācija. After picking a photo, a crop window
+  lets you drag and zoom to choose the square kept (`components/PhotoCropper.tsx`); the browser then shrinks it to a
+  480 px JPEG before uploading (`photo.ts`); the server
   only accepts real JPEG/PNG/WebP files up to 3 MB and keeps them in `/app/data/printer-photos/`. See `backend/app/photos.py`.
 - The container must be able to route to the printer subnets (192.168.88/90/91.x, 10.0.2.x).
 

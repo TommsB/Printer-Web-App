@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api, fmtClock, fmtTime, photoUrl, type Order, type Printer, type StoreLocation, type Supply, type UsageMonth } from '../api'
 import { useApiData } from '../cache'
 import { AnalyticsSheet } from '../components/AnalyticsSheet'
@@ -15,7 +15,7 @@ import { TopBar } from '../components/TopBar'
 import { useRemembered } from '../uiMemory'
 import { useApp } from '../ctx'
 import { Icon } from '../icons'
-import { attentionReasons, DEFECT_STATUS, fmtDate, fmtDaysLeft, fmtHours, fmtNum, isImportantAlert, linkedItem, LOW_PCT, printerState, SOON_DAYS, splitSupplies, type Col } from '../lib'
+import { attentionReasons, DEFECT_STATUS, fmtDate, fmtDaysLeft, fmtHours, fmtNum, isImportantAlert, linkedItem, LOW_PCT, printerState, SOON_DAYS, splitSupplies, type Col, type PrinterState } from '../lib'
 import { vtName, withViewTransition } from '../viewTransition'
 import { CDot, DotTile } from '../components/ColorDot'
 
@@ -59,6 +59,12 @@ function ConnBadge({ p }: { p: Printer }) {
 function Avatar({ p, size }: { p: Printer; size: number }) {
   const url = photoUrl(p)
   return url ? <img className="ic__photo" src={url} alt="" loading="lazy" decoding="async" /> : Icon.printer(size)
+}
+
+/** The printer's picture beside its name in the detail header; nothing without one. */
+function HeadPhoto({ p }: { p: Printer }) {
+  const url = photoUrl(p)
+  return url ? <img className="dhead__photo" src={url} alt="" decoding="async" /> : null
 }
 
 /** Amber dot = needs attention (maintenance / reserve below norm); hover or screen reader says why. */
@@ -342,7 +348,10 @@ function Defects({ printerId }: { printerId: number }) {
   )
 }
 
-/** Printer info sub-view: identity, network and all the counters we have. */
+/** The colour of the status in the Informācija hero: the same meaning as the badge on the printer icon. */
+const heroTone = (st: PrinterState) => (st.asleep || st.noData ? 'idle' : st.offline || st.blocked.length ? 'bad' : st.hot ? 'warn' : 'ok')
+
+/** Printer info sub-view: a hero card (picture, model, status, counters), then details, network, use, defects. */
 function PrinterInfo({ p, onBack, headRef }: { p: Printer; onBack: () => void; headRef: (el: HTMLHeadingElement | null) => void }) {
   const snap = p.snapshot
   const st = printerState(p)
@@ -352,16 +361,38 @@ function PrinterInfo({ p, onBack, headRef }: { p: Printer; onBack: () => void; h
       <div className="dhead">
         <button className="icon-btn" onClick={onBack} aria-label="Atpakaļ uz printeri">{Icon.back(20)}</button>
         <h2 ref={headRef}>{p.location}<small>Informācija</small></h2>
+        <div className="dacts">
+          {/* Shortcut to this printer's settings (Pārvaldība, its editor open); closing the editor comes back here. */}
+          <Link className="icon-btn" to={`/manage?printer=${p.id}`} state={{ fromStatus: true }}
+            aria-label={`Iestatījumi: ${p.location}`} title="Iestatījumi">{Icon.sliders(18)}</Link>
+        </div>
       </div>
       <div className="igrid">
+        {/* Hero: the picture (or the printer icon), what it is, how it is, and its counters in large figures. */}
+        <section className="icard ihero" aria-label="Kopsavilkums">
+          <span className="ihero__photo">
+            {photoUrl(p) ? <img src={photoUrl(p)!} alt={`${p.location} attēls`} decoding="async" /> : Icon.printer(44)}
+          </span>
+          <div className="ihero__main">
+            <div className="ihero__id">
+              <b className="ihero__model">{p.model || 'Modelis nav norādīts'}</b>
+              {(p.brand || p.company || p.color_type) && <span className="ihero__meta">{[p.brand, p.company, p.color_type].filter(Boolean).join(' · ')}</span>}
+              <span className={`ihero__st ${heroTone(st)}`}><i aria-hidden="true" />{st.tag}</span>
+            </div>
+            {/* The same compact line as the printer's main view: value + small label, thin separators. */}
+            <div className="stats-row ihero__stats">
+              <span className="stat"><b>{fmtNum(snap?.page_count)}</b><small>lapas kopā</small></span>
+              <span className="stat"><b>{fmtNum(snap?.pages_today)}</b><small>{snap?.pages_since ? `lapas kopš ${fmtClock(snap.pages_since)}` : 'lapas šodien'}</small></span>
+              <span className="stat"><b>{up == null ? '–' : `${fmtHours(up)} h`}</b><small>{up == null ? 'darbībā' : `darbībā (${(up / 24).toFixed(1)} d)`}</small></span>
+            </div>
+          </div>
+        </section>
         <section className="icard">
           <h3 className="lab">Printeris</h3>
           <dl>
-            <Row k="Modelis">{p.model || '–'}</Row>
-            <Row k="Ražotājs">{p.brand || '–'}</Row>
-            <Row k="Tips">{p.color_type || '–'}</Row>
-            <Row k="Uzņēmums">{p.company || '–'}</Row>
             <Row k="Sērijas nr.">{snap?.serial || '–'}</Row>
+            <Row k="Statuss">{st.line}</Row>
+            <Row k="Atjaunots">{snap ? fmtTime(snap.ts) : '–'}</Row>
             {p.notes && <Row k="Piezīmes">{p.notes}</Row>}
           </dl>
         </section>
@@ -376,16 +407,6 @@ function PrinterInfo({ p, onBack, headRef }: { p: Printer; onBack: () => void; h
                   <Row k="Tīmekļa saskarne"><a href={`http://${p.ip}`} target="_blank" rel="noreferrer">Atvērt ↗</a></Row>
                 </>
               : <Row k="IP adrese">Nav tīklā</Row>}
-          </dl>
-        </section>
-        <section className="icard">
-          <h3 className="lab">Rādītāji</h3>
-          <dl>
-            <Row k="Lapas kopā">{fmtNum(snap?.page_count)}</Row>
-            <Row k={snap?.pages_since ? `Lapas kopš ${fmtClock(snap.pages_since)}` : 'Lapas šodien'}>{fmtNum(snap?.pages_today)}</Row>
-            <Row k="Darbības laiks">{up == null ? '–' : `${fmtHours(up)} h (${(up / 24).toFixed(1)} d)`}</Row>
-            <Row k="Statuss">{st.line}</Row>
-            <Row k="Atjaunots">{snap ? fmtTime(snap.ts) : '–'}</Row>
           </dl>
         </section>
         <Usage printerId={p.id} />
@@ -470,6 +491,7 @@ function DetailMain({ p, busy, spinning, onRefresh, onAnalytics, onClose, onChan
       {/* One header row: < (phone only) · title · actions on the right. */}
       <div className="dhead">
         <button className="icon-btn back-btn" onClick={onClose} aria-label="Atpakaļ uz sarakstu">{Icon.back(20)}</button>
+        <HeadPhoto p={p} />
         <h2 ref={headRef}>{p.location}</h2>
         <div className="dacts">
           {/* This printer's Analītika (only printers on the network have any). */}

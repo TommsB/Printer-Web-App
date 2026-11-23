@@ -12,6 +12,8 @@ export const Icon = {
   // A crescent moon: the printer is asleep ("Miega režīmā").
   moon: (s = 22) => svg(s, <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />),
   // A picture (mountains and sun in a frame): a printer's photo.
+  // Crop marks (two overlapping corners): choose which part of a photo is kept.
+  crop: (s = 18) => svg(s, <><path d="M6 2v14a2 2 0 0 0 2 2h14" /><path d="M18 22V8a2 2 0 0 0-2-2H2" /></>),
   image: (s = 18) => svg(s, <><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="9.5" r="1.8" /><path d="M21 16l-5-5-9 9" /></>),
   clock: (s = 22) => svg(s, <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>),
   sliders: (s = 22) => svg(s, <><path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></>),
