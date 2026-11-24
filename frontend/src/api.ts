@@ -74,7 +74,43 @@ export interface PrinterInput {
   main_location_id: number | null
   norms: Record<number, number> // toner_id -> norm (optimal stock)
 }
-export interface Toner { id: number; code: string; color: string; kind: string }
+export interface Toner { id: number; code: string; color: string; kind: string; price: number | null } // price: € per cartridge, null = not known
+export type TonerInput = Omit<Toner, 'id' | 'price'> & { price?: number | null }
+
+/** Actual spending in one period (a month, this year, the last 90 days): received orders at their kept price.
+ *  estimated = cartridges priced at today's component price (orders from before prices were kept); unpriced = no
+ *  price at all (counted 0 €). toners / drums: of qty, how many were each (the rest is other components).
+ *  by_printer: { printer id: [cost, cartridges, estimated, unpriced, toners, drums] }. */
+export interface SpendBucket {
+  cost: number; qty: number; toners: number; drums: number; estimated: number; unpriced: number
+  by_company: Record<string, number>; by_printer: Record<string, [number, number, number, number, number, number]>
+}
+/** One supply's share of a printer's running cost over the period. */
+export interface CostSupply {
+  toner_id: number; code: string; kind: string; color: string; price: number | null
+  // level/runs_out_days null and current false: the slot isn't reported any more (renamed or removed in the period)
+  used_pct: number; pct_per_day: number; level: number | null; runs_out_days: number | null; current: boolean; cost: number | null
+  own_days: number // days of readings behind this slot's pace (none under a week: pct_per_day 0)
+  // From the pace (null without one): a cartridge lasts life_days, that's per_year replacements a year, and it
+  // costs per_month (price × % a day ÷ 100 × 30.44; null without a price). The printer's per_month is their sum.
+  life_days: number | null; per_year: number | null; per_month: number | null
+}
+/** A printer's running cost. method: 'levels' = from its daily toner/drum levels; 'taken' = from cartridges taken
+ *  from its reserve (no level readings); null = nothing to go on. Sums are null when none of its codes has a price. */
+export interface PrinterCost {
+  id: number; location: string; company: string; model: string; method: 'levels' | 'taken' | null
+  per_month: number | null; per_year: number | null; cost_per_page: number | null; pages_per_month: number | null
+  span_days: number | null; supplies: CostSupply[]; missing: string[]; unpriced: string[]
+}
+/** Analītika → Izmaksas (backend costs.py): the forecast, and what was really spent (received orders by delivery date). */
+export interface CostSummary {
+  days: number; per_month: number; per_year: number; cost_per_page: number | null
+  by_company: Record<string, number>
+  unpriced: string[]
+  // months: the last 12 calendar months, oldest first; year: this year so far; recent: the last recent_days days
+  actual: { months: (SpendBucket & { month: string })[]; year: SpendBucket; recent: SpendBucket; recent_days: number }
+  printers: PrinterCost[]
+}
 export interface StockRow {
   printer_id: number; company: string; location: string; model: string; ip: string | null
   toner_id: number; code: string; color: string; kind: string; qty: number; optimal_qty: number; low: boolean
@@ -104,6 +140,8 @@ export interface Order {
   held_location_id: number | null // where the defective cartridge is kept until it is handed over
   held_at: string | null // that place's name
   files: number // attached photos / documents
+  unit_price: number | null // € per cartridge paid: the component's price when ordered, editable (null = not kept)
+  current_price: number | null // the component's price now (shown for orders without a kept price)
   /** Delivery notes ("pavadzīmes") etc. One document covers several orders, so the same one shows on each.
    *  Only filled in by the order lists. */
   docs?: DeliveryDoc[]
@@ -227,8 +265,10 @@ export const api = {
   },
   deletePrinterPhoto: (id: number) => req<{ photo: null }>('DELETE', `/api/printers/${id}/photo`),
   toners: () => req<Toner[]>('GET', '/api/toners'),
-  createToner: (b: Omit<Toner, 'id'>) => req<Toner>('POST', '/api/toners', b),
-  updateToner: (id: number, b: Omit<Toner, 'id'>) => req<Toner>('PUT', `/api/toners/${id}`, b),
+  createToner: (b: TonerInput) => req<Toner>('POST', '/api/toners', b),
+  updateToner: (id: number, b: TonerInput) => req<Toner>('PUT', `/api/toners/${id}`, b),
+  /** The cost forecast for every active printer; `days`: the period the pace is taken from (30 or 90). */
+  costs: (days: number) => req<CostSummary>('GET', `/api/costs?days=${days}`),
   deleteToner: (id: number) => req<unknown>('DELETE', `/api/toners/${id}`),
   stock: () => req<StockRow[]>('GET', '/api/stock'),
   /** emptyLocationId: where the empty cartridge is put (Tukšie); null = it isn't counted. */
@@ -288,6 +328,8 @@ export const api = {
   cancelOrder: (id: number) => req<Order>('POST', `/api/orders/${id}/cancel`),
   /** Removes the order record only; stock is not changed. */
   deleteOrder: (id: number) => req<unknown>('DELETE', `/api/orders/${id}`),
+  /** Correct what was paid per cartridge (0 for a free one). Not for warranty replacements. */
+  setOrderPrice: (id: number, unitPrice: number) => req<Order & { docs: DeliveryDoc[] }>('PUT', `/api/orders/${id}/price`, { unit_price: unitPrice }),
   setOptimal: (printerId: number, tonerId: number, optimal_qty: number) =>
     req<StockRow>('PUT', `/api/stock/${printerId}/${tonerId}/optimal`, { optimal_qty }),
   movements: () => req<Movement[]>('GET', '/api/movements'),

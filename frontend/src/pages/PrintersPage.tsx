@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { api, fmtClock, fmtTime, photoUrl, type Order, type Printer, type StoreLocation, type Supply, type UsageMonth } from '../api'
+import { api, fmtClock, fmtTime, photoUrl, type CostSummary, type Order, type Printer, type StoreLocation, type Supply, type UsageMonth } from '../api'
 import { useApiData } from '../cache'
 import { AnalyticsSheet } from '../components/AnalyticsSheet'
 import { CompactBar } from '../components/CompactBar'
@@ -15,7 +15,7 @@ import { TopBar } from '../components/TopBar'
 import { useRemembered } from '../uiMemory'
 import { useApp } from '../ctx'
 import { Icon } from '../icons'
-import { attentionReasons, DEFECT_STATUS, fmtDate, fmtDaysLeft, fmtHours, fmtNum, isImportantAlert, linkedItem, LOW_PCT, printerState, SOON_DAYS, splitSupplies, type Col, type PrinterState } from '../lib'
+import { attentionReasons, DEFECT_STATUS, fmtDate, fmtDaysLeft, fmtEur, fmtEurAuto, fmtHours, fmtNum, isImportantAlert, linkedItem, LOW_PCT, printerState, SOON_DAYS, splitSupplies, type Col, type PrinterState } from '../lib'
 import { vtName, withViewTransition } from '../viewTransition'
 import { CDot, DotTile } from '../components/ColorDot'
 
@@ -59,6 +59,17 @@ function ConnBadge({ p }: { p: Printer }) {
 function Avatar({ p, size }: { p: Printer; size: number }) {
   const url = photoUrl(p)
   return url ? <img className="ic__photo" src={url} alt="" loading="lazy" decoding="async" /> : Icon.printer(size)
+}
+
+/** "≈ 38 € mēnesī" in the printer's stats line: its running cost at the last 30 days' pace (Analītika → Izmaksas
+ *  has the details); the cost per page on hover. Nothing until its components have prices. */
+function CostStat({ printerId }: { printerId: number }) {
+  const { data } = useApiData<CostSummary | null>('costs-30', () => api.costs(30), null)
+  const c = data?.printers.find((x) => x.id === printerId)
+  if (!c || c.per_month === null) return null
+  const tip = [c.cost_per_page !== null && `${fmtEur(c.cost_per_page, 3)} par lapu`, c.per_year !== null && `≈ ${fmtEur(c.per_year)} gadā`,
+    c.missing.length > 0 && `bez cenas: ${c.missing.join(', ')}`].filter(Boolean).join(' · ')
+  return <span className="stat" title={tip || undefined}><b>≈ {fmtEurAuto(c.per_month)}</b><small>mēnesī</small></span>
 }
 
 /** The printer's picture beside its name in the detail header; nothing without one. */
@@ -523,6 +534,7 @@ function DetailMain({ p, busy, spinning, onRefresh, onAnalytics, onClose, onChan
                 <small>{snap.pages_since ? `lapas kopš ${fmtClock(snap.pages_since)}` : 'lapas šodien'}</small>
               </span>
             )}
+            <CostStat printerId={p.id} />
           </div>
           {/* Printer messages as one quiet line: orange only for real problems. */}
           {(important.length > 0 || info.length > 0) && (

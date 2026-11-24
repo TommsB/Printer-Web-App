@@ -19,10 +19,11 @@ import RubberSegment from './RubberSegment'
  * from the .seg styles where it sits (index.css). `className` replaces the default "seg seg--form" (form
  * fields); page switches pass plain "seg".
  */
-export function Segmented<T extends string>({ value, options, onChange, label, className = 'seg seg--form' }: {
+export function Segmented<T extends string>({ value, options, onChange, label, className = 'seg seg--form', disabled = false }: {
   value: T; options: { value: T; label: React.ReactNode }[]; onChange: (v: T) => void; label: string; className?: string
+  disabled?: boolean // greyed out and not clickable (kept in place, e.g. Toneri / Drumi while Izmaksas is shown)
 }) {
   return (
-    <RubberSegment items={options} value={value} onChange={(v) => onChange(v as T)} equalSlots={false} aria-label={label} className={className} />
+    <RubberSegment items={options} value={value} onChange={(v) => onChange(v as T)} equalSlots={false} aria-label={label} className={className} disabled={disabled} />
   )
 }

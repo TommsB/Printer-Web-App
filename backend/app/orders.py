@@ -45,6 +45,7 @@ SELECT o.id, o.printer_id, o.toner_id, o.qty, o.status, o.note, o.created_by, o.
        o.resolved_by, o.resolved_ts, o.received_qty, o.warranty, o.removed_pct, o.defect, o.sent_ts, o.sent_by,
        p.location, p.model, p.company, p.default_location_id, t.code, t.color, t.kind,
        o.pages_printed, o.installed_ts, o.held_location_id, h.name AS held_at,
+       o.unit_price, t.price AS current_price,
        (SELECT COUNT(*) FROM order_files f WHERE f.order_id = o.id) AS files
 FROM orders o
 JOIN printers p ON p.id = o.printer_id
@@ -99,10 +100,13 @@ def create_orders(body: OrderIn, conn: sqlite3.Connection = Depends(db_dep),
             kept = "; ".join(dict.fromkeys(b["note"] for b in basket if b["note"]))
             conn.execute("DELETE FROM orders WHERE status = 'planned' AND printer_id = ? AND toner_id = ?",
                          (it.printer_id, it.toner_id))
+        # The price paid per cartridge: the component's price right now (Pārvaldība → Komponenti), kept with the
+        # order so later price changes don't rewrite past spending. It can be corrected later (set_price).
+        price = conn.execute("SELECT price FROM toner_models WHERE id = ?", (it.toner_id,)).fetchone()["price"]
         cur = conn.execute(
-            "INSERT INTO orders (printer_id, toner_id, qty, status, note, created_by, extra) VALUES (?,?,?,?,?,?,?)",
+            "INSERT INTO orders (printer_id, toner_id, qty, status, note, created_by, extra, unit_price) VALUES (?,?,?,?,?,?,?,?)",
             (it.printer_id, it.toner_id, it.qty, "planned" if body.planned else "ordered",
-             note or kept, username, int(body.extra and not body.planned)))
+             note or kept, username, int(body.extra and not body.planned), price))
         ids.append(cur.lastrowid)
     return [dict(_get(conn, i)) for i in ids]
 
@@ -196,6 +200,22 @@ def create_warranty(body: WarrantyIn, conn: sqlite3.Connection = Depends(db_dep)
         (body.printer_id, body.toner_id, body.note.strip(), username, body.removed_pct, body.defect.strip(),
          body.held_location_id, installed_ts, pages))
     return dict(_get(conn, cur.lastrowid))
+
+
+class PriceIn(BaseModel):
+    # € per cartridge actually paid; a number (0 for a free one). Not clearable: an order without a kept price would
+    # quietly fall back to the component's current price again.
+    unit_price: float = Field(ge=0, le=100000)
+
+
+@router.put("/{order_id}/price")
+def set_price(order_id: int, body: PriceIn, conn: sqlite3.Connection = Depends(db_dep)) -> dict:
+    """Correct what was paid per cartridge (e.g. to match the invoice). Warranty replacements cost nothing."""
+    order = _get(conn, order_id)
+    if order["warranty"]:
+        raise HTTPException(400, "Garantijas aizvietotājam cenas nav")
+    conn.execute("UPDATE orders SET unit_price = ? WHERE id = ?", (round(body.unit_price, 2), order_id))
+    return {**dict(_get(conn, order_id)), "docs": attachments.docs_by_order(conn, [order_id]).get(order_id, [])}
 
 
 class HeldIn(BaseModel):

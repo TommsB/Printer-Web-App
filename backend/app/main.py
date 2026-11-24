@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import attachments, auth, empties, microsoft, orders, photos, printers, push, replacements, settings, toners
+from . import attachments, auth, costs, empties, microsoft, orders, photos, printers, push, replacements, settings, toners
 from .auth import current_username
 from .config import config
 from .db import init_db
@@ -34,6 +34,7 @@ app.include_router(auth.users_router, dependencies=[Depends(auth.require_admin)]
 app.include_router(photos.router, dependencies=[require_auth])  # before printers: same /api/printers prefix
 app.include_router(printers.router, dependencies=[require_auth])
 app.include_router(toners.router, dependencies=[require_auth])
+app.include_router(costs.router, dependencies=[require_auth])  # the cost forecast (Analītika → Izmaksas)
 app.include_router(orders.router, dependencies=[require_auth])
 app.include_router(attachments.router, dependencies=[require_auth])
 app.include_router(empties.router, dependencies=[require_auth])

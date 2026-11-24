@@ -201,4 +201,9 @@ export function attentionReasons(p: Printer): string[] {
 }
 
 export const fmtNum = (n: number | null | undefined) => (n === null || n === undefined ? '–' : n.toLocaleString('lv-LV'))
+/** Euros, Latvian style ("1 234,50 €"): `digits` decimals (0 for monthly sums, 2 for prices, 3 for per-page costs). */
+export const fmtEur = (n: number | null | undefined, digits = 0) => (n === null || n === undefined ? '–'
+  : n.toLocaleString('lv-LV', { style: 'currency', currency: 'EUR', minimumFractionDigits: digits, maximumFractionDigits: digits }))
+/** Euros for amounts that can be small (a month of one drum, one purchase): cents under 10 €, so 0,45 € doesn't read "0 €". */
+export const fmtEurAuto = (n: number | null | undefined) => fmtEur(n, n != null && n !== 0 && Math.abs(n) < 10 ? 2 : 0)
 export const fmtHours = (n: number | null | undefined) => (n === null || n === undefined ? '–' : n.toFixed(1))

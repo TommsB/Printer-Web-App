@@ -110,7 +110,8 @@ CREATE TABLE IF NOT EXISTS toner_models (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     code TEXT NOT NULL UNIQUE,
     color TEXT NOT NULL DEFAULT '',
-    kind TEXT NOT NULL DEFAULT 'toner'
+    kind TEXT NOT NULL DEFAULT 'toner',
+    price REAL  -- € per cartridge, entered in Pārvaldība → Komponenti; NULL = not known (costs.py)
 );
 CREATE TABLE IF NOT EXISTS printer_toners (
     printer_id INTEGER NOT NULL REFERENCES printers(id) ON DELETE CASCADE,
@@ -394,6 +395,10 @@ def init_db() -> None:
             conn.execute("ALTER TABLE printers ADD COLUMN snmp_version TEXT NOT NULL DEFAULT '2c'")
         if "can_sleep" not in _columns(conn, "printers"):  # "Printeris var aizmigt" (sleep.py)
             conn.execute("ALTER TABLE printers ADD COLUMN can_sleep INTEGER NOT NULL DEFAULT 0")
+        if "price" not in _columns(conn, "toner_models"):  # € per cartridge, for the cost forecast (costs.py)
+            conn.execute("ALTER TABLE toner_models ADD COLUMN price REAL")
+        if "unit_price" not in _columns(conn, "orders"):  # € per cartridge paid: the component's price when ordered, editable
+            conn.execute("ALTER TABLE orders ADD COLUMN unit_price REAL")
         if "photo" not in _columns(conn, "printers"):  # the printer's picture (photos.py)
             conn.execute("ALTER TABLE printers ADD COLUMN photo TEXT")
         if "is_global" not in _columns(conn, "locations"):  # a shared store every printer moves cartridges to (SP, LI)

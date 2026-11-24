@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { api, photoUrl, type Printer, type StoreLocation, type Toner } from '../api'
 import { useApiData } from '../cache'
+import { fmtEur } from '../lib'
 import { matches, SearchBox } from '../components/SearchBox'
 import { TopBar } from '../components/TopBar'
 import { Segmented } from '../components/Toggle'
@@ -145,6 +146,10 @@ export function ManagePage() {
                   <span className="mrow__body">
                     <span className="mrow__l1"><b>{t.code}</b>{t.kind !== 'toner' && t.kind !== 'drum' && <span className="tag-s">{KIND_LV[t.kind] ?? t.kind}</span>}</span>
                     <span className="mrow__l2">{users.length ? users.map((p) => p.location).join(', ') : 'Netiek izmantots'}</span>
+                  </span>
+                  {/* The price per cartridge (Izmaksas uses it); "bez cenas" for a used toner or drum still without one. */}
+                  <span className="mrow__meta mrow__price">
+                    {t.price != null ? <b>{fmtEur(t.price, 2)}</b> : <small className={users.length && t.kind !== 'other' ? 'hot' : undefined}>bez cenas</small>}
                   </span>
                   <span className="mrow__meta"><b>{reserveOf(t.id)}</b><small>rezervē</small></span>
                   <span className="mrow__chev">{Icon.chevron(18)}</span>

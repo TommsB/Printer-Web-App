@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { api, type AllAnalytics, type Analytics, type AnalyticsPart, type Printer } from '../api'
+import { api, type AllAnalytics, type Analytics, type AnalyticsPart, type CostSummary, type CostSupply, type Printer, type PrinterCost, type SpendBucket } from '../api'
 import { Icon } from '../icons'
-import { classifySupply, fmtDaysLeft, fmtNum, SOON_DAYS, splitSupplies } from '../lib'
+import { classifySupply, fmtDaysLeft, fmtEur, fmtEurAuto, fmtNum, SOON_DAYS, splitSupplies } from '../lib'
 import { useRemembered } from '../uiMemory'
 import { Segmented } from './Toggle'
+import { CDot } from './ColorDot'
 
 /** `ink` = the colour of a number written on that toner's colour (the pie's labels). */
 const TONERS: Record<string, { label: string; color: string; ink: string }> = {
@@ -625,29 +626,301 @@ function AllCharts({ items, printers, kind }: { items: AllAnalytics['printers'];
   )
 }
 
+const MONTHS = ['janvāris', 'februāris', 'marts', 'aprīlis', 'maijs', 'jūnijs', 'jūlijs', 'augusts', 'septembris', 'oktobris', 'novembris', 'decembris']
+const monthName = (ym: string, short = false) => { const m = MONTHS[+ym.slice(5, 7) - 1] ?? ym; return short ? m.slice(0, 3) : m }
+const COST_DAYS = 30 // Izmaksas: the pace is always taken from this many days (costs.py also accepts 90)
+const MONTH_DAYS = 30.44 // as in costs.py
+const COST_HINT = 'Pēc toneru un drumu līmeņiem: cik procentu no katras kasetnes izlietots, reiz tās cena. Tas rāda, cik printera lietošana izmaksā pašreizējā tempā (nevis kad kasetnes nopirktas). Printeriem bez līmeņu datiem — pēc kasetnēm, kas paņemtas no rezerves pēdējās 180 dienās.'
+
+/** "12 komponentiem vēl nav cenas…": how many of the codes in this view (all printers, or one) have no price; the
+ *  codes themselves on hover, not listed out. */
+function Unpriced({ codes }: { codes: string[] }) {
+  const n = codes.length
+  // Latvian: 1, 21, 31… take the singular ("21 komponentam"), except 11.
+  const one = n % 10 === 1 && n % 100 !== 11
+  return (
+    <p className="alert an-costs__warn" title={codes.join(', ')}>
+      <b>{n} {one ? 'komponentam' : 'komponentiem'}</b> vēl nav cenas, tāpēc summas ir mazākas nekā patiesībā. Cenu var ievadīt Pārvaldība → Komponenti.
+    </p>
+  )
+}
+
+/** "0,82" — a number with up to `digits` decimals, Latvian style. */
+const fmtDec = (n: number, digits = 2) => n.toLocaleString('lv-LV', { maximumFractionDigits: digits })
+
+/** One spending period for all printers, or just for one (its share from by_printer). */
+const spendOf = (b: SpendBucket, printerId: number | null) => {
+  if (printerId === null) return { cost: b.cost, qty: b.qty, estimated: b.estimated, unpriced: b.unpriced, toners: b.toners, drums: b.drums }
+  const [cost = 0, qty = 0, estimated = 0, unpriced = 0, toners = 0, drums = 0] = b.by_printer[String(printerId)] ?? []
+  return { cost, qty, estimated, unpriced, toners, drums }
+}
+
+/** Faktiskās izmaksas as a table: Mēnesis · Toneri · Drumi · Kopā (€), one row per month that cost something, and a
+ *  total row. "Toneri" and "Drumi" are cartridges received; other components (a waste box…) only count in the €. */
+function MonthTable({ rows }: { rows: { month: string; toners: number; drums: number; cost: number }[] }) {
+  if (rows.length === 0) return <p className="muted an-mtab__none">Pēdējos 12 mēnešos nav neviena saņemta pasūtījuma ar cenu.</p>
+  return (
+    <table className="an-mtab">
+      <thead><tr><th scope="col">Mēnesis</th><th scope="col">Toneri</th><th scope="col">Drumi</th><th scope="col">Kopā</th></tr></thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.month}>
+            <th scope="row">{monthName(r.month)} {r.month.slice(0, 4)}</th>
+            <td>{r.toners || '–'}</td>
+            <td>{r.drums || '–'}</td>
+            <td>{fmtEur(r.cost, 2)}</td>
+          </tr>
+        ))}
+      </tbody>
+      {rows.length > 1 && (
+        <tfoot><tr>
+          <th scope="row">Kopā</th>
+          <td>{sum(rows.map((r) => r.toners)) || '–'}</td>
+          <td>{sum(rows.map((r) => r.drums)) || '–'}</td>
+          <td>{fmtEur(sum(rows.map((r) => r.cost)), 2)}</td>
+        </tr></tfoot>
+      )}
+    </table>
+  )
+}
+
+/**
+ * "Faktiskās izmaksas": what was really spent — received orders, in the month they were delivered, at the price kept
+ * with each order (editable in Vēsture → Pasūtījumi). A table of the last 12 months that cost something, this year's total, and the last
+ * 90 days set against the forecast for the same days: buying more than is used fills the reserve, less empties it.
+ */
+function ActualCard({ data, printerId, forecastPerMonth, forecastIds }: {
+  data: CostSummary; printerId: number | null; forecastPerMonth: number | null
+  forecastIds?: number[] // all printers: the ones the forecast covers (spending is compared for those only)
+}) {
+  const a = data.actual
+  const months = a.months.map((m) => ({ month: m.month, ...spendOf(m, printerId) }))
+  const year = spendOf(a.year, printerId)
+  const recent = spendOf(a.recent, printerId)
+  const used = forecastPerMonth === null ? null : (forecastPerMonth / MONTH_DAYS) * a.recent_days
+  // Bought against used, like for like: in the overview only the printers the forecast covers (not inactive ones,
+  // or ones without data or prices); the 90-day amount shown is still everything that was spent.
+  const bought = printerId === null && forecastIds ? sum(forecastIds.map((id) => spendOf(a.recent, id).cost)) : recent.cost
+  // More than a quarter apart is worth saying.
+  const verdict = used === null || used <= 0 || bought <= 0 ? null
+    : bought > used * 1.25 ? 'nopirkts vairāk nekā izlietots — rezerve aug'
+    : bought < used * 0.75 ? 'nopirkts mazāk nekā izlietots — rezerve sarūk'
+    : 'nopirkts aptuveni tikpat, cik izlietots'
+  // Deliveries priced at today's price, or with no price: across the 12 months in the table (they reach into last year).
+  const estimated = sum(months.map((m) => m.estimated))
+  const unpriced = sum(months.map((m) => m.unpriced))
+  return (
+    <section className="an-card an-actual">
+      <div className="an-card__head">
+        <h3>{Icon.euro(18)}Faktiskās izmaksas
+          <Hint label="Kas šeit skaitīts">Saņemtie pasūtījumi pēc piegādes dienas, ar pasūtījumā saglabāto cenu (komponenta cena pasūtīšanas brīdī; to var labot Vēsture → Pasūtījumi). Garantijas aizvietotāji netiek skaitīti.</Hint>
+        </h3>
+        <span className="an-card__val">šogad <b>{fmtEurAuto(year.cost)}</b></span>
+      </div>
+      <p className="an-actual__vs">
+        Pēdējās {a.recent_days} dienās iztērēts <b>{fmtEurAuto(recent.cost)}</b>
+        {used !== null && <>, izlietots par ~<b>{fmtEurAuto(used)}</b></>}
+        {verdict && <> — {verdict}</>}.
+      </p>
+      {/* The last 12 months, newest first: only months that cost something — when, how many toners and drums
+          arrived, and what they cost. */}
+      <MonthTable rows={months.filter((m) => m.cost > 0).reverse()} />
+      {(estimated > 0 || unpriced > 0) && (
+        <p className="muted an-costs__note">
+          {estimated > 0 && `${estimated} no šeit redzamajām kasetnēm cena nav saglabāta pasūtījumā (vecāki pasūtījumi) — rēķināts pēc pašreizējās cenas. `}
+          {unpriced > 0 && `${unpriced} kasetnēm nav cenas vispār (skaitīts 0 €).`}
+        </p>
+      )}
+    </section>
+  )
+}
+
+/**
+ * One printer's costs: the headline numbers; a table of its toners and drums — what a cartridge costs, how fast it
+ * is used, how long it lasts and how often it has to be replaced, and so what it costs a month (with the sum worked
+ * through once, so the number can be checked); then what was really spent on it.
+ */
+function PrinterCosts({ data, p }: { data: CostSummary; p: PrinterCost }) {
+  const compact = window.matchMedia('(max-width: 800px)').matches
+  const span = p.span_days ?? data.days
+  // Most expensive a month first; components without a pace yet, or no longer reported, at the end.
+  const rows = [...p.supplies].sort((a, b) => (b.per_month ?? -1) - (a.per_month ?? -1) || (b.life_days === null ? -1 : 0))
+  const top = Math.max(0, ...rows.map((s) => s.per_month ?? 0)) || 1
+  const example = rows.find((s) => s.per_month !== null && s.per_month > 0 && s.life_days !== null && s.price !== null)
+  const spentYear = spendOf(data.actual.year, p.id).cost
+  const name = (s: CostSupply) => `${s.code}${s.kind === 'drum' && s.color && s.color !== 'K' ? ` (${s.color})` : ''}`
+  return (
+    <div className="an an--all an--costs">
+      {p.unpriced.length > 0 && <Unpriced codes={p.unpriced} />}
+      <div className="an-tiles">
+        <Tile label="Prognoze mēnesī" value={fmtEurAuto(p.per_month)} delta={null} spark={null} color="var(--ink)"
+          hint={<Hint label="Kā rēķināta prognoze">{p.method === 'taken'
+            ? `Šim printerim nav līmeņu datu: kasetnes, kas paņemtas no rezerves pēdējās ${span} dienās, reiz to cena, pārrēķinātas uz mēnesi.`
+            : 'Visu komponentu izmaksas mēnesī kopā (tabulā zemāk): katra komponenta cena reiz tā patēriņš dienā, reiz 30,44 dienas.'}</Hint>} />
+        <Tile label="Prognoze gadā" value={fmtEurAuto(p.per_year)} delta={null} spark={null} color="var(--ink)" />
+        <Tile label={compact ? 'Par lapu' : 'Vidēji par lapu'} value={fmtEur(p.cost_per_page, 3)} delta={null} spark={null} color="var(--ink)"
+          hint={p.pages_per_month !== null ? <Hint label="Kā rēķināts par lapu">Izmaksas mēnesī, dalītas ar lapām mēnesī šajā tempā (~{fmtNum(p.pages_per_month)}).</Hint> : undefined} />
+        <Tile label="Iztērēts šogad" value={fmtEurAuto(spentYear)} delta={null} spark={null} color="var(--accent-line)"
+          hint={<Hint label="Kas ir Iztērēts šogad">Šī printera saņemtie pasūtījumi kopš 1. janvāra, ar pasūtījumā saglabāto cenu (sk. Faktiskās izmaksas).</Hint>} />
+      </div>
+
+      <section className="an-card an-ctab">
+        <div className="an-card__head">
+          <h3>{Icon.layers(18)}Komponenti: cena, kalpošana un izmaksas</h3>
+          <span className="an-card__val">no pēdējām {span} dienām</span>
+        </div>
+        {rows.length === 0
+          ? <p className="muted an-none">{p.method === 'taken' ? 'Šim printerim nav līmeņu datu, tāpēc komponentus pa vienam nevar parādīt: izmaksas rēķinātas pēc kasetnēm, kas paņemtas no rezerves.' : 'Vēl nav pietiekami daudz līmeņu datu.'}</p>
+          : <>
+            {/* Phones (CSS): Komponents · Cena · Patēriņš dienā (just "0,38 %") · Kalpo (days only) · € mēnesī —
+                no Nomaiņas column, no months under Kalpo, no bars. The .an-ctab__wide / __narrow pairs swap the text. */}
+            <div className="an-ctab__row an-ctab__head" aria-hidden="true">
+              <span>Komponents</span><span>Cena</span>
+              <span><span className="an-ctab__wide">Patēriņš</span><span className="an-ctab__narrow">Patēriņš dienā</span></span>
+              <span>Kalpo</span><span className="an-ctab__opt">Nomaiņas</span><span>€ mēnesī</span>
+            </div>
+            <ul className="an-ctab__list">
+              {rows.map((s, i) => (
+                <li key={`${s.toner_id}-${s.color}-${i}`} className={!s.current ? 'an-ctab__row off' : 'an-ctab__row'}>
+                  <span className="an-ctab__name"><CDot color={s.color} kind={s.kind} /><b>{name(s)}</b></span>
+                  <span>{s.price === null ? <small className="hot">bez cenas</small> : fmtEur(s.price, 2)}</span>
+                  <span>{s.life_days === null ? '–' : <>
+                    <span className="an-ctab__wide">{fmtDec(s.pct_per_day)} % dienā</span><span className="an-ctab__narrow">{fmtDec(s.pct_per_day)} %</span>
+                  </>}</span>
+                  <span>{!s.current ? <small>vairs netiek ziņots</small>
+                    : s.life_days === null ? <small title={`Līmenis vēl nav mainījies vai dati tikai par ${s.own_days} dienām`}>par maz datu</small>
+                    : <>~{fmtNum(s.life_days)} d.{s.life_days >= 60 && <small className="an-ctab__wide"> ~{fmtDec(s.life_days / MONTH_DAYS, 0)} mēn.</small>}</>}</span>
+                  <span className="an-ctab__opt">{s.per_year === null ? '–' : `~${fmtDec(s.per_year, 1)}× gadā`}</span>
+                  <span className="an-ctab__cost">
+                    <i><b style={{ width: `${((s.per_month ?? 0) / top) * 100}%`, animationDelay: `${0.3 + i * 0.04}s` }} /></i>
+                    <strong>{s.per_month === null ? '–' : fmtEurAuto(s.per_month)}</strong>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="an-ctab__row an-ctab__total">
+              <span>Kopā mēnesī</span><span /><span /><span /><span className="an-ctab__opt" />
+              <span className="an-ctab__cost"><strong>{fmtEurAuto(p.per_month)}</strong></span>
+            </div>
+            {/* How it adds up, worked through once with this printer's most expensive component. */}
+            <p className="an-ctab__how">
+              <b>Kā rēķina:</b> kasetne kalpo 100 % ÷ patēriņš dienā; mēnesī tā izmaksā cena × patēriņš dienā × 30,44 dienas. Printera prognoze ir visu komponentu summa.
+              {example && <> Piemēram, {name(example)}: {fmtDec(example.pct_per_day)} % dienā → kalpo ~{fmtNum(example.life_days)} dienas (~{fmtDec(example.per_year ?? 0, 1)}× gadā); {fmtEur(example.price, 2)} × {fmtDec(example.pct_per_day)} % × 30,44 = <b>{fmtEurAuto(example.per_month)}</b> mēnesī.</>}
+            </p>
+          </>}
+      </section>
+
+      <ActualCard data={data} printerId={p.id} forecastPerMonth={p.per_month} />
+    </div>
+  )
+}
+
+/** All printers: headline numbers (a month, a year, a page, spent this year), the cost per printer (each opens its
+ *  own view), what was really spent, and the forecast split by company. */
+function CostsOverview({ data, onPick }: { data: CostSummary; onPick: (id: number) => void }) {
+  const compact = window.matchMedia('(max-width: 800px)').matches
+  const priced = data.printers.filter((p) => p.per_month !== null).sort((a, b) => b.per_month! - a.per_month!)
+  const unknown = data.printers.filter((p) => p.per_month === null)
+  const top = Math.max(0, ...priced.map((p) => p.per_month!)) || 1
+  const companies = [...COMPANY_ORDER, ...Object.keys(data.by_company).filter((c) => !COMPANY_ORDER.includes(c)).sort()]
+  const parts = companies.filter((c) => c in data.by_company).map((c) => ({ key: c || '-', label: c || 'Bez uzņēmuma', value: data.by_company[c] }))
+  const partsTop = Math.max(0, ...parts.map((x) => x.value)) || 1
+  const shortSpan = priced.some((p) => p.method === 'levels' && (p.span_days ?? 0) < data.days)
+  return (
+    <div className="an an--all an--costs">
+      {data.unpriced.length > 0 && <Unpriced codes={data.unpriced} />}
+      <div className="an-tiles">
+        <Tile label="Prognoze mēnesī" value={fmtEurAuto(data.per_month)} delta={null} spark={null} color="var(--ink)"
+          hint={<Hint label="Kā rēķināta prognoze">{COST_HINT} Pēdējo {data.days} dienu temps, pārrēķināts uz mēnesi.</Hint>} />
+        <Tile label="Prognoze gadā" value={fmtEurAuto(data.per_year)} delta={null} spark={null} color="var(--ink)" />
+        <Tile label={compact ? 'Par lapu' : 'Vidēji par lapu'} value={fmtEur(data.cost_per_page, 3)} delta={null} spark={null} color="var(--ink)"
+          hint={<Hint label="Kā rēķināts par lapu">Izmaksas šajās dienās, dalītas ar šajās dienās izdrukātajām lapām — visi printeri ar līmeņu datiem kopā.</Hint>} />
+        <Tile label="Iztērēts šogad" value={fmtEurAuto(data.actual.year.cost)} delta={null} spark={null} color="var(--accent-line)"
+          hint={<Hint label="Kas ir Iztērēts šogad">Visi saņemtie pasūtījumi kopš 1. janvāra, ar pasūtījumā saglabāto cenu (sk. Faktiskās izmaksas).</Hint>} />
+      </div>
+      <div className="an-cols">
+        <div className="an-main">
+          <section className="an-card an-rank">
+            <div className="an-card__head"><h3>{Icon.printer(18)}Izmaksas mēnesī pa printeriem</h3></div>
+            {priced.length === 0
+              ? <p className="muted an-none">Vēl nav ko rēķināt: ievadiet komponentu cenas Pārvaldībā.</p>
+              : <ol>
+                {priced.map((p, i) => (
+                  // A row opens that printer's own cost view (the same as picking it in the heading's printer menu).
+                  <li key={p.id} className="an-costs__pick" role="button" tabIndex={0} onClick={() => onPick(p.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(p.id) } }}
+                    aria-label={`${p.location}: ${fmtEurAuto(p.per_month)} mēnesī — atvērt printera izmaksas`}
+                    title={p.cost_per_page !== null ? `${fmtEur(p.cost_per_page, 3)} par lapu · ~${fmtNum(p.pages_per_month)} lapas mēnesī` : undefined}>
+                    <span>{p.location}{p.method === 'taken' && <small className="an-costs__how"> · pēc nomaiņām</small>}</span>
+                    <i><b style={{ width: `${(p.per_month! / top) * 100}%`, animationDelay: `${0.3 + i * 0.04}s` }} /></i>
+                    <b>{fmtEurAuto(p.per_month)}</b>
+                  </li>
+                ))}
+              </ol>}
+            {unknown.length > 0 && (
+              <p className="muted an-costs__note">Bez datu vai cenas: {unknown.map((p) => p.location).join(', ')}.</p>
+            )}
+            {shortSpan && <p className="muted an-costs__note">Dažiem printeriem līmeņu dati ir par mazāk nekā {data.days} dienām — prognoze precizēsies ar katru dienu.</p>}
+          </section>
+          <ActualCard data={data} printerId={null} forecastPerMonth={priced.length ? data.per_month : null} forecastIds={priced.map((p) => p.id)} />
+        </div>
+        <div className="an-side">
+          <section className="an-card an-rank">
+            <div className="an-card__head"><h3>{Icon.building(18)}Izmaksas mēnesī pa uzņēmumiem</h3></div>
+            {parts.length === 0
+              ? <p className="muted an-none">Vēl nav ko sadalīt: ievadiet komponentu cenas.</p>
+              : <ol>
+                {parts.map((c, i) => (
+                  <li key={c.key}>
+                    <span>{c.label}</span>
+                    <i><b style={{ width: `${(c.value / partsTop) * 100}%`, animationDelay: `${0.3 + i * 0.05}s` }} /></i>
+                    <b>{fmtEurAuto(c.value)}</b>
+                  </li>
+                ))}
+              </ol>}
+          </section>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /**
  * "Analītika": slides up from the bottom (most of the screen; on phones nearly all of it, with everything in
- * view at once). First asks which printer; then shows its last 7, 30 or 90 days — the headline numbers, pages
- * per day, each toner's level day by day, and how the use splits between the colours.
+ * view at once). First asks which printer (or Visi printeri); then shows its last 7, 30 or 90 days — the headline
+ * numbers, pages per day, each toner's level day by day, and how the use splits between the colours.
+ * The "Lietojums / Izmaksas" switch in the heading turns the same choice (Visi printeri or one printer) into its
+ * costs instead: the overview of every printer, or that printer's own costs (backend costs.py).
  */
 export function AnalyticsSheet({ printers, onClose, initial = null }: { printers: Printer[]; onClose: () => void; initial?: number | null }) {
   // `initial`: opened from a printer's page, straight on that printer (the picker is one tap away in the heading).
   const [id, setId] = useState<number | 'all' | null>(initial)
+  const [view, setViewState] = useState<'use' | 'costs'>('use') // Lietojums every time the sheet opens
   const [days, setDays] = useRemembered('analytics.days', 30)
   const [kindPick, setKind] = useState<Kind>('toner') // Toneri every time the sheet opens (not remembered, unlike the period)
   const [loaded, setLoaded] = useState<{ id: number; days: number; data: Analytics } | null>(null)
   const [loadedAll, setLoadedAll] = useState<{ days: number; items: AllAnalytics['printers'] } | null>(null)
+  const [loadedCosts, setLoadedCosts] = useState<{ days: number; data: CostSummary } | null>(null)
   const [error, setError] = useState('')
+  const costs = view === 'costs'
   const list = printers.filter((p) => p.active && p.ip)
-  const printer = list.find((p) => p.id === id) ?? null
+  // Izmaksas also covers printers that aren't on the network (their cost comes from the cartridges taken), so its
+  // printer list is every active printer; Lietojums only has data for the ones on the network.
+  const choices = costs ? printers.filter((p) => p.active) : list
+  const printer = typeof id === 'number' ? choices.find((p) => p.id === id) ?? null : null
   const all = id === 'all', picked = all || printer !== null
+  // Izmaksas always takes its pace from the last COST_DAYS days (a week is too short to see a cartridge's pace), so
+  // the period switch is greyed out there — it keeps its place and its choice for Lietojums.
+  const costDays = COST_DAYS
+  const shownDays = costs ? costDays : days
   // The picker, by company: the three companies in this order, then anything else.
   const companies = [...COMPANY_ORDER, ...[...new Set(list.map((p) => p.company))].filter((c) => !COMPANY_ORDER.includes(c)).sort()]
   const groups = companies.map((company) => ({ company, printers: list.filter((p) => p.company === company) })).filter((g) => g.printers.length > 0)
     .map((g, i, all) => ({ ...g, first: sum(all.slice(0, i).map((x) => x.printers.length)) }))
 
+  // Lietojums: this printer's (or every printer's) days.
   useEffect(() => {
-    if (id === null) return
+    if (costs || id === null) return
     let stale = false
     if (id === 'all') {
       api.allAnalytics(days).then((d) => { if (!stale) setLoadedAll({ days, items: d.printers }) })
@@ -657,15 +930,35 @@ export function AnalyticsSheet({ printers, onClose, initial = null }: { printers
     api.printerAnalytics(id, days).then((data) => { if (!stale) setLoaded({ id, days, data }) })
       .catch((e) => { if (!stale) setError(e instanceof Error ? e.message : 'Neizdevās ielādēt') })
     return () => { stale = true }
-  }, [id, days])
-  const fresh = printer !== null && loaded?.id === printer.id && loaded.days === days
-  const freshAll = all && loadedAll?.days === days
+  }, [id, days, costs])
+  // Izmaksas: one summary covers every printer, so it loads once per period, not again for each printer picked.
+  const anyPicked = id !== null
+  useEffect(() => {
+    if (!costs || !anyPicked) return
+    let stale = false
+    api.costs(costDays).then((data) => { if (!stale) setLoadedCosts({ days: costDays, data }) })
+      .catch((e) => { if (!stale) setError(e instanceof Error ? e.message : 'Neizdevās ielādēt') })
+    return () => { stale = true }
+  }, [costs, costDays, anyPicked])
+  const fresh = !costs && printer !== null && loaded?.id === printer.id && loaded.days === days
+  const freshAll = !costs && all && loadedAll?.days === days
+  const freshCosts = costs && loadedCosts?.days === costDays
+  const costRow = printer && freshCosts ? loadedCosts!.data.printers.find((p) => p.id === printer.id) ?? null : null
+  // The line under the heading in Izmaksas: all printers, or the picked one — with where its pace comes from.
+  const costWho = costRow
+    ? [costRow.model, costRow.company].filter(Boolean).join(' · ') + (costRow.model || costRow.company ? ' · ' : '') + (
+      costRow.method === 'taken' ? `pēc nomaiņām pēdējās ${costRow.span_days} dienās`
+        : costRow.method === 'levels' ? `temps no pēdējām ${costRow.span_days} dienām` : 'vēl nav datu')
+    : `Visi aktīvie printeri · cenas no Pārvaldība → Komponenti · temps no pēdējām ${costDays} dienām`
   // "Toneri / Drumi" only where there are drums to show: this printer reports a drum level, or (Visi printeri) any does.
-  const hasDrums = all
+  // Izmaksas counts toners and drums together, so it has no such switch.
+  const hasDrums = costs ? false : all
     ? list.some((p) => splitSupplies(p).drums.length > 0)
     : fresh && loaded!.data.supplies.some((s) => classifySupply(s.description, printer!.color_type === 'Melnbalts')?.kind === 'drum')
   const kind: Kind = hasDrums ? kindPick : 'toner'
-  const KINDS = [{ value: 'toner' as Kind, label: 'Toneri' }, { value: 'drum' as Kind, label: 'Drumi' }]
+  const kindOn = !costs && hasDrums // Toneri / Drumi stays in place, greyed out when it doesn't apply
+  const KINDS = [{ value: 'toner' as Kind, label: <>{Icon.drop(15)}Toneri</> }, { value: 'drum' as Kind, label: <>{Icon.drum(15)}Drumi</> }]
+  const VIEWS = [{ value: 'use' as const, label: <>{Icon.chart(15)}Lietojums</> }, { value: 'costs' as const, label: <>{Icon.euro(15)}Izmaksas</> }]
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
@@ -679,6 +972,12 @@ export function AnalyticsSheet({ printers, onClose, initial = null }: { printers
   }, [])
   const pick = (next: number | 'all' | null) => { setError(''); setId(next) }
   const period = (d: number) => { setError(''); setDays(d) }
+  // Back to Lietojums on a printer that has no usage data (not on the network, picked in Izmaksas): Visi printeri.
+  const setView = (v: 'use' | 'costs') => {
+    setError('')
+    setViewState(v)
+    if (v === 'use' && typeof id === 'number' && !list.some((p) => p.id === id)) setId('all')
+  }
 
   // Straight into <body>, not inside the button that opened it: the dim layer is then a plain full-screen layer of
   // the page, which is what Safari reads to tint the strip above the page along with it.
@@ -690,26 +989,41 @@ export function AnalyticsSheet({ printers, onClose, initial = null }: { printers
           {/* With a printer picked its name is the heading and "Analītika" a small label over it. */}
           {picked
             ? <div className="asheet__title">
-                <span className="asheet__kicker">{Icon.chart(16)}Analītika<i> · {days} dienas{kind === 'drum' ? ' · drumi' : ''}</i></span>
+                <span className="asheet__kicker">{Icon.chart(16)}Analītika<i> · {shownDays} dienas{costs ? ' · izmaksas' : kind === 'drum' ? ' · drumi' : ''}</i></span>
                 <h2>{all ? 'Visi printeri' : printer!.location}</h2>
               </div>
             : <h2 className="asheet__big">{Icon.chart(28)}Analītika</h2>}
-          {/* The period: a 7 / 30 / 90 switch on desktop; on phones a stopwatch with the browser's own list behind it. */}
-          {/* Toneri / Drumi: a switch on desktop; on phones a round button with the browser's own list behind it. */}
-          {picked && hasDrums && <div className="asheet__period asheet__kind"><Segmented label="Komponenti" value={kind} onChange={setKind} options={KINDS} /></div>}
-          {picked && hasDrums && (
-            <label className="icon-btn asheet__sel asheet__sel--days" title="Komponenti">
-              {Icon.layers(18)}
-              <select value={kind} onChange={(e) => setKind(e.target.value as Kind)} aria-label="Komponenti">
-                {KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+          {/* The switches always stand in the same places, so nothing jumps when the view changes:
+              Toneri / Drumi (greyed out where it doesn't apply: Izmaksas counts both, or the printer has no drums),
+              then Lietojums / Izmaksas, then the period. Desktop: switches; phones: round buttons with the browser's
+              own list behind them. */}
+          {picked && <div className="asheet__period asheet__kind"><Segmented label="Komponenti" value={kind} onChange={setKind} options={KINDS} disabled={!kindOn} /></div>}
+          {picked && (
+            <label className={kindOn ? 'icon-btn asheet__sel asheet__sel--days' : 'icon-btn asheet__sel asheet__sel--days off'}
+              title={costs ? 'Komponenti (izmaksās skaitīti gan toneri, gan drumi)' : kindOn ? 'Komponenti' : 'Komponenti (šim printerim nav drumu)'}>
+              {kind === 'drum' ? Icon.drum(18) : Icon.drop(18)}
+              <select value={kind} onChange={(e) => setKind(e.target.value as Kind)} aria-label="Komponenti" disabled={!kindOn}>
+                {KINDS.map((k) => <option key={k.value} value={k.value}>{k.value === 'drum' ? 'Drumi' : 'Toneri'}</option>)}
               </select>
             </label>
           )}
-          {picked && <div className="asheet__period"><Segmented label="Periods" value={String(days)} onChange={(v) => period(+v)} options={PERIODS.map((d) => ({ value: String(d), label: `${d} dienas` }))} /></div>}
+          {picked && <div className="asheet__period asheet__view"><Segmented label="Skats" value={view} onChange={setView} options={VIEWS} /></div>}
           {picked && (
-            <label className="icon-btn asheet__sel asheet__sel--days" title="Periods">
+            <label className={costs ? 'icon-btn asheet__sel asheet__sel--days on' : 'icon-btn asheet__sel asheet__sel--days'} title="Skats">
+              {costs ? Icon.euro(18) : Icon.chart(18)}
+              <select value={view} onChange={(e) => setView(e.target.value as 'use' | 'costs')} aria-label="Skats">
+                {VIEWS.map((v) => <option key={v.value} value={v.value}>{v.value === 'costs' ? 'Izmaksas' : 'Lietojums'}</option>)}
+              </select>
+            </label>
+          )}
+          {/* The period: a 7 / 30 / 90 switch on desktop; on phones a stopwatch with the browser's own list. Greyed out in
+              Izmaksas (always the last COST_DAYS days), showing the choice that still applies to Lietojums. */}
+          {picked && <div className="asheet__period"><Segmented label="Periods" value={String(days)} onChange={(v) => period(+v)} options={PERIODS.map((d) => ({ value: String(d), label: `${d} dienas` }))} disabled={costs} /></div>}
+          {picked && (
+            <label className={costs ? 'icon-btn asheet__sel asheet__sel--days off' : 'icon-btn asheet__sel asheet__sel--days'}
+              title={costs ? `Periods (izmaksās vienmēr pēdējās ${COST_DAYS} dienas)` : 'Periods'}>
               {Icon.stopwatch(18)}
-              <select value={days} onChange={(e) => period(+e.target.value)} aria-label="Periods">
+              <select value={days} onChange={(e) => period(+e.target.value)} aria-label="Periods" disabled={costs}>
                 {PERIODS.map((d) => <option key={d} value={d}>Pēdējās {d} dienas</option>)}
               </select>
             </label>
@@ -718,9 +1032,9 @@ export function AnalyticsSheet({ printers, onClose, initial = null }: { printers
           {picked && (
             <label className="icon-btn asheet__sel" title="Cits printeris">
               {Icon.printer(18)}
-              <select value={all ? 'all' : printer!.id} onChange={(e) => pick(e.target.value === 'all' ? 'all' : +e.target.value)} aria-label="Cits printeris">
+              <select value={all ? 'all' : printer!.id} aria-label="Cits printeris" onChange={(e) => pick(e.target.value === 'all' ? 'all' : +e.target.value)}>
                 <option value="all">Visi printeri</option>
-                {list.map((p) => <option key={p.id} value={p.id}>{p.location}</option>)}
+                {choices.map((p) => <option key={p.id} value={p.id}>{p.location}</option>)}
               </select>
             </label>
           )}
@@ -733,7 +1047,7 @@ export function AnalyticsSheet({ printers, onClose, initial = null }: { printers
           {list.length > 1 && (
             <button className="asheet__all" onClick={() => pick('all')} style={{ animationDelay: `${RISE_START}s` }}>
               <span className="asheet__all-ic">{Icon.chart(24)}</span>
-              <span className="asheet__all-txt"><b>Visi printeri</b><span>Kopskats: lapas, nomainītās kasetnes un kas drīz beigsies · {list.length} printeri</span></span>
+              <span className="asheet__all-txt"><b>Visi printeri</b><span>Kopskats: lapas, nomainītās kasetnes, izmaksas un kas drīz beigsies · {list.length} printeri</span></span>
             </button>
           )}
           {/* One row of cards per company, in a fixed order. Once the sheet is up, the labels and cards rise into
@@ -751,17 +1065,22 @@ export function AnalyticsSheet({ printers, onClose, initial = null }: { printers
           {list.length === 0 && <p className="muted">Nav neviena printera ar SNMP datiem.</p>}
         </>}
         {/* The printer's details, and a note when it has less history than the chosen period. */}
-        {printer && (
+        {!costs && printer && (
           <div className="asheet__who">
             <span>{[printer.model, printer.company, printer.ip, printer.color_type].filter(Boolean).join(' · ')}</span>
             {fresh && dataStart(loaded!.data) > 0 && <em>dati tikai no {dayLabel(loaded!.data.days[dataStart(loaded!.data)])}</em>}
           </div>
         )}
-        {all && <div className="asheet__who"><span>{list.length} printeri tīklā · visi uzņēmumi kopā</span></div>}
+        {!costs && all && <div className="asheet__who"><span>{list.length} printeri tīklā · visi uzņēmumi kopā</span></div>}
+        {costs && picked && <div className="asheet__who"><span>{costWho}</span></div>}
         {picked && error && <p className="alert">{error}</p>}
-        {picked && !error && !(all ? freshAll : fresh) && <p className="muted asheet__wait">Ielādē…</p>}
-        {all && !error && freshAll && <AllCharts key={`all-${days}-${kind}`} items={loadedAll!.items} printers={printers} kind={kind} />}
-        {printer && !error && fresh && <Charts key={`${printer.id}-${days}-${kind}`} data={loaded!.data} mono={printer.color_type === 'Melnbalts'} printer={printer} kind={kind} />}
+        {picked && !error && !(costs ? freshCosts : all ? freshAll : fresh) && <p className="muted asheet__wait">Ielādē…</p>}
+        {costs && !error && freshCosts && all && <CostsOverview key={`costs-${costDays}`} data={loadedCosts!.data} onPick={pick} />}
+        {costs && !error && freshCosts && printer && (costRow
+          ? <PrinterCosts key={`costs-${printer.id}-${costDays}`} data={loadedCosts!.data} p={costRow} />
+          : <p className="muted asheet__wait">Šim printerim nav izmaksu datu.</p>)}
+        {!costs && all && !error && freshAll && <AllCharts key={`all-${days}-${kind}`} items={loadedAll!.items} printers={printers} kind={kind} />}
+        {!costs && printer && !error && fresh && <Charts key={`${printer.id}-${days}-${kind}`} data={loaded!.data} mono={printer.color_type === 'Melnbalts'} printer={printer} kind={kind} />}
       </section>
     </>,
     document.body,

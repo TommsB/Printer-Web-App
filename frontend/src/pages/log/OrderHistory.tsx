@@ -3,11 +3,11 @@ import { api, fmtTime, parseTs, type Order } from '../../api'
 import { invalidate, useApiData } from '../../cache'
 import { DefectDialog } from '../../components/DefectFiles'
 import { DeliveryDocsDialog } from '../../components/DeliveryDocs'
-import { DestructiveDialog } from '../../components/Dialog'
+import { Dialog, DestructiveDialog } from '../../components/Dialog'
 import { matches, SearchBox } from '../../components/SearchBox'
 import { docsOf } from '../../files'
 import { Icon } from '../../icons'
-import { fmtDate, fmtNum } from '../../lib'
+import { fmtDate, fmtEur, fmtNum } from '../../lib'
 import { DayGroup, useFoldedDays } from './DayGroup'
 import { CDot } from '../../components/ColorDot'
 
@@ -52,6 +52,40 @@ function outcome(o: Order): string {
   return `Atcelts ${shortDate(o.resolved_ts)}`
 }
 
+/** "89,90 € × 2 = 179,80 €" — what an order cost; an older order without a kept price shows today's component price. */
+function priceText(o: Order): string {
+  const qty = o.status === 'received' ? o.received_qty ?? o.qty : o.qty
+  if (o.unit_price !== null) return `${fmtEur(o.unit_price, 2)} × ${qty} = ${fmtEur(o.unit_price * qty, 2)}`
+  if (o.current_price !== null) return `${fmtEur(o.current_price, 2)} × ${qty} = ${fmtEur(o.current_price * qty, 2)} (pēc pašreizējās cenas)`
+  return 'nav norādīta'
+}
+
+/** Correct what was paid per cartridge for one order (e.g. to match the invoice). Only this order changes — the
+ *  component's price in Pārvaldība, used for new orders and the forecast, stays as it is. A number is required (0 for
+ *  a free cartridge): an emptied price would quietly fall back to the component's current price again. */
+function OrderPriceDialog({ order, onClose, onSaved }: { order: Order; onClose: () => void; onSaved: (o: Order) => void }) {
+  const start = order.unit_price ?? order.current_price
+  const [text, setText] = useState(start !== null ? String(start).replace('.', ',') : '')
+  const clean = text.trim().replace(/\s/g, '').replace(',', '.')
+  const price = Number(clean)
+  const ok = clean !== '' && Number.isFinite(price) && price >= 0 && price <= 100000
+  return (
+    <Dialog.Frame title={`Cena: ${order.code}`} onClose={onClose} onSubmit={async () => onSaved(await api.setOrderPrice(order.id, price))}>
+      <p className="dlg-text">{order.code} ×{order.qty} · {order.location} · pasūtīts {fmtDate(order.created_ts.slice(0, 10))}</p>
+      <label>Cena par vienu (€)
+        <input name="price" inputMode="decimal" autoComplete="off" autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="piem. 89,90" aria-invalid={!ok} />
+      </label>
+      {!ok
+        ? <p className="fnote err" role="alert">Ievadiet cenu kā skaitli, piem. 89,90 (bezmaksas kasetnei — 0).</p>
+        : <p className="fnote">Mainās tikai šim pasūtījumam (Izmaksas → Faktiskās izmaksas). Komponenta cena Pārvaldībā paliek tā pati.{order.unit_price === null && ' Šim pasūtījumam cena vēl nav saglabāta — pagaidām tiek ņemta pašreizējā komponenta cena.'}</p>}
+      <Dialog.Footer>
+        <Dialog.Cancel />
+        <Dialog.Confirm disabled={!ok}>Saglabāt</Dialog.Confirm>
+      </Dialog.Footer>
+    </Dialog.Frame>
+  )
+}
+
 /**
  * Vēsture → Pasūtījumi: toner orders grouped by the day they were ordered (newest first). By default the ones
  * on the way and the received ones; cancelled orders are under "Atcelts". Read-only; orders are received/cancelled in Krājumi. `filter`/`filters` come from the
@@ -66,6 +100,7 @@ export function OrderHistory({ filter, filters }: { filter: string; filters: Rea
   const [openId, setOpenId] = useState<number | null>(null)
   const [limit, setLimit] = useState(PAGE)
   const [deleting, setDeleting] = useState<Order | null>(null)
+  const [pricing, setPricing] = useState<Order | null>(null) // the order whose price is being corrected
   const folds = useFoldedDays('log.foldedOrderDays') // date headings fold their day's orders
 
   // Defects not handed over yet and what is only in the basket aren't orders: they are in Krājumi, not here.
@@ -162,6 +197,15 @@ export function OrderHistory({ filter, filters }: { filter: string; filters: Rea
                           <dd>{o.received_qty ?? o.qty} gab.{o.received_qty !== null && o.received_qty !== o.qty && ` (pasūtīts ${o.qty})`}</dd>
                         </>}
                         {took !== null && <><dt>Piegāde</dt><dd>{after(took)}</dd></>}
+                        {/* What was paid (not for warranty replacements, which cost nothing): the price kept with the
+                            order, or today's component price for an older order that has none; editable. */}
+                        {!o.warranty && <>
+                          <dt>Cena</dt>
+                          <dd className="ev__price">
+                            <span>{priceText(o)}</span>
+                            <button type="button" className="ev__edit" onClick={() => setPricing(o)} aria-label={`Labot cenu: ${o.code}`}>{Icon.pencil(14)}Labot</button>
+                          </dd>
+                        </>}
                         <dt>Printeris</dt><dd>{[o.location, o.model, o.company].filter(Boolean).join(' · ')}</dd>
                         {o.note && <><dt>Piezīme</dt><dd>{o.note}</dd></>}
                       </dl>
@@ -190,6 +234,13 @@ export function OrderHistory({ filter, filters }: { filter: string; filters: Rea
           onClose={() => setNotes(null)} onChange={() => { reload().catch(() => {}) }} />
       )}
       {details && <DefectDialog order={details} onClose={() => setDetails(null)} onChange={() => { reload().catch(() => {}) }} />}
+      {pricing && (
+        <OrderPriceDialog order={pricing} onClose={() => setPricing(null)}
+          onSaved={(saved) => {
+            setOrders((l) => l.map((x) => (x.id === saved.id ? { ...x, unit_price: saved.unit_price } : x)))
+            invalidate('costs-30') // the "≈ € mēnesī" figures and Izmaksas read it
+          }} />
+      )}
 
       {deleting && (
         <DestructiveDialog title="Dzēst pasūtījuma ierakstu" confirmLabel="Dzēst" onClose={() => setDeleting(null)}

@@ -6,7 +6,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from . import forecast, photos, sleep, snmp, stockloc
+from . import forecast, pagecount, photos, sleep, snmp, stockloc
 from .auth import current_username
 from .db import db_dep
 from .poller import poll_all
@@ -193,16 +193,17 @@ def usage(printer_id: int, conn: sqlite3.Connection = Depends(db_dep)) -> list[d
     def month(key: str) -> dict:
         return months.setdefault(key, {"month": key, "pages": None, "since": None, "toners": [], "defects": []})
 
-    prev = None
-    for r in conn.execute("SELECT day, page_count FROM page_counts WHERE printer_id = ? ORDER BY day", (printer_id,)):
+    readings = conn.execute("SELECT day, page_count FROM page_counts WHERE printer_id = ? ORDER BY day", (printer_id,)).fetchall()
+    started = False
+    for r, step in zip(readings, pagecount.steps([r["page_count"] for r in readings])):  # glitches and resets: pagecount.py
         m = month(r["day"][:7])
         if m["pages"] is None:
             m["pages"] = 0
-        if prev is None:
-            m["since"] = r["day"]
-        elif r["page_count"] >= prev:
-            m["pages"] += r["page_count"] - prev
-        prev = r["page_count"]
+        if step is None:
+            if not started and (r["page_count"] or 0) > 0:  # the first real reading: counting starts here
+                m["since"], started = r["day"], True
+        else:
+            m["pages"] += step
     for r in conn.execute(
             "SELECT substr(m.ts, 1, 7) AS month, t.code, t.color, t.kind, -SUM(m.delta) AS qty FROM stock_movements m"
             " JOIN toner_models t ON t.id = m.toner_id WHERE m.printer_id = ? AND m.reason = 'taken'"
@@ -253,15 +254,20 @@ def _analytics(conn: sqlite3.Connection, printer_id: int, days: int) -> dict:
         "SELECT day, page_count FROM page_counts WHERE printer_id = ? AND day >= ?", (printer_id, span[0]))}
     before = conn.execute("SELECT page_count FROM page_counts WHERE printer_id = ? AND day < ? ORDER BY day DESC LIMIT 1",
                           (printer_id, span[0])).fetchone()
-    last = before["page_count"] if before else None
+    # The pages each reading adds (a one-day glitch or a counter reset handled in pagecount.py), then laid out per day:
+    # None before there is anything to count from, 0 on a day without a reading.
+    readings = ([before["page_count"]] if before else []) + [counts[d] for d in span if d in counts]
+    added = iter(pagecount.steps(readings))
+    if before:
+        next(added)
+    based = bool(before) and before["page_count"] > 0
     pages: list[int | None] = []
     for d in span:
-        cur = counts.get(d)
-        if cur is None:
-            pages.append(None if last is None else 0)
+        if d not in counts:
+            pages.append(0 if based else None)
             continue
-        pages.append(None if last is None else max(0, cur - last))
-        last = cur
+        pages.append(next(added))
+        based = based or counts[d] > 0
 
     series: dict[tuple[str, str], dict[str, int]] = {}
     for r in conn.execute("SELECT day, idx, description, pct FROM supply_days WHERE printer_id = ? AND day >= ? ORDER BY day",

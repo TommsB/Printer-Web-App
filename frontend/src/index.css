@@ -842,6 +842,9 @@ button.flist__name { border: 0; background: none; padding: 0; font: inherit; tex
 .pcrop__zoom { display: flex; align-items: center; gap: 12px; width: min(320px, 100%); margin: 12px auto 0; font-size: 13px; color: var(--muted); }
 .pcrop__zoom input { flex: 1; accent-color: var(--ink); }
 .fnote { margin: 0; font-size: 12.5px; color: var(--muted); }
+.fnote.err { color: var(--bad); }
+.mrow__price { min-width: 64px; }
+.mrow__price small.hot { color: var(--hot); } /* a used toner or drum without a price: the forecast misses it */
 /* Printer editor: IP field + "Pārbaudīt savienojumu", and the test result box below */
 .ip-row { display: flex; align-items: flex-end; gap: 8px; }
 .ip-row label { flex: 1; min-width: 0; }
@@ -993,6 +996,12 @@ button.day__head { width: 100%; height: 34px; padding-top: 0; padding-bottom: 0;
 .ev__more dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 13px; }
 .ev__more dt { color: var(--faint); }
 .ev__more dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+/* An order's price, with a small "Labot" to correct it (Vēsture → Pasūtījumi). */
+.ev__price { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.ev__edit { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; color: var(--muted);
+  font: inherit; font-size: 12.5px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.ev__edit:hover { color: var(--ink); }
+.ev__edit:focus-visible { outline: 2px solid var(--outline); outline-offset: 2px; border-radius: 4px; }
 .ev__more .del { display: inline-flex; align-items: center; gap: 6px; }
 .btn.more { display: block; margin: 16px auto 4px; }
 .code { font-size: 15px; font-weight: 500; }
@@ -1281,7 +1290,7 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
 .asheet__title { flex: 1; min-width: 0; }
 .asheet__kicker { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .asheet__kicker svg { color: var(--ink); }
-.asheet__kicker i { display: none; font-style: normal; } /* "· 30 dienas": phones only, where the period switch is just an icon */
+.asheet__kicker i { display: none; font-style: normal; } /* "· 30 dienas · izmaksas": not shown (phones too: the switches' icons say it) */
 .asheet__head h2 { margin: 0; min-width: 0; font-size: 38px; font-weight: 600; letter-spacing: -.035em; line-height: 1.08; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .asheet__head h2.asheet__big { flex: 1; display: flex; align-items: center; gap: 12px; font-size: 30px; }
 .asheet__period .seg { align-self: auto; background: var(--pillbg); }
@@ -1428,7 +1437,6 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
   .asheet__head { align-items: center; gap: 8px; padding: 12px 2px 8px; }
   .asheet__kicker { font-size: 11px; gap: 6px; }
   .asheet__kicker svg { width: 13px; height: 13px; }
-  .asheet__kicker i { display: inline; }
   .asheet__head h2 { font-size: 25px; }
   .asheet__head h2.asheet__big { font-size: 25px; gap: 10px; }
   .asheet__head h2.asheet__big svg { width: 24px; height: 24px; }
@@ -1623,6 +1631,71 @@ html[data-vt="panel-close"]::view-transition-new(list-pane) { animation: none; }
 .asheet__all-txt b { font-size: 20px; font-weight: 600; letter-spacing: -.025em; }
 .asheet__all-txt span { font-size: 13.5px; opacity: .72; }
 @media (hover: hover) { .asheet__all:hover { transform: translateY(-2px); box-shadow: 0 16px 36px rgba(40, 40, 36, .24); } }
+/* Phones: the round € button (Lietojums / Izmaksas) shows when Izmaksas is on; Toneri / Drumi greys out where it
+   doesn't apply (Izmaksas, or a printer without drums) but keeps its place. */
+.asheet__sel.on { background: var(--ink); color: var(--on-ink); }
+.asheet__sel.off { opacity: .4; }
+.asheet__sel.off select { cursor: default; }
+
+/* ---- Analītika → Izmaksas ---- */
+/* Faktiskās izmaksas as a table: Mēnesis · Toneri · Drumi · Kopā, months with costs only, a total row. */
+.an-mtab { width: 100%; margin-top: 14px; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.an-mtab th, .an-mtab td { padding: 9px 0; border-top: 1px solid var(--line2); text-align: right; }
+.an-mtab th:first-child { text-align: left; font-weight: 500; }
+.an-mtab thead th { padding-top: 0; border-top: 0; font-size: 12px; font-weight: 400; color: var(--muted); }
+.an-mtab td:last-child { font-weight: 600; }
+.an-mtab td:not(:last-child), .an-mtab thead th:not(:first-child):not(:last-child) { width: 70px; }
+.an-mtab tfoot th, .an-mtab tfoot td { border-top: 1px solid var(--line); font-weight: 600; }
+.an-mtab__none { margin: 12px 0 0; font-size: 13px; }
+/* One printer's component table: Komponents · Cena · Patēriņš · Kalpo · Nomaiņas · € mēnesī (bar + amount), a total
+   row, and the sum worked through once. Phones drop Patēriņš and Nomaiņas (the worked example still shows them). */
+.an-ctab { margin-bottom: 16px; }
+.an-ctab__list { list-style: none; margin: 0; padding: 0; }
+.an-ctab__row { display: grid; grid-template-columns: minmax(0, 1.5fr) 84px 104px 118px 92px minmax(150px, 1.3fr); align-items: center; gap: 12px;
+  min-height: 44px; border-top: 1px solid var(--line2); font-size: 14px; font-variant-numeric: tabular-nums; }
+.an-ctab__row > span { min-width: 0; }
+.an-ctab__row small { font-size: 12px; color: var(--muted); }
+.an-ctab__row small.hot { color: var(--hot); }
+.an-ctab__row.off { opacity: .55; }
+.an-ctab__head { min-height: 30px; border-top: 0; font-size: 12px; color: var(--muted); }
+.an-ctab__head > span:last-child, .an-ctab__total > span:last-child { justify-content: flex-end; text-align: right; }
+.an-ctab__name { display: flex; align-items: center; gap: 9px; overflow: hidden; }
+.an-ctab__name b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-ctab__cost { display: flex; align-items: center; gap: 12px; }
+.an-ctab__cost i { flex: 1; height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; }
+.an-ctab__cost i b { display: block; height: 100%; min-width: 3px; border-radius: 4px; background: var(--ink); transform-origin: left; animation: an-grow .7s var(--ease) both; }
+.an-ctab__cost strong { flex: none; min-width: 58px; text-align: right; font-weight: 600; }
+.an-ctab__total { border-top: 1px solid var(--line); font-weight: 600; }
+.an-ctab__total .an-ctab__cost { justify-content: flex-end; }
+.an-ctab__how { margin: 10px 0 2px; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.an-ctab__how b { color: var(--ink); font-weight: 600; }
+.an-ctab__narrow { display: none; } /* desktop: "0,38 % dienā", "~267 d. ~9 mēn."; phones swap in the short forms */
+/* Phones: Komponents · Cena · Patēriņš dienā (%) · Kalpo (days) · € mēnesī — compact, no Nomaiņas, no bars. */
+@media (max-width: 800px) {
+  .an-ctab__row { grid-template-columns: minmax(0, 1fr) 58px 58px 50px 52px; gap: 8px; font-size: 13px; }
+  .an-ctab__head { font-size: 11px; line-height: 1.2; }
+  .an-ctab__row > span:not(:first-child) { text-align: right; }
+  .an-ctab__opt, .an-ctab__wide { display: none; }
+  .an-ctab__narrow { display: inline; }
+  .an-ctab__name { gap: 7px; }
+  .an-ctab__cost { justify-content: flex-end; }
+  .an-ctab__cost i { display: none; }
+  .an-ctab__cost strong { min-width: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .an-ctab__cost i b { animation: none; } }
+/* A printer's row in the cost overview opens that printer's costs. */
+.an-costs__pick { cursor: pointer; border-radius: 8px; }
+@media (hover: hover) { .an-costs__pick:hover span { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; } }
+.an-costs__pick:focus-visible { outline: 2px solid var(--outline); outline-offset: 3px; }
+.an-costs__warn { margin: 0 0 14px; }
+.an-costs__how { color: var(--muted); font-size: 12px; }
+.an-costs__note { margin: 10px 0 0; font-size: 12.5px; }
+.an--costs .an-rank li { grid-template-columns: minmax(0, 220px) minmax(0, 1fr) 76px; }
+.an-actual__vs { margin: 0 0 10px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+.an-actual__vs b { color: var(--ink); font-weight: 600; }
+@media (max-width: 800px) {
+  .an--costs .an-rank li { grid-template-columns: minmax(0, 132px) minmax(0, 1fr) 62px; }
+}
 /* The right-hand column: the companies' pie over the "runs out first" list. */
 .an-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .an-side .an-share { flex: 1 0 auto; }

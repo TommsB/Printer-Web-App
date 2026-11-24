@@ -12,6 +12,12 @@ export const Icon = {
   // A crescent moon: the printer is asleep ("Miega režīmā").
   moon: (s = 22) => svg(s, <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />),
   // A picture (mountains and sun in a frame): a printer's photo.
+  // A drop: toners (Analītika → Toneri).
+  drop: (s = 18) => svg(s, <path d="M12 3.5c3.2 4 5.5 7.2 5.5 10.2a5.5 5.5 0 0 1-11 0c0-3 2.3-6.2 5.5-10.2z" />),
+  // A drum (a short cylinder on its side): imaging drums (Analītika → Drumi).
+  drum: (s = 18) => svg(s, <><ellipse cx="6.5" cy="12" rx="2.5" ry="6" /><path d="M6.5 6h11c1.4 0 2.5 2.7 2.5 6s-1.1 6-2.5 6h-11" /></>),
+  // The euro sign: costs (Analītika → Izmaksas).
+  euro: (s = 18) => svg(s, <><path d="M18 6.5A7 7 0 1 0 18 17.5" /><path d="M4 10h9M4 14h9" /></>),
   // Crop marks (two overlapping corners): choose which part of a photo is kept.
   crop: (s = 18) => svg(s, <><path d="M6 2v14a2 2 0 0 0 2 2h14" /><path d="M18 22V8a2 2 0 0 0-2-2H2" /></>),
   image: (s = 18) => svg(s, <><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="9.5" r="1.8" /><path d="M21 16l-5-5-9 9" /></>),

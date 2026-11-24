@@ -25,6 +25,15 @@ docker compose down                 # data survives (named volume printer-data)
   notification. It counts as unreachable only on a weekday from 8:00 if it hasn't answered once since midnight
   (its wake schedule should have woken it). Such printers also get a longer retry (5 s × 3) before a poll gives up.
   See `backend/app/sleep.py`.
+- **Costs** (Analītika → the "Lietojums / Izmaksas" switch in the heading, for Visi printeri or one printer): prices are entered per component code (Pārvaldība → Komponenti → Cena, € per
+  cartridge). The running cost comes from the daily toner/drum levels (% used × price, at the last 30 days' pace — the period switch is greyed out in Izmaksas),
+  giving € per month, per year and per page (a per-component table shows price, use per day, cartridge life and
+  replacements a year); printers without level readings use the cartridges taken from their reserve.
+  "Faktiskās izmaksas" is what was really spent: received orders (not warranty replacements) by delivery month, at the
+  price kept with each order (`orders.unit_price`, the component's price when ordered; editable in Vēsture →
+  Pasūtījumi → Cena → Labot), compared with the forecast for the last 90 days. A component with order or stock
+  history can't be deleted (its spending would go with it). The printer panel in Statuss shows "≈ … € mēnesī".
+  See `backend/app/costs.py`.
 - **Printer picture** (Pārvaldība → printer → Pamatinformācija → Attēls): shown round in Statuss in place of the
   printer icon, beside the name in the printer's panel, and large in Informācija. After picking a photo, a crop window
   lets you drag and zoom to choose the square kept (`components/PhotoCropper.tsx`); the browser then shrinks it to a

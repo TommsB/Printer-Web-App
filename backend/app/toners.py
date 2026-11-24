@@ -26,10 +26,11 @@ class TonerIn(BaseModel):
     code: str
     color: str = ""
     kind: str = "toner"
+    price: float | None = Field(default=None, ge=0, le=100000)  # € per cartridge; None = not known (costs.py)
 
 
-def _checked(body: TonerIn) -> tuple[str, str, str]:
-    """(code, colour, kind) to store, or 400 for a value the app doesn't know."""
+def _checked(body: TonerIn) -> tuple[str, str, str, float | None]:
+    """(code, colour, kind, price) to store, or 400 for a value the app doesn't know."""
     code, color = body.code.strip(), body.color.strip().upper()
     if not code:
         raise HTTPException(400, "Norādiet kodu")
@@ -37,7 +38,8 @@ def _checked(body: TonerIn) -> tuple[str, str, str]:
         raise HTTPException(400, "Nezināms veids vai krāsa")
     if color == "CMY" and body.kind != "drum":
         raise HTTPException(400, "Krāsu „CMY” var norādīt tikai drumam")
-    return code, color, body.kind
+    price = round(body.price, 2) if body.price is not None else None
+    return code, color, body.kind, price
 
 
 class UseIn(BaseModel):
@@ -74,29 +76,29 @@ class LocationIn(BaseModel):
 
 @router.get("/toners")
 def list_toners(conn: sqlite3.Connection = Depends(db_dep)) -> list[dict]:
-    return [dict(r) for r in conn.execute("SELECT id, code, color, kind FROM toner_models ORDER BY code")]
+    return [dict(r) for r in conn.execute("SELECT id, code, color, kind, price FROM toner_models ORDER BY code")]
 
 
 @router.post("/toners", status_code=201)
 def create_toner(body: TonerIn, conn: sqlite3.Connection = Depends(db_dep)) -> dict:
-    code, color, kind = _checked(body)
+    code, color, kind, price = _checked(body)
     try:
-        cur = conn.execute("INSERT INTO toner_models (code, color, kind) VALUES (?,?,?)", (code, color, kind))
+        cur = conn.execute("INSERT INTO toner_models (code, color, kind, price) VALUES (?,?,?,?)", (code, color, kind, price))
     except sqlite3.IntegrityError:
         raise HTTPException(409, "Šāds kods jau eksistē")
-    return {"id": cur.lastrowid, "code": code, "color": color, "kind": kind}
+    return {"id": cur.lastrowid, "code": code, "color": color, "kind": kind, "price": price}
 
 
 @router.put("/toners/{toner_id}")
 def update_toner(toner_id: int, body: TonerIn, conn: sqlite3.Connection = Depends(db_dep)) -> dict:
-    code, color, kind = _checked(body)
+    code, color, kind, price = _checked(body)
     try:
-        cur = conn.execute("UPDATE toner_models SET code=?, color=?, kind=? WHERE id=?", (code, color, kind, toner_id))
+        cur = conn.execute("UPDATE toner_models SET code=?, color=?, kind=?, price=? WHERE id=?", (code, color, kind, price, toner_id))
     except sqlite3.IntegrityError:
         raise HTTPException(409, "Šāds kods jau eksistē")
     if cur.rowcount == 0:
         raise HTTPException(404, "Toner not found")
-    return {"id": toner_id, "code": code, "color": color, "kind": kind}
+    return {"id": toner_id, "code": code, "color": color, "kind": kind, "price": price}
 
 
 @router.delete("/toners/{toner_id}")
@@ -105,6 +107,11 @@ def delete_toner(toner_id: int, conn: sqlite3.Connection = Depends(db_dep)) -> d
     used = conn.execute("SELECT COUNT(*) FROM printer_toners WHERE toner_id = ?", (toner_id,)).fetchone()[0]
     if used:
         raise HTTPException(409, f"Toneri izmanto {used} printeri(-s) — vispirms noņemiet to printeru iestatījumos")
+    # Its orders (what was spent, in Izmaksas) and stock moves would go with it (ON DELETE CASCADE): keep the history.
+    history = conn.execute("SELECT (SELECT COUNT(*) FROM orders WHERE toner_id = ?) + (SELECT COUNT(*) FROM stock_movements WHERE toner_id = ?)",
+                           (toner_id, toner_id)).fetchone()[0]
+    if history:
+        raise HTTPException(409, "Šim komponentam ir pasūtījumu vai krājuma kustību vēsture (arī izmaksās), tāpēc to nevar dzēst")
     if not conn.execute("DELETE FROM toner_models WHERE id = ?", (toner_id,)).rowcount:
         raise HTTPException(404, "Toner not found")
     return {"ok": True}

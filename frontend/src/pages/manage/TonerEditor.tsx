@@ -21,6 +21,11 @@ export function TonerEditor({ toner, users, onClose, onSaved }: Props) {
   const [code, setCode] = useState(toner?.code ?? '')
   const [color, setColor] = useState((toner?.color ?? '').toUpperCase())
   const [kind, setKind] = useState(toner?.kind ?? 'toner')
+  // Price (€ per cartridge), typed as text so "45,90" works as well as "45.90"; empty = not known.
+  const [priceText, setPriceText] = useState(toner?.price != null ? String(toner.price).replace('.', ',') : '')
+  const priceClean = priceText.trim().replace(/\s/g, '').replace(',', '.')
+  const price = priceClean === '' ? null : Number(priceClean)
+  const priceOk = price === null || (Number.isFinite(price) && price >= 0 && price <= 100000)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const pickKind = (k: string) => {
@@ -28,7 +33,7 @@ export function TonerEditor({ toner, users, onClose, onSaved }: Props) {
     if (k !== 'drum' && color === SHARED) setColor('') // "CMY" only exists for drums
   }
   const save = async () => {
-    const body = { code: code.trim(), color, kind }
+    const body = { code: code.trim(), color, kind, price }
     if (toner) await api.updateToner(toner.id, body)
     else await api.createToner(body)
     await onSaved()
@@ -47,6 +52,13 @@ export function TonerEditor({ toner, users, onClose, onSaved }: Props) {
           <Segmented label="Krāsa" value={color} onChange={setColor}
             options={colors.map((c) => ({ value: c, label: c ? <><CDot color={c} kind={kind} />{c}</> : '–' }))} />
         </div>
+        <label>Cena par vienu (€)
+          <input name="price" inputMode="decimal" autoComplete="off" value={priceText} onChange={(e) => setPriceText(e.target.value)}
+            placeholder="piem. 89,90" aria-invalid={!priceOk} />
+        </label>
+        {!priceOk
+          ? <p className="fnote err" role="alert">Ievadiet cenu kā skaitli, piem. 89,90.</p>
+          : <p className="fnote">Izmanto izmaksu prognozei (Analītika → Izmaksas). Var atstāt tukšu.</p>}
         {/* What the kind means for the app, so the colour is filled in right. */}
         {kind === 'drum' && <p className="fnote">Drums: lietotne rāda tā līmeni, pamana nomaiņu un brīdina, kad tas ir zems un rezervē nav neviena. Norādiet krāsu. „CMY” — viens kods visiem trim krāsu drumiem (ciāna, purpura un dzeltenajam), piem. „DR-316 Color”.</p>}
         {kind === 'other' && <p className="fnote">Cits (piem., atkritumu tvertne): tikai uzskaitei rezervē un pasūtīšanai. Līmenim un nomaiņai lietotne neseko.</p>}
@@ -63,7 +75,7 @@ export function TonerEditor({ toner, users, onClose, onSaved }: Props) {
             </Dialog.Start>
           )}
           <Dialog.Cancel />
-          <Dialog.Confirm disabled={!code.trim()}>Saglabāt</Dialog.Confirm>
+          <Dialog.Confirm disabled={!code.trim() || !priceOk}>Saglabāt</Dialog.Confirm>
         </Dialog.Footer>
       </Dialog.Frame>
 
