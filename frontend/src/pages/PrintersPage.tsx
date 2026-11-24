@@ -61,10 +61,10 @@ function Avatar({ p, size }: { p: Printer; size: number }) {
   return url ? <img className="ic__photo" src={url} alt="" loading="lazy" decoding="async" /> : Icon.printer(size)
 }
 
-/** "≈ 38 € mēnesī" in the printer's stats line: its running cost at the last 30 days' pace (Analītika → Izmaksas
+/** "≈ 38 € mēnesī" in the printer's stats line: its running cost at the pace of the last (up to) 90 days (Analītika → Izmaksas
  *  has the details); the cost per page on hover. Nothing until its components have prices. */
 function CostStat({ printerId }: { printerId: number }) {
-  const { data } = useApiData<CostSummary | null>('costs-30', () => api.costs(30), null)
+  const { data } = useApiData<CostSummary | null>('costs-90', () => api.costs(90), null)
   const c = data?.printers.find((x) => x.id === printerId)
   if (!c || c.per_month === null) return null
   const tip = [c.cost_per_page !== null && `${fmtEur(c.cost_per_page, 3)} par lapu`, c.per_year !== null && `≈ ${fmtEur(c.per_year)} gadā`,

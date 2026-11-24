@@ -238,7 +238,7 @@ export function OrderHistory({ filter, filters }: { filter: string; filters: Rea
         <OrderPriceDialog order={pricing} onClose={() => setPricing(null)}
           onSaved={(saved) => {
             setOrders((l) => l.map((x) => (x.id === saved.id ? { ...x, unit_price: saved.unit_price } : x)))
-            invalidate('costs-30') // the "≈ € mēnesī" figures and Izmaksas read it
+            invalidate('costs-90') // the "≈ € mēnesī" figures and Izmaksas read it
           }} />
       )}
 

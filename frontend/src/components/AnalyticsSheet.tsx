@@ -628,7 +628,7 @@ function AllCharts({ items, printers, kind }: { items: AllAnalytics['printers'];
 
 const MONTHS = ['janvāris', 'februāris', 'marts', 'aprīlis', 'maijs', 'jūnijs', 'jūlijs', 'augusts', 'septembris', 'oktobris', 'novembris', 'decembris']
 const monthName = (ym: string, short = false) => { const m = MONTHS[+ym.slice(5, 7) - 1] ?? ym; return short ? m.slice(0, 3) : m }
-const COST_DAYS = 30 // Izmaksas: the pace is always taken from this many days (costs.py also accepts 90)
+const COST_DAYS = 90 // Izmaksas: the pace is taken from the level data of up to this many days (all of it while there's less)
 const MONTH_DAYS = 30.44 // as in costs.py
 const COST_HINT = 'Pēc toneru un drumu līmeņiem: cik procentu no katras kasetnes izlietots, reiz tās cena. Tas rāda, cik printera lietošana izmaksā pašreizējā tempā (nevis kad kasetnes nopirktas). Printeriem bez līmeņu datiem — pēc kasetnēm, kas paņemtas no rezerves pēdējās 180 dienās.'
 
@@ -909,7 +909,7 @@ export function AnalyticsSheet({ printers, onClose, initial = null }: { printers
   const choices = costs ? printers.filter((p) => p.active) : list
   const printer = typeof id === 'number' ? choices.find((p) => p.id === id) ?? null : null
   const all = id === 'all', picked = all || printer !== null
-  // Izmaksas always takes its pace from the last COST_DAYS days (a week is too short to see a cartridge's pace), so
+  // Izmaksas takes its pace from all the level data of up to the last COST_DAYS days (longer = steadier), so
   // the period switch is greyed out there — it keeps its place and its choice for Lietojums.
   const costDays = COST_DAYS
   const shownDays = costs ? costDays : days
@@ -1021,7 +1021,7 @@ export function AnalyticsSheet({ printers, onClose, initial = null }: { printers
           {picked && <div className="asheet__period"><Segmented label="Periods" value={String(days)} onChange={(v) => period(+v)} options={PERIODS.map((d) => ({ value: String(d), label: `${d} dienas` }))} disabled={costs} /></div>}
           {picked && (
             <label className={costs ? 'icon-btn asheet__sel asheet__sel--days off' : 'icon-btn asheet__sel asheet__sel--days'}
-              title={costs ? `Periods (izmaksās vienmēr pēdējās ${COST_DAYS} dienas)` : 'Periods'}>
+              title={costs ? `Periods (izmaksās — visi līmeņu dati līdz ${COST_DAYS} dienām)` : 'Periods'}>
               {Icon.stopwatch(18)}
               <select value={days} onChange={(e) => period(+e.target.value)} aria-label="Periods" disabled={costs}>
                 {PERIODS.map((d) => <option key={d} value={d}>Pēdējās {d} dienas</option>)}

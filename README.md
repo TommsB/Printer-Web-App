@@ -26,7 +26,7 @@ docker compose down                 # data survives (named volume printer-data)
   (its wake schedule should have woken it). Such printers also get a longer retry (5 s × 3) before a poll gives up.
   See `backend/app/sleep.py`.
 - **Costs** (Analītika → the "Lietojums / Izmaksas" switch in the heading, for Visi printeri or one printer): prices are entered per component code (Pārvaldība → Komponenti → Cena, € per
-  cartridge). The running cost comes from the daily toner/drum levels (% used × price, at the last 30 days' pace — the period switch is greyed out in Izmaksas),
+  cartridge). The running cost comes from the daily toner/drum levels (% used × price, at the pace of up to the last 90 days of level data — the period switch is greyed out in Izmaksas),
   giving € per month, per year and per page (a per-component table shows price, use per day, cartridge life and
   replacements a year); printers without level readings use the cartridges taken from their reserve.
   "Faktiskās izmaksas" is what was really spent: received orders (not warranty replacements) by delivery month, at the
