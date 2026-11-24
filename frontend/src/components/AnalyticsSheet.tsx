@@ -781,7 +781,10 @@ function PrinterCosts({ data, p }: { data: CostSummary; p: PrinterCost }) {
             </div>
             <ul className="an-ctab__list">
               {rows.map((s, i) => (
-                <li key={`${s.toner_id}-${s.color}-${i}`} className={!s.current ? 'an-ctab__row off' : 'an-ctab__row'}>
+                <li key={`${s.toner_id}-${s.color}-${i}`} className={!s.current ? 'an-ctab__row off' : 'an-ctab__row'}
+                  title={s.current && !s.level_known
+                    ? `Printeris šim komponentam vairs neziņo līmeni (parasti — ļoti zems). Pēdējais zināmais: ${s.level ?? '–'} % (${dayLabel(s.last_day)}). Temps — pēc vēstures.`
+                    : undefined}>
                   <span className="an-ctab__name"><CDot color={s.color} kind={s.kind} /><b>{name(s)}</b></span>
                   <span>{s.price === null ? <small className="hot">bez cenas</small> : fmtEur(s.price, 2)}</span>
                   <span>{s.life_days === null ? '–' : <>

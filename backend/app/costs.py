@@ -58,8 +58,12 @@ def _from_levels(conn: sqlite3.Connection, p: sqlite3.Row, linked: list[sqlite3.
 
     One chain per cartridge slot (SNMP supply index), not per description: when a slot starts reporting another
     name (a 410A swapped for a 410X, a compatible cartridge with its own code) that is a new cartridge in the same
-    slot — the drop across the change counts nothing, and the slot is shown once, under its current name. A slot no
-    longer reported on the last day still counts what it used, but has no level, run-out or purchases any more."""
+    slot — the drop across the change counts nothing, and the slot is shown once, under its current name.
+
+    A slot is still in the printer when the printer's latest reading lists it — also when it gives no level (an HP
+    reports -2, "unknown", once a cartridge is very low): its daily levels stop, but its history still gives its pace
+    and cost, and it shows its last known level (level_known False, since last_day). Only a slot the latest reading no
+    longer lists is gone: it still counts what it used, but has no pace going forward."""
     mono = p["color_type"] == "Melnbalts"
     since = (date.today() - timedelta(days=days)).isoformat()
     slots: dict[str, list[tuple[str, str, int]]] = {}
@@ -74,6 +78,9 @@ def _from_levels(conn: sqlite3.Connection, p: sqlite3.Row, linked: list[sqlite3.
     if span < MIN_SPAN:
         return None
     left = forecast.days_left(conn, p["id"])  # {supply idx: days}, the run-out shown in Statuss
+    # The slots the printer reports right now (with or without a level): what is still in it.
+    latest = conn.execute("SELECT MAX(id) FROM snmp_snapshots WHERE printer_id = ? AND reachable = 1", (p["id"],)).fetchone()[0]
+    reported = {r["idx"] for r in conn.execute("SELECT idx FROM snmp_supplies WHERE snapshot_id = ?", (latest,))} if latest else None
 
     supplies, missing = [], set()
     for idx, points in slots.items():
@@ -90,10 +97,12 @@ def _from_levels(conn: sqlite3.Connection, p: sqlite3.Row, linked: list[sqlite3.
                 used += a - b
         own = _days_between(points[0][0], points[-1][0])  # this slot's own readings, not the printer's
         per_day = used / own if own >= MIN_SPAN else 0.0  # % of a cartridge per day; too few days = no pace yet
-        current = points[-1][0] == last
-        now = points[-1][2] if current else None
+        level_known = points[-1][0] == last  # it had a level on the latest day
+        # Still in the printer: listed in the latest reading (with or without a level); without a reading, as before.
+        current = idx in reported if reported is not None else level_known
+        now = points[-1][2] if current else None  # the last level known (older when level_known is False)
         runs_out = left.get(idx) if current else None
-        if current and runs_out is None and per_day > 0:
+        if current and level_known and runs_out is None and per_day > 0:
             runs_out = round(now / per_day)
         if item["price"] is None:
             missing.add(item["code"])
@@ -105,7 +114,7 @@ def _from_levels(conn: sqlite3.Connection, p: sqlite3.Row, linked: list[sqlite3.
         supplies.append({
             "toner_id": item["id"], "code": item["code"], "kind": item["kind"], "color": what[1], "price": price,
             "used_pct": used, "pct_per_day": per_day, "level": now, "runs_out_days": runs_out, "current": current,
-            "own_days": own,
+            "own_days": own, "level_known": current and level_known, "last_day": points[-1][0],
             "life_days": round(100 / pace) if pace > 0 else None,
             "per_year": round(365 * pace / 100, 1) if pace > 0 else None,
             "per_month": None if price is None else round(price * pace / 100 * MONTH, 2),

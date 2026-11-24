@@ -91,6 +91,9 @@ export interface CostSupply {
   // level/runs_out_days null and current false: the slot isn't reported any more (renamed or removed in the period)
   used_pct: number; pct_per_day: number; level: number | null; runs_out_days: number | null; current: boolean; cost: number | null
   own_days: number // days of readings behind this slot's pace (none under a week: pct_per_day 0)
+  // false: still in the printer, but it reports no level any more (an HP does once a cartridge is very low);
+  // level is then the last one known, on last_day
+  level_known: boolean; last_day: string
   // From the pace (null without one): a cartridge lasts life_days, that's per_year replacements a year, and it
   // costs per_month (price × % a day ÷ 100 × 30.44; null without a price). The printer's per_month is their sum.
   life_days: number | null; per_year: number | null; per_month: number | null
